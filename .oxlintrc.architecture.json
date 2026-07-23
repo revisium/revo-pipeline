@@ -1,0 +1,61 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["import"],
+  "rules": {
+    "import/no-cycle": ["error", { "ignoreTypes": false }],
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "regex": "^@revisium/revo-run(?:/|$)",
+            "message": "Pipeline is a dependency of run and must never import run."
+          },
+          {
+            "regex": "^(?:@revisium/(?:revo-(?:agent-runtime|scripts)|orchestrator)(?:/|$)|orchestrator(?:/|$)|@prisma/client(?:/|$)|prisma(?:/|$)|@dbos-inc/|dbos(?:/|$)|pg-boss(?:/|$)|graphile-worker(?:/|$)|@nestjs/|nestjs(?:/|$)|graphql(?:/|$)|@modelcontextprotocol/)",
+            "message": "Run, execution, persistence, queue, and host-framework packages are outside revo-pipeline."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["**/test/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^@revisium/revo-run(?:/|$)",
+                "message": "Pipeline is a dependency of run and must never import run."
+              },
+              {
+                "regex": "^(?:@revisium/(?:revo-(?:agent-runtime|scripts)|orchestrator)(?:/|$)|orchestrator(?:/|$)|@prisma/client(?:/|$)|prisma(?:/|$)|@dbos-inc/|dbos(?:/|$)|pg-boss(?:/|$)|graphile-worker(?:/|$)|@nestjs/|nestjs(?:/|$)|graphql(?:/|$)|@modelcontextprotocol/)",
+                "message": "Run, execution, persistence, queue, and host-framework packages are outside revo-pipeline."
+              },
+              {
+                "group": [
+                  "**/src/spec/**",
+                  "**/src/policy/**",
+                  "**/src/errors/**",
+                  "**/src/definition/**",
+                  "**/src/graph/**",
+                  "**/src/transition/**",
+                  "!**/src/spec/index.js",
+                  "!**/src/policy/index.js",
+                  "!**/src/errors/index.js",
+                  "!**/src/definition/index.js",
+                  "!**/src/graph/index.js",
+                  "!**/src/transition/index.js"
+                ],
+                "message": "Tests consume each production layer through its curated layer barrel."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
