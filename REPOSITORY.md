@@ -2,18 +2,22 @@
 
 `@revisium/revo-pipeline` is a strict ESM TypeScript library.
 
-## Current foundation
+## Current implementation
 
 ```text
 src/index.ts                       intentionally empty shipped entrypoint
 src/spec/                          type-only accepted contract foundation
 src/policy/                        immutable limits and pure bounded utilities
 src/errors/                        type-only fault and result contracts
+src/graph/                         bounded topology, reachability and region algorithms
+src/definition/                    identity helper, validation and deterministic compilation
 scripts/architecture/              structural source validation
 scripts/verify-architecture.ts     positive graph and exact negative probes
 scripts/verify-package.ts          one-tarball package/consumer proof
 test/unit/policy/                  portable policy and bound behavior
 test/unit/spec/                    type contract assertions
+test/unit/graph/                   graph algorithm behavior
+test/unit/definition/              compiler validation, canonicalization and isolation
 test/unit/scripts/                 validator behavior
 test/package/                      bootstrap source/package assertions
 docs/adr/                          decisions
