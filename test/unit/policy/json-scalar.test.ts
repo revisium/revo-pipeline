@@ -43,6 +43,8 @@ describe('canonical JSON scalar policy', () => {
     expect(isValidSemanticName('\ud800')).toBe(false);
     expect(isValidSemanticName('\udc00')).toBe(false);
     expect(isValidSemanticName('\ud800x')).toBe(false);
+    expect(isValidSemanticName('\u{1f680}')).toBe(true);
+    expect(isValidSemanticName('semantic\u0000name')).toBe(true);
     expect(isValidSemanticName(1)).toBe(false);
     expect(isValidKey('node-key')).toBe(true);
     expect(isValidKey('node/key')).toBe(false);
