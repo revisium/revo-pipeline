@@ -1,73 +1,40 @@
 # Architecture
 
-## Purpose
-
-The package is a deterministic pipeline language and decision engine. It lets a consumer
-store a portable definition, compile it once, and repeatedly ask what graph action is
-enabled by supplied facts.
+`@revisium/revo-pipeline` is a zero-runtime-dependency ESM library for portable graph
+definitions, deterministic compilation, and one pure semantic decision from supplied
+facts.
 
 ```text
-portable PipelineDefinition
-            |
-            v
-pure validation and compilation
-            |
-            v
-portable CompiledPipeline
-            |
-            + supplied PipelineFacts
-            v
-pure PipelineDecision
+PipelineDefinition --compilePipeline--> CompiledPipeline
+CompiledPipeline + PipelineFacts --decidePipeline--> PipelineDecision
 ```
 
-Compilation rejects malformed topology and normalizes graph structure. It does not bind
-models, profiles, prompts, agents, scripts, workspaces, credentials, or durable storage.
-Those bindings produce an orchestrator-owned immutable `ExecutionPlan`.
+The accepted API is planned but not shipped: the root source remains exactly `export {};`.
 
-Decision evaluation is referentially transparent. Every fact that can change an answer is
-supplied explicitly. The package neither remembers a previous call nor commits the
-decision.
+## Ownership boundary
 
-## Semantic ownership
+The package owns task, branch, fork, join, consensus, human-gate, and terminal graph
+semantics; bounded validation; immutable normalized topology; and pure decisions. It
+does not own a run, node instance, attempt, output, event, time, ID, clock, lease, CAS,
+retry, resume, persistence, queue, authorization, inbox, notification, agent, script,
+model/profile/prompt/workspace/provider binding, or host lifecycle. It never accepts a
+`JoinArrival` or a host execution-plan object.
 
-- Branch selects deterministic outgoing paths from explicit facts.
-- Fork enables declared branches without scheduling or creating durable work.
-- Join describes which branch completions satisfy a barrier.
-- Consensus describes candidate/quorum/decision rules, not agent execution.
-- Human gate describes an answer contract and how supplied resolution facts affect the
-  next decision, not an inbox, waiter, database row, or authorization service.
+`@revisium/revo-run` may depend on this package; reverse dependency is forbidden. A host
+reads durable state, maps it to portable facts, atomically applies a decision, and reloads
+after conflicts. That host work is deliberately outside this package.
 
-The package describes semantic node identities present in the definition. Runtime
-instance ids, attempts, duplicate-delivery protection, leases, timestamps, idempotency
-keys, and atomic state transitions belong to `@revisium/revo-run`.
+## Semantic invariants
 
-## Dependency boundary
+- Branch predicates are data; case domains are disjoint, so selection is never
+  first-match.
+- Fork/join readiness comes only from declared exit-node facts. Nested forks and hidden
+  mutable arrivals/counters are excluded in v1.
+- Decisions validate compiled integrity and causal facts before choosing an outcome;
+  terminal beats residual work, actions beat waits, and quiescence is explicit.
+- `CompiledPipeline` is portable, JSON-round-trippable canonical data, not a host binding.
 
-`@revisium/revo-run` may consume the pipeline package. This package never imports run.
-The orchestrator consumes both, compiles host bindings, and operates workers.
-
-```text
-@revisium/revo-pipeline
-          |
-          v
-@revisium/revo-run
-          |
-          v
-orchestrator application / worker / adapters
-```
-
-Agents and scripts are leaf executors selected by the orchestrator; neither is a pipeline
-dependency. Persistence and queues are infrastructure behind run/application contracts.
-
-## Internal structure
-
-The target layers and import matrix are in [REPOSITORY.md](../REPOSITORY.md) and the
-Draft internal structure specification. The structural validator, Oxlint cycle rule,
-synthetic positive graph, and exact negative probes make the rules executable before
-business source exists.
-
-## Public surface
-
-The foundation ships an intentionally empty ESM root. Draft examples are non-executable.
-An API is exported only after its specification is accepted and implementation, tests,
-declarations, package proof, and README agree.
+The accepted [definition](./specs/pipeline-definition-v1.spec.md),
+[transition](./specs/pipeline-transition-v1.spec.md), and
+[module structure](./specs/internal-module-structure.spec.md) specifications own exact
+type, ordering, bound, fault, and dependency details.

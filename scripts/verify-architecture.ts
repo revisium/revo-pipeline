@@ -94,34 +94,34 @@ const positiveGraph: readonly SourceModule[] = [
   {
     path: 'src/errors/pipeline-fault.ts',
     source:
-      "import type { PipelineDefinition } from '../spec/index.js';\nexport interface PipelineFault { readonly definition?: PipelineDefinition }\n",
+      "import type { PIPELINE_LIMITS } from '../policy/index.js';\nimport type { PipelineDefinition } from '../spec/index.js';\nexport interface PipelineFault { readonly definition?: PipelineDefinition; readonly limits?: typeof PIPELINE_LIMITS }\n",
   },
   {
     path: 'src/errors/index.ts',
     source: "export type { PipelineFault } from './pipeline-fault.js';\n",
   },
   {
-    path: 'src/definition/compile-pipeline.ts',
-    source:
-      "import type { PipelineDefinition } from '../spec/index.js';\nimport { PIPELINE_LIMITS } from '../policy/index.js';\nexport const compilePipeline = (value: PipelineDefinition): PipelineDefinition => (PIPELINE_LIMITS.nodes > 0 ? value : value);\n",
-  },
-  {
-    path: 'src/definition/index.ts',
-    source: "export { compilePipeline } from './compile-pipeline.js';\n",
-  },
-  {
     path: 'src/graph/read-edges.ts',
     source:
-      "import { compilePipeline } from '../definition/index.js';\nexport const readEdges = compilePipeline;\n",
+      "import type { PipelineFault } from '../errors/index.js';\nimport { PIPELINE_LIMITS } from '../policy/index.js';\nimport type { PipelineDefinition } from '../spec/index.js';\nexport const readEdges = (value: PipelineDefinition, fault?: PipelineFault): PipelineDefinition => (PIPELINE_LIMITS.nodes > 0 || fault ? value : value);\n",
   },
   {
     path: 'src/graph/index.ts',
     source: "export { readEdges } from './read-edges.js';\n",
   },
   {
+    path: 'src/definition/compile-pipeline.ts',
+    source:
+      "import type { PipelineFault } from '../errors/index.js';\nimport { readEdges } from '../graph/index.js';\nimport { PIPELINE_LIMITS } from '../policy/index.js';\nimport type { PipelineDefinition } from '../spec/index.js';\nexport const compilePipeline = (value: PipelineDefinition, fault?: PipelineFault): PipelineDefinition => (PIPELINE_LIMITS.nodes > 0 ? readEdges(value, fault) : value);\n",
+  },
+  {
+    path: 'src/definition/index.ts',
+    source: "export { compilePipeline } from './compile-pipeline.js';\n",
+  },
+  {
     path: 'src/transition/decide-transition.ts',
     source:
-      "import { readEdges } from '../graph/index.js';\nexport const decideTransition = readEdges;\n",
+      "import type { PipelineFault } from '../errors/index.js';\nimport { readEdges } from '../graph/index.js';\nimport { PIPELINE_LIMITS } from '../policy/index.js';\nimport type { PipelineDefinition } from '../spec/index.js';\nexport const decideTransition = (value: PipelineDefinition, fault?: PipelineFault): PipelineDefinition => (PIPELINE_LIMITS.nodes > 0 ? readEdges(value, fault) : value);\n",
   },
   {
     path: 'src/transition/index.ts',
@@ -140,6 +140,22 @@ execFileSync(oxlint, ['--config', config, '--deny-warnings', 'src', 'test'], {
 });
 
 const structuralProbes: readonly (readonly [SourceModule, ArchitectureRule])[] = [
+  [
+    {
+      path: 'src/graph/reverse-definition.ts',
+      source:
+        "import type { Compiled } from '../definition/index.js';\nexport type Reverse = Compiled;\n",
+    },
+    'layer-dependency',
+  ],
+  [
+    {
+      path: 'src/transition/reverse-definition.ts',
+      source:
+        "import type { Compiled } from '../definition/index.js';\nexport type Reverse = Compiled;\n",
+    },
+    'layer-dependency',
+  ],
   [
     {
       path: 'src/graph/missing-js.ts',

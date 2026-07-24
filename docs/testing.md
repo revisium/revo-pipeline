@@ -1,36 +1,40 @@
 # Testing
 
-## Principles
+PR1 retains tooling and package tests only. Each later behavior slice MUST add
+table-driven tests at its owning boundary and MUST pass `corepack pnpm verify`.
 
-- Behavior follows red -> green -> refactor.
-- Test pure semantic partitions with table-driven unit tests.
-- Expected decisions are written independently from actual results.
-- Fixtures contain every fact read by the decision engine.
-- Tests use public or curated layer entrypoints rather than private cross-layer files.
-- Skips and quality exclusions require an owner, reason, and removal condition.
+## Slice matrix
 
-## Proof layers
+| Slice | Required proof                                                                                                   |
+| ----- | ---------------------------------------------------------------------------------------------------------------- |
+| 1     | accepted contracts, exact empty root/package proof, full DAG positive graph, and exact negative probes           |
+| 2     | every public spec/policy/error type, JSON guards/equality, every limit, stable fault ordering/truncation         |
+| 3     | compiler normalization, graph/fork regions, canonical indexes, freeze/isolation, round-trip and tamper rejection |
+| 4     | entry/task/branch/terminal/noop, causal facts, faults-before-actions, actions-before-waits, terminal precedence  |
+| 5a    | fork/join activation/readiness edges, regions, causal closure, and all/any/threshold partitions                  |
+| 5b    | consensus/human-gate algorithms, verdict/resolution prerequisites, bounds, and faults                            |
+| 6     | exact root manifest, docs/examples, permutation/repeat properties, packed public consumer proof                  |
 
-| Layer        | Owns                                                              |
-| ------------ | ----------------------------------------------------------------- |
-| Unit         | Validation, compilation, graph algorithms, transition partitions  |
-| Contract     | Stable public definition/decision input and output compatibility  |
-| Architecture | Layer DAG, type cycles, forbidden imports, structural conventions |
-| Package      | ESM exports, declarations, packed contents, consumer resolution   |
+## Semantic matrix
 
-Only unit tests for repository tooling and package tests exist in the foundation.
-Behavior lanes are added with their first accepted behavior; no empty lane is retained.
+| Area          | Required partitions                                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| node state    | every node kind × omitted/enabled/terminal cell                                                                      |
+| progression   | empty facts, initial activation, repeated intent, post-application continuation, empty activation continuation, noop |
+| terminal      | zero/one/two reached terminals and reached terminal before earlier residual parallel work                            |
+| causality     | ordinary activation, fork activation/readiness, selector atomic targets, candidate/gate prerequisites                |
+| branch        | fact missing, each case, default, typed equality, overlap/non-exhaustive/unreachable default                         |
+| join          | accepted/rejected/skipped/pending/impossible for all, any, and every threshold boundary                              |
+| consensus     | unanimous/quorum/threshold approved/rejected/tied/insufficient/wait, abstain, irreversible result                    |
+| gate          | unresolved, every resolution, duplicate/foreign/premature/invalid resolution                                         |
+| compiled data | canonical sort/indexes, JSON round-trip, stale/tampered/noncanonical indexes                                         |
+| bounded input | every collection/string/depth/key/visit/path/message/render/fault limit and limit+sentinel                           |
+| descriptors   | sparse/accessor/symbol/non-enumerable/custom-prototype rejection without accessor invocation                         |
+| determinism   | input permutations, repeated evaluation, mutation isolation, recursive freeze                                        |
 
-Architecture proof must include the current graph, a representative synthetic positive
-graph, and exact negative probes for cycles, missing `.js`, private imports, forbidden
-external packages, unknown production areas, production escapes, root leakage, reverse
-dependencies, type-only barrels, and cleanup. Tests may consume a curated layer
-`index.js`, but not a private layer leaf.
+Architecture proof MUST cover the current graph, every allowed layer edge, and exact
+representative failures for every structural rule. Package proof MUST use one tarball for
+ATTW, contents, ESM, strict TypeScript, and runtime/type-level deep-import denial.
 
-The package proof creates one tarball with an isolated npm cache. ATTW, content checks,
-isolated ESM execution, strict TypeScript resolution, and deep-import denial all consume
-that exact artifact. Runtime and type-level private deep imports must both fail.
-
-During package foundation, v8 coverage includes `scripts/architecture/**/*.ts` in
-addition to `src/**/*.ts`; architecture tooling is owned executable behavior rather than
-an unmeasured repository helper.
+Before merge, exact-head CI, a real Sonar quality gate with zero valid open issues, and
+zero valid unresolved review threads are REQUIRED.

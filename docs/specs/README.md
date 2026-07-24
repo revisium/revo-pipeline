@@ -1,11 +1,11 @@
 # Specifications
 
-| Specification                                                    | Status |
-| ---------------------------------------------------------------- | ------ |
-| [Pipeline definition v1](./pipeline-definition-v1.spec.md)       | Draft  |
-| [Pipeline transition v1](./pipeline-transition-v1.spec.md)       | Draft  |
-| [Internal module structure](./internal-module-structure.spec.md) | Draft  |
+| Specification                                                    | Status   |
+| ---------------------------------------------------------------- | -------- |
+| [Pipeline definition v1](./pipeline-definition-v1.spec.md)       | Accepted |
+| [Pipeline transition v1](./pipeline-transition-v1.spec.md)       | Accepted |
+| [Internal module structure](./internal-module-structure.spec.md) | Accepted |
 
-Draft specifications are reviewable design targets. They are not shipped contracts,
-cannot be imported, and do not authorize implementation. Acceptance requires an explicit
-status change and review of the affected boundary.
+Acceptance fixes the contract for later implementation. It does not ship an API: until a
+subsequent implementation slice changes `src/index.ts`, the package root remains exactly
+`export {};` and the accepted API sketches are planned declarations only.

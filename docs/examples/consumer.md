@@ -1,32 +1,9 @@
 # Consumer Example
 
 > [!IMPORTANT]
-> This is a Draft, target-only example. The npm package is not published, the root export is intentionally empty, and every
-> API name and object shape below is provisional.
-
-This example defines one portable review graph and then evaluates independent fact snapshots. It demonstrates the intended
-consumer flow:
-
-```text
-define portable data
-        |
-        v
-compile and validate once
-        |
-        v
-read an explicit durable fact snapshot
-        |
-        v
-calculate one pure PipelineDecision
-        |
-        v
-consumer applies the decision atomically
-```
-
-The pipeline package owns only definition, compilation, and decision calculation. The illustrative `applyAtomically()`
-function belongs to the consumer and is intentionally not implemented here.
-
-## Define and compile
+> The following is an accepted contract example, not executable package code. The package
+> is unpublished and `src/index.ts` is exactly `export {};`; imports become valid only
+> after a later implementation/public-export slice.
 
 ```ts
 import { compilePipeline, decidePipeline, definePipeline } from '@revisium/revo-pipeline';
@@ -34,271 +11,95 @@ import { compilePipeline, decidePipeline, definePipeline } from '@revisium/revo-
 const definition = definePipeline({
   schemaVersion: 1,
   entry: 'prepare',
+  facts: [{ key: 'reviewRequired', type: 'boolean' }],
   nodes: [
     {
       key: 'prepare',
       kind: 'task',
-      outcomes: { completed: 'route-review' },
+      outcomes: {
+        completed: 'route',
+        failed: 'cancelled',
+        cancelled: 'cancelled',
+        skipped: 'cancelled',
+      },
     },
     {
-      key: 'route-review',
+      key: 'route',
       kind: 'branch',
-      cases: [
-        {
-          name: 'review-required',
-          when: { field: 'reviewRequired', equals: true },
-          target: 'review-fork',
-        },
-      ],
-      default: { name: 'skip-review', target: 'approval' },
+      fact: 'reviewRequired',
+      cases: [{ name: 'review', when: { op: 'equals', value: true }, to: 'reviews' }],
+      default: { name: 'skip', to: 'approval' },
     },
     {
-      key: 'review-fork',
+      key: 'reviews',
       kind: 'fork',
+      join: 'joined',
       branches: [
-        { name: 'reviewer-a', entry: 'review-a' },
-        { name: 'reviewer-b', entry: 'review-b' },
-        { name: 'reviewer-c', entry: 'review-c' },
+        { name: 'a', entry: 'review-a', exit: 'review-a' },
+        { name: 'b', entry: 'review-b', exit: 'review-b' },
       ],
-      join: 'reviews-finished',
     },
     {
       key: 'review-a',
       kind: 'task',
-      outcomes: { completed: 'reviews-finished' },
+      outcomes: { completed: 'joined', failed: 'joined', cancelled: 'joined', skipped: 'joined' },
     },
     {
       key: 'review-b',
       kind: 'task',
-      outcomes: { completed: 'reviews-finished' },
+      outcomes: { completed: 'joined', failed: 'joined', cancelled: 'joined', skipped: 'joined' },
     },
     {
-      key: 'review-c',
-      kind: 'task',
-      outcomes: { completed: 'reviews-finished' },
-    },
-    {
-      key: 'reviews-finished',
+      key: 'joined',
       kind: 'join',
-      fork: 'review-fork',
+      fork: 'reviews',
       policy: { kind: 'all' },
-      next: 'review-consensus',
-    },
-    {
-      key: 'review-consensus',
-      kind: 'consensus',
-      candidates: ['review-a', 'review-b', 'review-c'],
-      policy: {
-        kind: 'quorum',
-        required: 2,
-        tie: 'rejected',
-      },
-      outcomes: {
-        accepted: 'approval',
-        rejected: 'review-rejected',
-      },
+      outcomes: { completed: 'approval', rejected: 'cancelled', insufficient: 'cancelled' },
     },
     {
       key: 'approval',
       kind: 'humanGate',
-      subject: 'Approve the reviewed change',
-      resolutions: {
-        approved: 'publish',
-        rejected: 'cancelled',
-      },
-    },
-    {
-      key: 'publish',
-      kind: 'task',
-      outcomes: { completed: 'published', failed: 'publish-failed' },
+      subject: 'Approve the prepared change',
+      resolutions: [
+        { resolution: 'approved', to: 'published' },
+        { resolution: 'rejected', to: 'cancelled' },
+      ],
     },
     { key: 'published', kind: 'terminal', outcome: 'published' },
-    { key: 'review-rejected', kind: 'terminal', outcome: 'review-rejected' },
     { key: 'cancelled', kind: 'terminal', outcome: 'cancelled' },
-    { key: 'publish-failed', kind: 'terminal', outcome: 'publish-failed' },
   ],
 });
 
 const compilation = compilePipeline(definition);
-
-if (!compilation.ok) {
-  for (const fault of compilation.faults) {
-    console.error(fault.code, fault.path, fault.message);
-  }
-
-  throw new Error('Invalid pipeline definition');
-}
-
+if (!compilation.ok) throw new Error(compilation.faults.map((fault) => fault.message).join('\n'));
 const pipeline = compilation.pipeline;
 ```
 
-`NodeKey` values such as `review-a` are definition-local semantic identities. They are not run ids, database ids, runtime
-node-instance ids, attempt ids, idempotency keys, or lease tokens. Compilation copies retained input and produces portable
-readonly JSON-compatible data; it does not bind executors, models, profiles, prompts, credentials, or workspaces.
-
-## Decide from independent snapshots
-
-Each call below is independent. The package does not remember earlier calls, update the facts, or apply the returned
-decision.
-
-### Branch
-
-After `prepare` completes, the branch reads the explicit `reviewRequired` value. Exactly one declared case or the default
-must be selected.
+The first empty snapshot asks the host to enable `prepare`:
 
 ```ts
-const branchDecision = decidePipeline(pipeline, {
-  values: { reviewRequired: true },
+decidePipeline(pipeline, { values: [], nodes: [], candidateVerdicts: [], gateResolutions: [] });
+// { kind: 'activate', cause: { kind: 'entry' }, nodeKeys: ['prepare'] }
+```
+
+After a task terminal fact, branch selection is data-driven and never first-match:
+
+```ts
+decidePipeline(pipeline, {
+  values: [{ key: 'reviewRequired', value: true }],
   nodes: [
     { key: 'prepare', state: 'terminal', outcome: 'completed' },
-    { key: 'route-review', state: 'active' },
+    { key: 'route', state: 'enabled' },
   ],
-});
-
-// Representative target result:
-// {
-//   kind: 'select',
-//   nodeKey: 'route-review',
-//   outcome: 'review-required',
-//   activate: ['review-fork']
-// }
-```
-
-The predicate is portable data over declared fields. It cannot execute JavaScript, read the environment, call a service,
-or inspect stored run rows.
-
-### Fork
-
-When the selected fork is enabled, one decision activates every declared branch entry in stable order.
-
-```ts
-const forkDecision = decidePipeline(pipeline, {
-  nodes: [{ key: 'review-fork', state: 'enabled' }],
-});
-
-// Representative target result:
-// {
-//   kind: 'activate',
-//   nodeKeys: ['review-a', 'review-b', 'review-c']
-// }
-```
-
-The package does not enqueue tasks or create runtime node instances. A run engine may apply the whole activation set in one
-transaction.
-
-### Join
-
-Join readiness is derived from current branch and node facts. There is no mutable counter and no `JoinArrival`.
-
-```ts
-const waitingForJoin = decidePipeline(pipeline, {
-  nodes: [
-    { key: 'review-a', state: 'terminal', outcome: 'completed' },
-    { key: 'review-b', state: 'terminal', outcome: 'completed' },
-    { key: 'review-c', state: 'active' },
-    { key: 'reviews-finished', state: 'enabled' },
-  ],
-  forkBranches: [
-    { forkKey: 'review-fork', branch: 'reviewer-a', condition: 'accepted' },
-    { forkKey: 'review-fork', branch: 'reviewer-b', condition: 'accepted' },
-    { forkKey: 'review-fork', branch: 'reviewer-c', condition: 'active' },
-  ],
-});
-
-// Representative target result:
-// { kind: 'wait', nodeKey: 'reviews-finished', reason: 'join-incomplete' }
-
-const readyJoin = decidePipeline(pipeline, {
-  nodes: [
-    { key: 'review-a', state: 'terminal', outcome: 'completed' },
-    { key: 'review-b', state: 'terminal', outcome: 'completed' },
-    { key: 'review-c', state: 'terminal', outcome: 'completed' },
-    { key: 'reviews-finished', state: 'enabled' },
-  ],
-  forkBranches: [
-    { forkKey: 'review-fork', branch: 'reviewer-a', condition: 'accepted' },
-    { forkKey: 'review-fork', branch: 'reviewer-b', condition: 'accepted' },
-    { forkKey: 'review-fork', branch: 'reviewer-c', condition: 'accepted' },
-  ],
-});
-
-// Representative target result:
-// {
-//   kind: 'activate',
-//   nodeKeys: ['review-consensus']
-// }
-```
-
-With an `all` policy, every non-skipped branch must reach its declared accepted terminal condition. `any` and `threshold`
-policies use the same explicit-facts model.
-
-### Consensus
-
-Consensus consumes normalized candidate verdict facts. It neither runs reviewers nor chooses which attempt/output becomes
-a candidate verdict.
-
-```ts
-const consensusDecision = decidePipeline(pipeline, {
-  nodes: [{ key: 'review-consensus', state: 'active' }],
-  candidateVerdicts: [
-    { nodeKey: 'review-consensus', candidate: 'review-a', verdict: 'accepted' },
-    { nodeKey: 'review-consensus', candidate: 'review-b', verdict: 'accepted' },
-    { nodeKey: 'review-consensus', candidate: 'review-c', verdict: 'rejected' },
-  ],
-});
-
-// Representative target result:
-// {
-//   kind: 'select',
-//   nodeKey: 'review-consensus',
-//   outcome: 'accepted',
-//   activate: ['approval']
-// }
-```
-
-If the policy can still require a missing verdict, the result is `wait`. Quorum bounds, tie behavior, candidate membership,
-and exhaustive outcomes are validated during compilation.
-
-### Human gate
-
-Without an accepted normalized resolution fact, a human gate waits.
-
-```ts
-const waitingForHuman = decidePipeline(pipeline, {
-  nodes: [{ key: 'approval', state: 'waiting' }],
+  candidateVerdicts: [],
   gateResolutions: [],
 });
-
-// Representative target result:
-// { kind: 'wait', nodeKey: 'approval', reason: 'gate-unresolved' }
+// { kind: 'select', nodeKey: 'route', outcome: 'review', activate: ['reviews'] }
 ```
 
-Once the consumer supplies an accepted resolution, the package selects the declared graph outcome.
-
-```ts
-const gateDecision = decidePipeline(pipeline, {
-  nodes: [{ key: 'approval', state: 'waiting' }],
-  gateResolutions: [{ nodeKey: 'approval', resolution: 'approved' }],
-});
-
-// Representative target result:
-// {
-//   kind: 'select',
-//   nodeKey: 'approval',
-//   outcome: 'approved',
-//   activate: ['publish']
-// }
-```
-
-The consumer owns authorization, answer compare-and-set, storage, notification, durable wake-up, and the waiting runtime
-node instance. There is no persisted gate entity in this package.
-
-## Keep application outside the package
-
-The examples stop at `PipelineDecision` intentionally. A consumer is responsible for turning durable state into
-`PipelineFacts` and applying a returned decision. The package receives no repository, transaction, queue, clock, worker,
-executor, model, profile, prompt, credential, or workspace binding.
-
-Deeply equal `CompiledPipeline` and `PipelineFacts` values always produce a deeply equal `PipelineDecision`. This semantic
-idempotence does not claim exactly-once durable application; atomic changes, optimistic concurrency, fencing, duplicate
-delivery, retries, outputs, events, and recovery remain consumer responsibilities.
+A fork selection records `forked` and enables its entries plus the join atomically. A
+join derives readiness from `review-a`/`review-b` exit facts—there is no `JoinArrival`,
+arrival counter, or branch-lifecycle fact. A gate waits while enabled with no resolution,
+then selects its declared target when supplied with one. The host owns durable state,
+authorization, application/CAS, retries, and disposition of unfinished work after an
+early `any`/threshold join; this package only returns the repeatable semantic decision.

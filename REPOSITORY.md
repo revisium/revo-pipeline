@@ -12,7 +12,7 @@ scripts/verify-package.ts          one-tarball package/consumer proof
 test/unit/scripts/                 validator behavior
 test/package/                      bootstrap source/package assertions
 docs/adr/                          decisions
-docs/specs/                        Draft and Accepted contracts
+docs/specs/                        Accepted contracts
 .github/workflows/                 CI, validation, release train, npm publish
 ```
 
@@ -25,7 +25,7 @@ request for placeholders.
 src/
   spec/         portable readonly contracts; type-only
   policy/       immutable package constants and pure policy
-  errors/       portable typed faults; type-only and spec-only
+  errors/       portable typed faults; type-only
   definition/   definition validation and compilation
   graph/        compiled graph inspection and structural algorithms
   transition/   pure PipelineFacts -> PipelineDecision evaluation
@@ -37,10 +37,10 @@ Dependency direction:
 ```text
 spec
 policy
-spec <- errors
-spec + policy + errors <- definition
-spec + policy + errors + definition <- graph
-spec + policy + errors + definition + graph <- transition
+spec + policy <- errors
+spec + policy + errors <- graph
+spec + policy + errors + graph <- definition
+spec + policy + errors + graph <- transition
 ```
 
 Cross-layer imports go through the target layer's one curated

@@ -32,21 +32,34 @@ test('accepts the complete layer dependency matrix', () => {
       {
         path: 'src/errors/fault.ts',
         source:
-          "import type { PipelineFacts } from '../spec/index.js';\nexport interface Fault { readonly facts: PipelineFacts }\n",
+          "import type { LIMITS } from '../policy/index.js';\nimport type { PipelineFacts } from '../spec/index.js';\nexport interface Fault { readonly facts: PipelineFacts; readonly limits: typeof LIMITS }\n",
       },
       {
-        path: 'src/definition/compile.ts',
-        source:
-          "import type { PipelineFacts } from '../spec/index.js';\nimport { LIMITS } from '../policy/index.js';\nexport const compile = (facts: PipelineFacts): PipelineFacts => (LIMITS.nodes ? facts : facts);\n",
+        path: 'src/errors/index.ts',
+        source: "export type { Fault } from './fault.js';\n",
       },
       {
         path: 'src/graph/edges.ts',
         source:
-          "import { compile } from '../definition/index.js';\nexport const edges = compile;\n",
+          "import type { Fault } from '../errors/index.js';\nimport { LIMITS } from '../policy/index.js';\nimport type { PipelineFacts } from '../spec/index.js';\nexport const edges = (facts: PipelineFacts, fault?: Fault): PipelineFacts => (LIMITS.nodes || fault ? facts : facts);\n",
+      },
+      {
+        path: 'src/graph/index.ts',
+        source: "export { edges } from './edges.js';\n",
+      },
+      {
+        path: 'src/definition/compile.ts',
+        source:
+          "import type { Fault } from '../errors/index.js';\nimport { edges } from '../graph/index.js';\nimport { LIMITS } from '../policy/index.js';\nimport type { PipelineFacts } from '../spec/index.js';\nexport const compile = (facts: PipelineFacts, fault?: Fault): PipelineFacts => (LIMITS.nodes ? edges(facts, fault) : facts);\n",
+      },
+      {
+        path: 'src/definition/index.ts',
+        source: "export { compile } from './compile.js';\n",
       },
       {
         path: 'src/transition/decide.ts',
-        source: "import { edges } from '../graph/index.js';\nexport const decide = edges;\n",
+        source:
+          "import type { Fault } from '../errors/index.js';\nimport { edges } from '../graph/index.js';\nimport { LIMITS } from '../policy/index.js';\nimport type { PipelineFacts } from '../spec/index.js';\nexport const decide = (facts: PipelineFacts, fault?: Fault): PipelineFacts => (LIMITS.nodes ? edges(facts, fault) : facts);\n",
       },
       {
         path: 'src/index.ts',
@@ -82,12 +95,12 @@ test('accepts supported syntax variants without weakening the matrix', () => {
           "import type PipelineFacts = require('../spec/index.js');\nexport type PipelineFault = typeof PipelineFacts;\n",
       },
       {
-        path: 'src/graph/dynamic.ts',
-        source: "export const loadDefinition = () => import('../definition/index.js');\n",
+        path: 'src/definition/dynamic.ts',
+        source: "export const loadGraph = () => import('../graph/index.js');\n",
       },
       {
-        path: 'src/graph/import-type.ts',
-        source: "export type DefinitionModule = import('../definition/index.js');\n",
+        path: 'src/definition/import-type.ts',
+        source: "export type GraphModule = import('../graph/index.js');\n",
       },
       {
         path: 'test/unit/external.ts',
@@ -102,6 +115,22 @@ test('accepts supported syntax variants without weakening the matrix', () => {
 });
 
 test.each([
+  [
+    {
+      path: 'src/graph/reverse.ts',
+      source:
+        "import type { Compiled } from '../definition/index.js';\nexport type Reverse = Compiled;\n",
+    },
+    'layer-dependency',
+  ],
+  [
+    {
+      path: 'src/transition/reverse-definition.ts',
+      source:
+        "import type { Compiled } from '../definition/index.js';\nexport type Reverse = Compiled;\n",
+    },
+    'layer-dependency',
+  ],
   [
     {
       path: 'src/spec/value.ts',
