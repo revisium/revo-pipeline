@@ -249,18 +249,38 @@ and non-empty.
 | canonical offending-value rendering   |          128 characters |
 | returned faults                       |                     100 |
 
-Collection inspection MUST stop at limit plus one sentinel. Traversal MUST stop when the
-depth or visited-value limit is reached. Implementations MUST inspect own property
-descriptors before values. Sparse arrays, accessors, symbols, non-enumerable properties,
-custom prototypes, functions, `undefined`, fractional/unsafe/non-finite numbers, and
-other non-plain values MUST reject without invoking getters or setters. Ordinary
-JSON-compatible primitives, dense arrays, and plain objects are the portable input
-contract. Proxies are outside that contract; a throwing proxy trap MAY propagate.
+An array MUST be prechecked by its ordinary `length`. If oversized, validation MUST emit
+one container limit fault and MUST NOT perform own-key reflection, inspect descriptors or
+elements, or emit descendant faults. An in-range array MUST perform exactly one
+`Reflect.ownKeys`, with unavoidable `O(K)` time and memory for `K` own keys. Before
+sorting, descriptor inspection, or element reads, the reflected count MUST equal
+`length + 1` for dense indices plus `length`; a mismatch MUST emit one container type
+fault and prune descendants. Matching keys MUST then be exactly `length` plus canonical
+decimal indices. Numeric descriptors MUST be inspected in index order without invoking
+accessors. Sparse arrays and extra string, symbol, or noncanonical index properties MUST
+reject. The unavoidable reflection cost of an adversarial in-range array with extra keys
+is outside the bounded-work claim; subsequent work remains bounded.
 
-Definition faults MUST accumulate in phase order: shape, limits, local node, references,
-regions, then DAG. Within a phase they MUST sort by RFC 6901 path in Unicode code-point
-order and then code. Messages and rendered values MUST NOT affect ordering. When more
-than 100 faults exist, the result MUST contain the first 99 plus a root `DEF_LIMIT`.
+A plain object MUST use one ECMAScript own-key reflection operation. That initial
+operation necessarily costs `O(K)` time and memory for `K` own keys because ECMAScript
+has no bounded own-key iterator. If it returns more than 32 keys, validation MUST emit
+one container limit fault and MUST NOT inspect property descriptors or descendants. This
+unavoidable initial reflection cost is outside the bounded semantic-traversal claim.
+
+Within the object-key limit, descriptors MUST be inspected in canonical key order before
+any property value. Traversal MUST stop at the depth and visited-value limits. Sparse
+arrays, accessors, symbols, non-enumerable properties, custom prototypes, functions,
+`undefined`, fractional/unsafe/non-finite numbers, and other non-plain values MUST reject
+without invoking getters or setters. Ordinary JSON-compatible primitives, dense arrays,
+and plain objects are the portable input contract. Proxies are outside that contract; a
+throwing proxy trap MAY propagate.
+
+For non-pruned input, validation MUST collect the complete fault set permitted by depth,
+collection, and visit limits before truncation. Definition faults MUST globally sort by
+phase (shape, limits, local node, references, regions, DAG), then RFC 6901 path in Unicode
+code-point order, then fault code lexically. Messages and rendered values MUST NOT affect
+ordering. Up to 100 faults MUST be returned completely. More than 100 MUST return the
+globally first 99 plus a fixed root `DEF_LIMIT` truncation fault as item 100.
 
 Compilation MUST be bounded `O(V + E)` plus bounded sorting. Recursion MUST NOT depend
 on unbounded caller input depth.

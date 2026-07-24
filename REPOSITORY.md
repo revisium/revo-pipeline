@@ -6,9 +6,14 @@
 
 ```text
 src/index.ts                       intentionally empty shipped entrypoint
+src/spec/                          type-only accepted contract foundation
+src/policy/                        immutable limits and pure bounded utilities
+src/errors/                        type-only fault and result contracts
 scripts/architecture/              structural source validation
 scripts/verify-architecture.ts     positive graph and exact negative probes
 scripts/verify-package.ts          one-tarball package/consumer proof
+test/unit/policy/                  portable policy and bound behavior
+test/unit/spec/                    type contract assertions
 test/unit/scripts/                 validator behavior
 test/package/                      bootstrap source/package assertions
 docs/adr/                          decisions

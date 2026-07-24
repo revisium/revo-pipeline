@@ -1,0 +1,32 @@
+export const PIPELINE_LIMITS = Object.freeze({
+  definition: Object.freeze({
+    nodes: 256,
+    edges: 1_024,
+    declaredFacts: 128,
+    branchCasesPerNode: 64,
+    predicateValuesPerCase: 64,
+    forkBranchesPerNode: 32,
+    candidatesPerNode: 32,
+    candidatesTotal: 1_024,
+    resolutionsPerNode: 32,
+    resolutionsTotal: 1_024,
+  }),
+  facts: Object.freeze({
+    values: 128,
+    nodes: 256,
+    candidateVerdicts: 1_024,
+    gateResolutions: 256,
+    total: 1_664,
+  }),
+  portable: Object.freeze({
+    depth: 8,
+    objectKeys: 32,
+    visitedValues: 16_384,
+    nameCodePoints: 64,
+    displayCodePoints: 512,
+    pathCharacters: 1_024,
+    messageCharacters: 512,
+    renderingCharacters: 128,
+  }),
+  faults: 100,
+} as const);

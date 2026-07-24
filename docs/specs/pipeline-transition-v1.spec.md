@@ -225,12 +225,30 @@ Malformed, altered, stale, or noncanonical compiled data MUST return `PIPELINE_I
 All offsets MUST be zero-based safe integers and MUST agree with their canonical arrays,
 keys, and endpoints. This is integrity validation, not cryptographic provenance.
 
-Validators MUST inspect own property descriptors before values. Ordinary JSON-compatible
-primitives, dense arrays, and plain objects are supported. Sparse arrays, accessors,
-symbols, non-enumerable properties, custom prototypes, functions, `undefined`, and
-fractional/unsafe/non-finite numbers MUST reject without invoking getters or setters.
-Traversal MUST stop at the depth, own-key, visited-value, and collection limits. Proxies
-are outside the portable contract; a throwing proxy trap MAY propagate.
+Arrays MUST be prechecked by ordinary `length`. An oversized array MUST produce one
+container limit fault without own-key reflection, descriptor or element inspection, or
+descendant faults. An in-range array MUST perform exactly one `Reflect.ownKeys`, whose
+`O(K)` time and memory cost for `K` own keys is unavoidable. Before sorting, descriptors,
+or element reads, key count MUST equal `length + 1`; mismatch MUST produce one container
+type fault and prune descendants. Matching keys MUST be exactly `length` plus canonical
+decimal indices, and numeric descriptors MUST be inspected in index order without
+invoking accessors. Sparse arrays and extra string, symbol, or noncanonical index
+properties MUST reject. The reflection cost of adversarial in-range arrays with extra
+keys is outside the bounded-work claim; all subsequent work remains bounded.
+
+Plain objects MUST use one ECMAScript own-key reflection operation. Because ECMAScript
+has no bounded own-key iterator, that operation necessarily costs `O(K)` time and memory
+for `K` own keys. More than 32 reflected keys MUST produce one container limit fault with
+no descriptor or descendant inspection. This initial reflection cost is outside the
+bounded semantic-traversal claim.
+
+Within the key limit, validators MUST inspect descriptors in canonical order before any
+values. Ordinary JSON-compatible primitives, dense arrays, and plain objects are
+supported. Sparse arrays, accessors, symbols, non-enumerable properties, custom
+prototypes, functions, `undefined`, and fractional/unsafe/non-finite numbers MUST reject
+without invoking getters or setters. Traversal MUST stop at the depth, visited-value,
+and collection limits. Proxies are outside the portable contract; a throwing proxy trap
+MAY propagate.
 
 ## Fact and diagnostic limits
 
@@ -249,26 +267,25 @@ are outside the portable contract; a throwing proxy trap MAY propagate.
 | canonical offending-value rendering               |          128 characters |
 | returned faults                                   |                     100 |
 
-Collection inspection MUST stop at limit plus one sentinel. Decision-fault validation
-MUST use these phases and exact code priorities:
+For non-pruned input, validators MUST collect the complete fault set permitted by depth,
+collection, and visit limits. Decision faults MUST globally sort by this explicit code
+priority:
 
-|                                       Phase | Codes in priority order                                               |
-| ------------------------------------------: | --------------------------------------------------------------------- |
-|                       1. compiled integrity | `PIPELINE_INVALID`                                                    |
-|            2. fact shape and portable value | `FACT_TYPE`                                                           |
-|          3. collection and traversal limits | `FACT_LIMIT`                                                          |
-|     4. uniqueness and closed-set membership | `FACT_DUPLICATE`, `FACT_FOREIGN`, `FACT_CANDIDATE`, `FACT_RESOLUTION` |
-|      5. terminal/node outcome compatibility | `FACT_OUTCOME`                                                        |
-| 6. selector/verdict/resolution prerequisite | `FACT_PREMATURE`                                                      |
-|     7. activation and region causal closure | `FACT_CAUSAL`                                                         |
+1. `PIPELINE_INVALID`
+2. `FACT_TYPE`
+3. `FACT_LIMIT`
+4. `FACT_DUPLICATE`
+5. `FACT_FOREIGN`
+6. `FACT_OUTCOME`
+7. `FACT_CANDIDATE`
+8. `FACT_RESOLUTION`
+9. `FACT_PREMATURE`
+10. `FACT_CAUSAL`
 
-Every `DecisionFaultCode` MUST belong to exactly one phase above. Within a phase,
-validators MUST traverse `values`, `nodes`, `candidateVerdicts`, then `gateResolutions`
-in canonical array order. Returned faults MUST sort by phase rank, RFC 6901 path in
-Unicode code-point order, and then the code priority shown for that phase. Fixed messages
-and rendered offending values MUST NOT participate in ordering. This order MUST apply
-across fault classes before truncation. When more than 100 faults exist, the result MUST
-contain the first 99 ordered faults plus a final root `FACT_LIMIT` truncation fault.
+After code priority they MUST sort by RFC 6901 path in Unicode code-point order, then
+fault code lexically. Fixed messages and rendered offending values MUST NOT participate
+in ordering. Up to 100 faults MUST be returned completely. More than 100 MUST return the
+globally first 99 plus a fixed root `FACT_LIMIT` truncation fault as item 100.
 
 ## Required test matrix
 
