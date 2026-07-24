@@ -1,35 +1,47 @@
-# ADR 0001: Portable pipeline boundary
+# ADR 0001: Portable pipeline language and decision boundary
 
 - Status: Accepted
-- Date: 2026-07-23
+- Version: 1.0.0
+- Date: 2026-07-24
 
 ## Context
 
-Pipeline topology, durable run state, and orchestrator bindings previously risked becoming
-one stateful subsystem. That prevents deterministic testing and makes persistence or
-worker choices leak into graph semantics.
+Pipeline topology, durable run coordination, and executor bindings could become one
+stateful subsystem. That would make graph outcomes depend on storage, clocks, attempts,
+workers, and application lifecycle, preventing deterministic reuse by different hosts.
 
 ## Decision
 
-`@revisium/revo-pipeline` owns portable definition/compilation and pure transition
-decisions. The defining equation is:
+`@revisium/revo-pipeline` is a portable, zero-runtime-dependency language for graph
+definition, deterministic compilation, and pure decisions from explicit facts. Durable
+execution and coordination remain outside the package. `@revisium/revo-run` may depend
+on pipeline; the reverse dependency is forbidden.
 
-```text
-CompiledPipeline + PipelineFacts -> PipelineDecision
-```
+The accepted [definition contract](../specs/pipeline-definition-v1.spec.md) owns the
+public vocabulary, compilation rules, graph validity, bounds, and export manifest. The
+accepted [transition contract](../specs/pipeline-transition-v1.spec.md) owns facts,
+decision precedence, node policies, causal closure, diagnostics, and totality. The
+accepted [module contract](../specs/internal-module-structure.spec.md) owns dependency
+direction and enforcement. Those specifications are normative; this ADR records only
+the boundary rationale.
 
-The package owns branch, fork, join, consensus, and human-gate semantics. It does not own
-run/attempt state, ids, clocks, persistence, CAS, leases, retry scheduling, resume,
-host-specific `ExecutionPlan` bindings, executors, or frameworks.
+## Alternatives considered
 
-`@revisium/revo-run` may depend on this package. Reverse dependency is forbidden.
-The orchestrator compiles host bindings and coordinates workers/adapters.
+- A stateful executor was rejected because it would duplicate run ownership and couple
+  semantic policy to persistence and worker lifecycle.
+- Executable predicates were rejected because code execution would weaken portability
+  and deterministic validation.
+- Persisted join arrivals were rejected because duplicate delivery and recovery would
+  leak run coordination into the semantic package.
+- External runtime helpers were rejected for v1 to preserve a small portable package
+  boundary.
 
 ## Consequences
 
-- Semantics remain deterministic and database-independent.
-- The run package can apply decisions atomically without duplicating graph policy.
-- A gate is graph semantics here but durable waiting and answer recording live in run.
-- Consensus is a graph decision rule here but candidate execution and outputs live
-  outside.
-- Pipeline definitions cannot reference host implementation objects.
+- Different hosts can reuse one deterministic language without duplicating graph policy.
+- Hosts must map durable state into complete fact snapshots and own atomic application,
+  conflict retries, cancellation, and unfinished work.
+- Canonical compiled data and integrity validation increase payload size and per-decision
+  work.
+- The intentionally limited v1 language trades expressiveness for a smaller, verifiable
+  first contract.

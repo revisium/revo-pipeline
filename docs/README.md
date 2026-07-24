@@ -5,9 +5,10 @@
 - [Release train](./release-train.md)
 - [Expanded consumer example](./examples/consumer.md)
 - [ADR 0001: package boundary](./adr/0001-package-boundary.md)
-- [Draft pipeline definition v1](./specs/pipeline-definition-v1.spec.md)
-- [Draft pipeline transition v1](./specs/pipeline-transition-v1.spec.md)
-- [Draft internal module structure](./specs/internal-module-structure.spec.md)
+- [Accepted pipeline definition v1](./specs/pipeline-definition-v1.spec.md)
+- [Accepted pipeline transition v1](./specs/pipeline-transition-v1.spec.md)
+- [Accepted internal module structure](./specs/internal-module-structure.spec.md)
 
-Specifications explicitly marked Draft are design inputs only. They do not authorize an
-export or claim implementation.
+Accepted specifications authorize later implementation, not an immediate export. The
+bootstrap root is intentionally empty until an implementation slice passes behavior,
+package, and architecture proof.

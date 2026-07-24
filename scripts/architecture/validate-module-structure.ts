@@ -38,16 +38,16 @@ interface ModuleReference {
   readonly target?: string;
 }
 
-const LAYERS = ['spec', 'policy', 'errors', 'definition', 'graph', 'transition'] as const;
+const LAYERS = ['spec', 'policy', 'errors', 'graph', 'definition', 'transition'] as const;
 type Layer = (typeof LAYERS)[number];
 
 const ALLOWED_DEPENDENCIES: Readonly<Record<Layer, readonly Layer[]>> = {
   spec: [],
   policy: [],
-  errors: ['spec'],
-  definition: ['spec', 'policy', 'errors'],
-  graph: ['spec', 'policy', 'errors', 'definition'],
-  transition: ['spec', 'policy', 'errors', 'definition', 'graph'],
+  errors: ['spec', 'policy'],
+  graph: ['spec', 'policy', 'errors'],
+  definition: ['spec', 'policy', 'errors', 'graph'],
+  transition: ['spec', 'policy', 'errors', 'graph'],
 };
 
 const fail = (rule: ArchitectureRule, path: string): never => {

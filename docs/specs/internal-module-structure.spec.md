@@ -1,71 +1,69 @@
 # Internal Module Structure
 
-- Status: Draft
+- Status: Accepted
+- Version: 1.0.0
 - Target package: `@revisium/revo-pipeline`
 
-The foundation already enforces this proposed structure against a synthetic positive
-graph and exact negative probes. Production areas are created only with accepted
-behavior.
+The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**, and
+**MAY** in this document are to be interpreted as described in BCP 14 (RFC 2119 and
+RFC 8174) when, and only when, they appear in all capitals.
 
-## Layers
+Directories MUST be created only with their first accepted behavior. This specification
+does not authorize a bootstrap export.
 
-| Layer        | Responsibility                                    | Allowed dependencies                  |
-| ------------ | ------------------------------------------------- | ------------------------------------- |
-| `spec`       | Portable readonly contracts; type-only            | none                                  |
-| `policy`     | Immutable constants and pure package policy       | none                                  |
-| `errors`     | Portable typed faults; type-only                  | `spec`                                |
-| `definition` | Validation, normalization, compilation            | `spec`, `policy`, `errors`            |
-| `graph`      | Compiled topology inspection and graph algorithms | previous layers through their barrels |
-| `transition` | Pure facts-to-decision evaluation                 | all previous layers through barrels   |
-| root         | Curated public API after contract acceptance      | curated exports only                  |
+## Dependency DAG
 
-The order is strict; a lower layer never imports a higher layer. `spec` and `policy` are
-independent leaves. `errors` remains type-only so diagnostics contracts cannot pull
-behavior back into specification.
+```text
+spec
+policy
+spec + policy <- errors
+spec + policy + errors <- graph
+spec + policy + errors + graph <- definition
+spec + policy + errors + graph <- transition
+definition + transition + spec + errors <- root
+```
 
-## File rules
+| Layer        | Responsibility                                                   | Allowed layer imports               |
+| ------------ | ---------------------------------------------------------------- | ----------------------------------- |
+| `spec`       | portable readonly public contracts; type-only                    | none                                |
+| `policy`     | immutable limits and pure package policy                         | none                                |
+| `errors`     | portable fault contracts; type-only                              | `spec`, `policy`                    |
+| `graph`      | bounded topology, reachability, sort, and fork-region algorithms | `spec`, `policy`, `errors`          |
+| `definition` | validation, normalization, compilation                           | `spec`, `policy`, `errors`, `graph` |
+| `transition` | pure facts-to-decision evaluation                                | `spec`, `policy`, `errors`, `graph` |
 
-- Relative imports and exports use `.js` specifiers.
-- Cross-layer imports target exactly the destination `src/<layer>/index.ts`.
-- Nested `index.ts` files are private leaves, not curated barrels.
-- Same-layer leaves do not import their `src/<layer>/index.ts` barrel.
-- Barrels use explicit named exports; wildcard and namespace barrels are forbidden.
-- `spec` and `errors` barrels use explicit `export type` syntax; value exports fail.
-- Each production leaf owns one exported entity.
-- `spec` and `errors` leaves contain only interfaces, type aliases, type-only imports,
-  and type-only exports.
-- Tests consume the source root or a curated layer barrel, not private cross-layer files.
-- Production never imports tests, fixtures, build output, repository scripts, or
-  generated verification probes.
-- Unknown `src/*` ownership areas fail closed, internal layers cannot import the package
-  root, and the bootstrap root remains exactly empty.
-- Public consumers use package exports and cannot deep-import `dist`.
+`graph` MUST NOT import `definition`. `transition` MUST NOT import `definition`; it
+consumes compiled contracts and graph helpers. The root MUST be the only public barrel
+after the later public implementation slice and MUST curate only `definition`,
+`transition`, `spec`, and `errors`. It MUST NOT re-export internal `policy` or `graph`
+helpers. During bootstrap it MUST remain exactly `export {};`.
 
-## Forbidden dependencies
+## File and import rules
 
-Production has no runtime dependency in the foundation. In particular it never imports:
+- Cross-layer imports MUST target `src/<layer>/index.ts`. Same-layer leaves MUST NOT
+  import their own barrel. Relative specifiers MUST use `.js`.
+- Layer barrels MUST use explicit named exports. `spec` and `errors` leaves and barrels
+  MUST be type-only. Each production leaf MUST own exactly one exported entity.
+- Tests MUST use only the root or a curated layer barrel. Production MUST NOT import
+  tests, scripts, generated output, coverage, probes, or unknown `src/*` areas.
+- Internal modules MUST NOT import the root. Consumers MUST use declared package exports;
+  runtime and type-level private `dist` imports MUST fail.
+- Runtime dependencies MUST remain zero. Production MUST NOT import
+  `@revisium/revo-run`, agent/script packages, Prisma, DBOS, queues, NestJS, GraphQL,
+  MCP, CLI, or another host framework.
 
-- `@revisium/revo-run`;
-- Prisma or another persistence implementation;
-- DBOS, pg-boss, Graphile Worker, or another durable queue/runtime;
-- NestJS, GraphQL, MCP, or CLI frameworks;
-- agent or script implementations.
+## Required executable proof
 
-A future external pure utility dependency requires an accepted boundary decision and an
-explicit allowlist change; architecture validation remains fail-closed.
+The architecture harness MUST validate:
 
-## Required proof
+1. current source and test files;
+2. a positive graph that exercises every allowed edge, including `errors -> policy`;
+3. exact negative `layer-dependency` probes for both `graph -> definition` and
+   `transition -> definition`;
+4. missing `.js`, private cross-layer/test imports, own-barrel imports, value/type
+   cycles, type-only layers/barrels, one-export leaves, broad barrels, root leakage,
+   unknown areas, production escapes, and forbidden external packages;
+5. removal of every temporary probe in `finally`, including after assertion failure.
 
-Architecture verification must:
-
-1. validate the current source/test graph;
-2. validate a representative synthetic positive graph spanning every layer;
-3. prove type/value cycle detection with type cycles included;
-4. prove forbidden external imports fail;
-5. prove test/private and cross-layer private imports fail;
-6. prove missing `.js`, own-barrel, reverse-layer, type-only, one-export, and explicit
-   barrel rules fail with exact rule identities;
-7. remove every temporary probe in `finally`, including after a failed assertion.
-
-Changing a rule requires updating its structural unit partition and the executable
-positive/negative architecture harness in the same change.
+A DAG rule change MUST update this specification, structural validator, unit partition,
+and positive/negative executable harness in the same change.
