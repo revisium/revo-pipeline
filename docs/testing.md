@@ -28,8 +28,9 @@ table-driven tests at its owning boundary and MUST pass `corepack pnpm verify`.
 | consensus     | unanimous/quorum/threshold approved/rejected/tied/insufficient/wait, abstain, irreversible result                    |
 | gate          | unresolved, every resolution, duplicate/foreign/premature/invalid resolution                                         |
 | compiled data | canonical sort/indexes, JSON round-trip, stale/tampered/noncanonical indexes                                         |
-| bounded input | every collection/string/depth/key/visit/path/message/render/fault limit and limit+sentinel                           |
-| descriptors   | sparse/accessor/symbol/non-enumerable/custom-prototype rejection without accessor invocation                         |
+| bounded input | over-limit array precheck, in-range key-count pruning, 33-key object pruning, every remaining bound                  |
+| reflection    | one array/object own-key reflection, documented O(K) caveats, numeric/canonical descriptor-first inspection          |
+| diagnostics   | insertion/overflow permutations, global truncation, definition lexical ties, decision code priority                  |
 | determinism   | input permutations, repeated evaluation, mutation isolation, recursive freeze                                        |
 
 Architecture proof MUST cover the current graph, every allowed layer edge, and exact

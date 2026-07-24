@@ -4,7 +4,7 @@ Portable pipeline definitions, deterministic compilation, and pure semantic deci
 for Revo.
 
 > [!IMPORTANT]
-> The v1 contract is accepted, but no runtime API is shipped. The package is unpublished
+> The v1 contract is accepted, but no public runtime API is shipped. The package is unpublished
 > and `src/index.ts` is exactly `export {};`. The API below is a planned declaration for
 > later implementation slices, not an importable API today.
 
@@ -18,6 +18,11 @@ their readonly definition, compiled graph, facts, policy, fault, and decision ty
 `definePipeline` is identity/type inference only. Compilation is bounded and creates
 frozen canonical portable data; decisions are synchronous, pure, deterministic, and
 total over supplied facts.
+
+The current internal foundation implements readonly contract types, immutable limits,
+canonical scalar/ordering policy, bounded portable-value inspection, and fault-ordering
+primitives. Compiler, graph traversal, and transition evaluation are not implemented or
+exported.
 
 The package owns graph semantics for task, branch, fork, join, consensus, human gate,
 and terminal nodes. It excludes runs, attempts, IDs, time, persistence, CAS, leases,
