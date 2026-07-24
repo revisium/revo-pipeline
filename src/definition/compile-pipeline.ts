@@ -42,7 +42,7 @@ type ValidatedNode = {
 const TASK_OUTCOMES = ['cancelled', 'completed', 'failed', 'skipped'] as const;
 const JOIN_OUTCOMES = ['completed', 'insufficient', 'rejected'] as const;
 const CONSENSUS_OUTCOMES = ['approved', 'insufficient', 'rejected', 'tied'] as const;
-const NODE_KINDS: readonly string[] = [
+const NODE_KINDS: ReadonlySet<string> = new Set([
   'branch',
   'consensus',
   'fork',
@@ -50,14 +50,14 @@ const NODE_KINDS: readonly string[] = [
   'join',
   'task',
   'terminal',
-];
-const FACT_TYPES: readonly string[] = ['boolean', 'null', 'number', 'string'];
+]);
+const FACT_TYPES: ReadonlySet<string> = new Set(['boolean', 'null', 'number', 'string']);
 
 const isRecord = (value: unknown): value is RecordValue =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const isFactType = (value: unknown): value is FactDefinition['type'] =>
-  typeof value === 'string' && FACT_TYPES.includes(value);
+  typeof value === 'string' && FACT_TYPES.has(value);
 
 const isStringRecord = (value: unknown): value is Record<string, string> =>
   isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string');
@@ -340,6 +340,44 @@ const validateFacts = (value: unknown, faults: MutableFault[]): readonly FactDef
   return facts;
 };
 
+const validateBranchCaseScalars = (
+  predicate: unknown,
+  casePath: string,
+  expectedType: FactDefinition['type'] | undefined,
+  domains: JsonScalar[],
+  faults: MutableFault[],
+): void => {
+  const scalars = validatePredicate(predicate, `${casePath}/when`, faults);
+  for (const scalar of scalars) {
+    if (domains.some((existing) => jsonScalarsEqual(existing, scalar))) {
+      addFault(faults, 'DEF_BRANCH_AMBIGUOUS', `${casePath}/when`, 'Overlapping case domain.');
+    }
+    domains.push(scalar);
+    if (expectedType !== undefined && scalarType(scalar) !== expectedType) {
+      addFault(faults, 'DEF_TYPE', `${casePath}/when`, 'Predicate type differs from fact.');
+    }
+  }
+};
+
+const validateBranchCase = (
+  entry: RecordValue,
+  casePath: string,
+  expectedType: FactDefinition['type'] | undefined,
+  domains: JsonScalar[],
+  names: Set<string>,
+  faults: MutableFault[],
+): void => {
+  unknownFields(entry, ['name', 'to', 'when'], casePath, faults);
+  if (requireName(entry.name, `${casePath}/name`, faults)) {
+    if (names.has(entry.name)) {
+      addFault(faults, 'DEF_DUPLICATE', `${casePath}/name`, 'Duplicate branch name.');
+    }
+    names.add(entry.name);
+  }
+  requireKey(entry.to, `${casePath}/to`, faults);
+  validateBranchCaseScalars(entry.when, casePath, expectedType, domains, faults);
+};
+
 const validateBranchCases = (
   cases: readonly unknown[],
   path: string,
@@ -354,24 +392,7 @@ const validateBranchCases = (
       addFault(faults, 'DEF_TYPE', casePath, 'Expected branch case.');
       continue;
     }
-    unknownFields(entry, ['name', 'to', 'when'], casePath, faults);
-    if (requireName(entry.name, `${casePath}/name`, faults)) {
-      if (names.has(entry.name)) {
-        addFault(faults, 'DEF_DUPLICATE', `${casePath}/name`, 'Duplicate branch name.');
-      }
-      names.add(entry.name);
-    }
-    requireKey(entry.to, `${casePath}/to`, faults);
-    const scalars = validatePredicate(entry.when, `${casePath}/when`, faults);
-    for (const scalar of scalars) {
-      if (domains.some((existing) => jsonScalarsEqual(existing, scalar))) {
-        addFault(faults, 'DEF_BRANCH_AMBIGUOUS', `${casePath}/when`, 'Overlapping case domain.');
-      }
-      domains.push(scalar);
-      if (expectedType !== undefined && scalarType(scalar) !== expectedType) {
-        addFault(faults, 'DEF_TYPE', `${casePath}/when`, 'Predicate type differs from fact.');
-      }
-    }
+    validateBranchCase(entry, casePath, expectedType, domains, names, faults);
   }
   return { domains, names };
 };
@@ -651,7 +672,7 @@ const validateNodes = (
       addFault(faults, 'DEF_TYPE', path, 'Expected pipeline node.');
       return;
     }
-    const kindValid = typeof entry.kind === 'string' && NODE_KINDS.includes(entry.kind);
+    const kindValid = typeof entry.kind === 'string' && NODE_KINDS.has(entry.kind);
     if (!kindValid) {
       addFault(faults, 'DEF_TYPE', `${path}/kind`, 'Invalid node kind.');
     }
@@ -863,6 +884,19 @@ type RegionContext = {
   readonly sourceNodes: ReadonlyMap<string, PipelineNode>;
 };
 
+type ForkNode = Extract<PipelineNode, { readonly kind: 'fork' }>;
+type JoinNode = Extract<PipelineNode, { readonly kind: 'join' }>;
+type ForkBranchClassification = {
+  readonly branch: ForkNode['branches'][number];
+  readonly branchExits: Map<string, string>;
+  readonly context: RegionContext;
+  readonly faults: MutableFault[];
+  readonly fork: ForkNode;
+  readonly forkPath: string;
+  readonly join: JoinNode;
+  readonly memberOwners: Map<string, string>;
+};
+
 const buildEdgeBuckets = (edges: readonly MutableCompiledEdge[]): EdgeBuckets => {
   const outgoing = new Map<string, MutableCompiledEdge[]>();
   const incoming = new Map<string, MutableCompiledEdge[]>();
@@ -878,7 +912,7 @@ const buildEdgeBuckets = (edges: readonly MutableCompiledEdge[]): EdgeBuckets =>
 };
 
 const sourceBranchIndex = (
-  fork: Extract<PipelineNode, { readonly kind: 'fork' }>,
+  fork: ForkNode,
   branch: (typeof fork.branches)[number],
   sourceNodes: ReadonlyMap<string, PipelineNode>,
 ): number => {
@@ -927,15 +961,10 @@ const validateRegionMember = (
 };
 
 const classifyForkBranch = (
-  fork: Extract<PipelineNode, { readonly kind: 'fork' }>,
-  join: Extract<PipelineNode, { readonly kind: 'join' }>,
-  branch: (typeof fork.branches)[number],
-  forkPath: string,
-  memberOwners: Map<string, string>,
-  branchExits: Map<string, string>,
-  context: RegionContext,
-  faults: MutableFault[],
+  classification: ForkBranchClassification,
 ): CompiledForkRegion['branches'][number] => {
+  const { branch, branchExits, context, faults, fork, forkPath, join, memberOwners } =
+    classification;
   const branchIndex = sourceBranchIndex(fork, branch, context.sourceNodes);
   const branchPath = `${forkPath}/branches/${branchIndex}`;
   branchExits.set(branch.name, branch.exit);
@@ -968,8 +997,8 @@ const classifyForkBranch = (
 
 const regionEdgeIsPermitted = (
   edge: CompiledEdge,
-  fork: Extract<PipelineNode, { readonly kind: 'fork' }>,
-  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  fork: ForkNode,
+  join: JoinNode,
   memberOwners: ReadonlyMap<string, string>,
   branchExits: ReadonlyMap<string, string>,
 ): boolean => {
@@ -990,8 +1019,8 @@ const regionEdgeIsPermitted = (
 };
 
 const validateRegionEdges = (
-  fork: Extract<PipelineNode, { readonly kind: 'fork' }>,
-  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  fork: ForkNode,
+  join: JoinNode,
   memberOwners: ReadonlyMap<string, string>,
   branchExits: ReadonlyMap<string, string>,
   context: RegionContext,
@@ -1019,7 +1048,7 @@ const validateRegionEdges = (
 };
 
 const validateJoinThreshold = (
-  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  join: JoinNode,
   branchCount: number,
   sourceIndexes: ReadonlyMap<string, number>,
   faults: MutableFault[],
@@ -1039,7 +1068,7 @@ const validateJoinThreshold = (
 };
 
 const classifyForkRegion = (
-  fork: Extract<PipelineNode, { readonly kind: 'fork' }>,
+  fork: ForkNode,
   context: RegionContext,
   faults: MutableFault[],
 ): CompiledForkRegion | undefined => {
@@ -1052,7 +1081,16 @@ const classifyForkRegion = (
   const memberOwners = new Map<string, string>();
   const branchExits = new Map<string, string>();
   const branches = fork.branches.map((branch) =>
-    classifyForkBranch(fork, join, branch, forkPath, memberOwners, branchExits, context, faults),
+    classifyForkBranch({
+      branch,
+      branchExits,
+      context,
+      faults,
+      fork,
+      forkPath,
+      join,
+      memberOwners,
+    }),
   );
   validateRegionEdges(fork, join, memberOwners, branchExits, context, faults);
   validateJoinThreshold(join, fork.branches.length, context.sourceIndexes, faults);
@@ -1060,7 +1098,7 @@ const classifyForkRegion = (
 };
 
 const validateJoinReciprocity = (
-  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  join: JoinNode,
   context: RegionContext,
   faults: MutableFault[],
 ): void => {
@@ -1076,7 +1114,7 @@ const validateJoinReciprocity = (
 };
 
 const validateJoinIngress = (
-  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  join: JoinNode,
   context: RegionContext,
   faults: MutableFault[],
 ): void => {
