@@ -42,8 +42,16 @@ type ValidatedNode = {
 const TASK_OUTCOMES = ['cancelled', 'completed', 'failed', 'skipped'] as const;
 const JOIN_OUTCOMES = ['completed', 'insufficient', 'rejected'] as const;
 const CONSENSUS_OUTCOMES = ['approved', 'insufficient', 'rejected', 'tied'] as const;
-const NODE_KINDS = ['branch', 'consensus', 'fork', 'humanGate', 'join', 'task', 'terminal'];
-const FACT_TYPES = ['boolean', 'null', 'number', 'string'];
+const NODE_KINDS: readonly string[] = [
+  'branch',
+  'consensus',
+  'fork',
+  'humanGate',
+  'join',
+  'task',
+  'terminal',
+];
+const FACT_TYPES: readonly string[] = ['boolean', 'null', 'number', 'string'];
 
 const isRecord = (value: unknown): value is RecordValue =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -214,8 +222,15 @@ const validateExactRoutes = (
 };
 
 const scalarType = (value: JsonScalar): string => (value === null ? 'null' : typeof value);
-const scalarTypeRank = (value: JsonScalar): number =>
-  value === null ? 0 : typeof value === 'boolean' ? 1 : typeof value === 'number' ? 2 : 3;
+const scalarTypeRank = (value: JsonScalar): number => {
+  if (value === null) {
+    return 0;
+  }
+  if (typeof value === 'boolean') {
+    return 1;
+  }
+  return typeof value === 'number' ? 2 : 3;
+};
 const scalarComparator = (left: JsonScalar, right: JsonScalar): number => {
   const rank = scalarTypeRank(left) - scalarTypeRank(right);
   if (rank !== 0) {
@@ -325,6 +340,101 @@ const validateFacts = (value: unknown, faults: MutableFault[]): readonly FactDef
   return facts;
 };
 
+const validateBranchCases = (
+  cases: readonly unknown[],
+  path: string,
+  expectedType: FactDefinition['type'] | undefined,
+  faults: MutableFault[],
+): { readonly domains: readonly JsonScalar[]; readonly names: ReadonlySet<string> } => {
+  const domains: JsonScalar[] = [];
+  const names = new Set<string>();
+  for (const [index, entry] of cases.entries()) {
+    const casePath = `${path}/cases/${index}`;
+    if (!isRecord(entry)) {
+      addFault(faults, 'DEF_TYPE', casePath, 'Expected branch case.');
+      continue;
+    }
+    unknownFields(entry, ['name', 'to', 'when'], casePath, faults);
+    if (requireName(entry.name, `${casePath}/name`, faults)) {
+      if (names.has(entry.name)) {
+        addFault(faults, 'DEF_DUPLICATE', `${casePath}/name`, 'Duplicate branch name.');
+      }
+      names.add(entry.name);
+    }
+    requireKey(entry.to, `${casePath}/to`, faults);
+    const scalars = validatePredicate(entry.when, `${casePath}/when`, faults);
+    for (const scalar of scalars) {
+      if (domains.some((existing) => jsonScalarsEqual(existing, scalar))) {
+        addFault(faults, 'DEF_BRANCH_AMBIGUOUS', `${casePath}/when`, 'Overlapping case domain.');
+      }
+      domains.push(scalar);
+      if (expectedType !== undefined && scalarType(scalar) !== expectedType) {
+        addFault(faults, 'DEF_TYPE', `${casePath}/when`, 'Predicate type differs from fact.');
+      }
+    }
+  }
+  return { domains, names };
+};
+
+const validateBranchDefault = (
+  value: unknown,
+  path: string,
+  caseNames: ReadonlySet<string>,
+  faults: MutableFault[],
+): void => {
+  if (value === null) {
+    return;
+  }
+  if (!isRecord(value)) {
+    addFault(faults, 'DEF_TYPE', `${path}/default`, 'Invalid branch default.');
+    return;
+  }
+  unknownFields(value, ['name', 'to'], `${path}/default`, faults);
+  const name = value.name;
+  const nameValid = requireName(name, `${path}/default/name`, faults);
+  const targetValid = nameValid && requireKey(value.to, `${path}/default/to`, faults);
+  if (!nameValid || !targetValid) {
+    addFault(faults, 'DEF_TYPE', `${path}/default`, 'Invalid branch default.');
+  }
+  if (nameValid && caseNames.has(name)) {
+    addFault(faults, 'DEF_DUPLICATE', `${path}/default/name`, 'Duplicate branch name.');
+  }
+};
+
+const branchDomainIsFullyCovered = (
+  type: FactDefinition['type'] | undefined,
+  domains: readonly JsonScalar[],
+): boolean => {
+  if (type === 'null') {
+    return domains.includes(null);
+  }
+  return type === 'boolean' && domains.includes(true) && domains.includes(false);
+};
+
+const validateBranchCoverage = (
+  type: FactDefinition['type'] | undefined,
+  domains: readonly JsonScalar[],
+  hasDefault: boolean,
+  path: string,
+  faults: MutableFault[],
+): void => {
+  if ((type === 'string' || type === 'number') && !hasDefault) {
+    addFault(faults, 'DEF_BRANCH_NON_EXHAUSTIVE', `${path}/default`, 'Default is required.');
+  }
+  const fullyCovered = branchDomainIsFullyCovered(type, domains);
+  if ((type === 'null' || type === 'boolean') && !fullyCovered && !hasDefault) {
+    addFault(faults, 'DEF_BRANCH_NON_EXHAUSTIVE', `${path}/default`, 'Branch is not exhaustive.');
+  }
+  if (fullyCovered && hasDefault) {
+    addFault(
+      faults,
+      'DEF_BRANCH_UNREACHABLE_DEFAULT',
+      `${path}/default`,
+      'Default is unreachable.',
+    );
+  }
+};
+
 const validateBranch = (
   node: RecordValue,
   path: string,
@@ -342,72 +452,13 @@ const validateBranch = (
   )
     ? node.cases
     : [];
-  const domains: JsonScalar[] = [];
-  const names = new Set<string>();
-  for (const [index, entry] of cases.entries()) {
-    const casePath = `${path}/cases/${index}`;
-    if (!isRecord(entry)) {
-      addFault(faults, 'DEF_TYPE', casePath, 'Expected branch case.');
-      continue;
-    }
-    unknownFields(entry, ['name', 'to', 'when'], casePath, faults);
-    if (requireName(entry.name, `${casePath}/name`, faults)) {
-      if (names.has(entry.name)) {
-        addFault(faults, 'DEF_DUPLICATE', `${casePath}/name`, 'Duplicate branch name.');
-      }
-      names.add(entry.name);
-    }
-    requireKey(entry.to, `${casePath}/to`, faults);
-    for (const scalar of validatePredicate(entry.when, `${casePath}/when`, faults)) {
-      if (domains.some((existing) => jsonScalarsEqual(existing, scalar))) {
-        addFault(faults, 'DEF_BRANCH_AMBIGUOUS', `${casePath}/when`, 'Overlapping case domain.');
-      }
-      domains.push(scalar);
-      if (factValid && scalarType(scalar) !== factTypes.get(fact)) {
-        addFault(faults, 'DEF_TYPE', `${casePath}/when`, 'Predicate type differs from fact.');
-      }
-    }
-  }
-  const defaultValid =
-    node.default === null ||
-    (isRecord(node.default) &&
-      (unknownFields(node.default, ['name', 'to'], `${path}/default`, faults),
-      requireName(node.default.name, `${path}/default/name`, faults) &&
-        requireKey(node.default.to, `${path}/default/to`, faults)));
-  if (!defaultValid) {
-    addFault(faults, 'DEF_TYPE', `${path}/default`, 'Invalid branch default.');
-  }
-  if (
-    isRecord(node.default) &&
-    typeof node.default.name === 'string' &&
-    names.has(node.default.name)
-  ) {
-    addFault(faults, 'DEF_DUPLICATE', `${path}/default/name`, 'Duplicate branch name.');
-  }
   const type = factValid ? factTypes.get(fact) : undefined;
+  const { domains, names } = validateBranchCases(cases, path, type, faults);
+  validateBranchDefault(node.default, path, names, faults);
   if (factValid && type === undefined) {
     addFault(faults, 'DEF_TARGET', `${path}/fact`, 'Unknown branch fact.');
   }
-  if ((type === 'string' || type === 'number') && node.default === null) {
-    addFault(faults, 'DEF_BRANCH_NON_EXHAUSTIVE', `${path}/default`, 'Default is required.');
-  }
-  const fullyCovered =
-    type === 'null'
-      ? domains.some((value) => value === null)
-      : type === 'boolean' &&
-        domains.some((value) => value === true) &&
-        domains.some((value) => value === false);
-  if ((type === 'null' || type === 'boolean') && !fullyCovered && node.default === null) {
-    addFault(faults, 'DEF_BRANCH_NON_EXHAUSTIVE', `${path}/default`, 'Branch is not exhaustive.');
-  }
-  if (fullyCovered && node.default !== null) {
-    addFault(
-      faults,
-      'DEF_BRANCH_UNREACHABLE_DEFAULT',
-      `${path}/default`,
-      'Default is unreachable.',
-    );
-  }
+  validateBranchCoverage(type, domains, node.default !== null, path, faults);
 };
 
 const validateFork = (node: RecordValue, path: string, faults: MutableFault[]): void => {
@@ -799,6 +850,254 @@ const validateReferences = (
   }
 };
 
+type EdgeBuckets = {
+  readonly incoming: ReadonlyMap<string, readonly MutableCompiledEdge[]>;
+  readonly outgoing: ReadonlyMap<string, readonly MutableCompiledEdge[]>;
+};
+
+type RegionContext = {
+  readonly adjacency: ReturnType<typeof buildGraphAdjacency>;
+  readonly buckets: EdgeBuckets;
+  readonly nodeByKey: ReadonlyMap<string, PipelineNode>;
+  readonly sourceIndexes: ReadonlyMap<string, number>;
+  readonly sourceNodes: ReadonlyMap<string, PipelineNode>;
+};
+
+const buildEdgeBuckets = (edges: readonly MutableCompiledEdge[]): EdgeBuckets => {
+  const outgoing = new Map<string, MutableCompiledEdge[]>();
+  const incoming = new Map<string, MutableCompiledEdge[]>();
+  for (const edge of edges) {
+    const outgoingForNode = outgoing.get(edge.from) ?? [];
+    outgoingForNode.push(edge);
+    outgoing.set(edge.from, outgoingForNode);
+    const incomingForNode = incoming.get(edge.to) ?? [];
+    incomingForNode.push(edge);
+    incoming.set(edge.to, incomingForNode);
+  }
+  return { incoming, outgoing };
+};
+
+const sourceBranchIndex = (
+  fork: Extract<PipelineNode, { readonly kind: 'fork' }>,
+  branch: (typeof fork.branches)[number],
+  sourceNodes: ReadonlyMap<string, PipelineNode>,
+): number => {
+  const sourceFork = sourceNodes.get(fork.key);
+  if (sourceFork?.kind !== 'fork') {
+    return 0;
+  }
+  return sourceFork.branches.findIndex(
+    (candidate) =>
+      candidate.name === branch.name &&
+      candidate.entry === branch.entry &&
+      candidate.exit === branch.exit,
+  );
+};
+
+const validateRegionMember = (
+  member: string,
+  branchName: string,
+  branchPath: string,
+  memberOwners: Map<string, string>,
+  context: RegionContext,
+  faults: MutableFault[],
+): void => {
+  const owner = memberOwners.get(member);
+  if (owner !== undefined && owner !== branchName) {
+    addFault(faults, 'DEF_FORK_REGION', branchPath, 'Fork branches overlap.');
+  }
+  memberOwners.set(member, branchName);
+  const memberKind = context.nodeByKey.get(member)?.kind;
+  if (memberKind === 'fork') {
+    addFault(
+      faults,
+      'DEF_FORK_NESTED',
+      `/nodes/${context.sourceIndexes.get(member) ?? 0}`,
+      'Nested forks are forbidden.',
+    );
+  }
+  if (memberKind === 'join') {
+    addFault(
+      faults,
+      'DEF_FORK_REGION',
+      `/nodes/${context.sourceIndexes.get(member) ?? 0}`,
+      'Foreign join in fork region.',
+    );
+  }
+};
+
+const classifyForkBranch = (
+  fork: Extract<PipelineNode, { readonly kind: 'fork' }>,
+  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  branch: (typeof fork.branches)[number],
+  forkPath: string,
+  memberOwners: Map<string, string>,
+  branchExits: Map<string, string>,
+  context: RegionContext,
+  faults: MutableFault[],
+): CompiledForkRegion['branches'][number] => {
+  const branchIndex = sourceBranchIndex(fork, branch, context.sourceNodes);
+  const branchPath = `${forkPath}/branches/${branchIndex}`;
+  branchExits.set(branch.name, branch.exit);
+  const members = [
+    ...collectRegionMembers(branch.entry, branch.exit, join.key, context.adjacency),
+  ].sort(compareUnicodeCodePoints);
+  for (const member of members) {
+    validateRegionMember(member, branch.name, branchPath, memberOwners, context, faults);
+  }
+  const exit = context.nodeByKey.get(branch.exit);
+  if (exit?.kind !== 'task' || !members.includes(branch.exit)) {
+    addFault(faults, 'DEF_FORK_REGION', `${branchPath}/exit`, 'Branch exit must be a member task.');
+  }
+  const exitEdges = context.buckets.outgoing.get(branch.exit) ?? [];
+  if (exitEdges.length !== TASK_OUTCOMES.length || exitEdges.some((edge) => edge.to !== join.key)) {
+    addFault(
+      faults,
+      'DEF_FORK_REGION',
+      `/nodes/${context.sourceIndexes.get(branch.exit) ?? 0}`,
+      'Every exit outcome must target the join.',
+    );
+  }
+  for (const edge of exitEdges) {
+    edge.role = 'readiness';
+    edge.fork = fork.key;
+    edge.branch = branch.name;
+  }
+  return { ...branch, members };
+};
+
+const regionEdgeIsPermitted = (
+  edge: CompiledEdge,
+  fork: Extract<PipelineNode, { readonly kind: 'fork' }>,
+  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  memberOwners: ReadonlyMap<string, string>,
+  branchExits: ReadonlyMap<string, string>,
+): boolean => {
+  const fromOwner = memberOwners.get(edge.from);
+  const toOwner = memberOwners.get(edge.to);
+  const exit = fromOwner !== undefined && edge.from === branchExits.get(fromOwner);
+  const permittedExit = exit && edge.to === join.key;
+  const permittedEntry = edge.from === fork.key && toOwner !== undefined;
+  const permittedInternal = fromOwner !== undefined && fromOwner === toOwner;
+  const directBarrier = edge.from === fork.key && edge.to === join.key;
+  return (
+    (fromOwner === undefined && toOwner === undefined) ||
+    permittedExit ||
+    permittedEntry ||
+    permittedInternal ||
+    directBarrier
+  );
+};
+
+const validateRegionEdges = (
+  fork: Extract<PipelineNode, { readonly kind: 'fork' }>,
+  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  memberOwners: ReadonlyMap<string, string>,
+  branchExits: ReadonlyMap<string, string>,
+  context: RegionContext,
+  faults: MutableFault[],
+): void => {
+  const regionEdges = new Set<MutableCompiledEdge>(context.buckets.outgoing.get(fork.key) ?? []);
+  for (const member of memberOwners.keys()) {
+    for (const edge of context.buckets.outgoing.get(member) ?? []) {
+      regionEdges.add(edge);
+    }
+    for (const edge of context.buckets.incoming.get(member) ?? []) {
+      regionEdges.add(edge);
+    }
+  }
+  for (const edge of regionEdges) {
+    if (!regionEdgeIsPermitted(edge, fork, join, memberOwners, branchExits)) {
+      addFault(
+        faults,
+        'DEF_FORK_REGION',
+        `/nodes/${context.sourceIndexes.get(edge.from) ?? 0}`,
+        'Invalid fork-region edge.',
+      );
+    }
+  }
+};
+
+const validateJoinThreshold = (
+  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  branchCount: number,
+  sourceIndexes: ReadonlyMap<string, number>,
+  faults: MutableFault[],
+): void => {
+  if (join.policy.kind !== 'threshold') {
+    return;
+  }
+  const { count } = join.policy;
+  if (!Number.isSafeInteger(count) || count < 1 || count > branchCount) {
+    addFault(
+      faults,
+      'DEF_JOIN_THRESHOLD',
+      `/nodes/${sourceIndexes.get(join.key) ?? 0}/policy/count`,
+      'Join threshold exceeds branch count.',
+    );
+  }
+};
+
+const classifyForkRegion = (
+  fork: Extract<PipelineNode, { readonly kind: 'fork' }>,
+  context: RegionContext,
+  faults: MutableFault[],
+): CompiledForkRegion | undefined => {
+  const forkPath = `/nodes/${context.sourceIndexes.get(fork.key) ?? 0}`;
+  const join = context.nodeByKey.get(fork.join);
+  if (join?.kind !== 'join' || join.fork !== fork.key) {
+    addFault(faults, 'DEF_FORK_JOIN', `${forkPath}/join`, 'Fork/join is not reciprocal.');
+    return undefined;
+  }
+  const memberOwners = new Map<string, string>();
+  const branchExits = new Map<string, string>();
+  const branches = fork.branches.map((branch) =>
+    classifyForkBranch(fork, join, branch, forkPath, memberOwners, branchExits, context, faults),
+  );
+  validateRegionEdges(fork, join, memberOwners, branchExits, context, faults);
+  validateJoinThreshold(join, fork.branches.length, context.sourceIndexes, faults);
+  return { fork: fork.key, join: join.key, branches };
+};
+
+const validateJoinReciprocity = (
+  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  context: RegionContext,
+  faults: MutableFault[],
+): void => {
+  const fork = context.nodeByKey.get(join.fork);
+  if (fork?.kind !== 'fork' || fork.join !== join.key) {
+    addFault(
+      faults,
+      'DEF_FORK_JOIN',
+      `/nodes/${context.sourceIndexes.get(join.key) ?? 0}/fork`,
+      'Join/fork is not reciprocal.',
+    );
+  }
+};
+
+const validateJoinIngress = (
+  join: Extract<PipelineNode, { readonly kind: 'join' }>,
+  context: RegionContext,
+  faults: MutableFault[],
+): void => {
+  const fork = context.nodeByKey.get(join.fork);
+  const declaredExits = fork?.kind === 'fork' ? fork.branches.map((branch) => branch.exit) : [];
+  for (const edge of context.buckets.incoming.get(join.key) ?? []) {
+    const owningForkActivation =
+      edge.from === join.fork && edge.role === 'activation' && edge.outcome === 'forked';
+    const declaredReadiness =
+      declaredExits.includes(edge.from) && edge.role === 'readiness' && edge.fork === join.fork;
+    if (!owningForkActivation && !declaredReadiness) {
+      addFault(
+        faults,
+        'DEF_FORK_REGION',
+        `/nodes/${context.sourceIndexes.get(edge.from) ?? 0}`,
+        'Invalid join ingress.',
+      );
+    }
+  }
+};
+
 const classifyForkRegions = (
   nodes: readonly PipelineNode[],
   inputEdges: readonly CompiledEdge[],
@@ -808,171 +1107,20 @@ const classifyForkRegions = (
 ): { readonly edges: readonly CompiledEdge[]; readonly regions: readonly CompiledForkRegion[] } => {
   const nodeByKey = new Map(nodes.map((node) => [node.key, node]));
   const edges: MutableCompiledEdge[] = inputEdges.map((edge) => ({ ...edge }));
-  const adjacency = buildGraphAdjacency(edges);
-  const outgoingEdges = new Map<string, MutableCompiledEdge[]>();
-  const incomingEdges = new Map<string, MutableCompiledEdge[]>();
-  for (const edge of edges) {
-    const outgoing = outgoingEdges.get(edge.from) ?? [];
-    outgoing.push(edge);
-    outgoingEdges.set(edge.from, outgoing);
-    const incoming = incomingEdges.get(edge.to) ?? [];
-    incoming.push(edge);
-    incomingEdges.set(edge.to, incoming);
-  }
-  const regions: CompiledForkRegion[] = [];
-  for (const fork of nodes.filter((node) => node.kind === 'fork')) {
-    const forkPath = `/nodes/${sourceIndexes.get(fork.key) ?? 0}`;
-    const join = nodeByKey.get(fork.join);
-    if (join?.kind !== 'join' || join.fork !== fork.key) {
-      addFault(faults, 'DEF_FORK_JOIN', `${forkPath}/join`, 'Fork/join is not reciprocal.');
-      continue;
-    }
-    const memberOwners = new Map<string, string>();
-    const branchExits = new Map<string, string>();
-    const branches = fork.branches.map((branch) => {
-      const sourceFork = sourceNodes.get(fork.key);
-      const branchIndex =
-        sourceFork?.kind === 'fork'
-          ? sourceFork.branches.findIndex(
-              (candidate) =>
-                candidate.name === branch.name &&
-                candidate.entry === branch.entry &&
-                candidate.exit === branch.exit,
-            )
-          : 0;
-      const branchPath = `${forkPath}/branches/${branchIndex}`;
-      branchExits.set(branch.name, branch.exit);
-      const members = [
-        ...collectRegionMembers(branch.entry, branch.exit, join.key, adjacency),
-      ].sort(compareUnicodeCodePoints);
-      for (const member of members) {
-        const owner = memberOwners.get(member);
-        if (owner !== undefined && owner !== branch.name) {
-          addFault(faults, 'DEF_FORK_REGION', branchPath, 'Fork branches overlap.');
-        }
-        memberOwners.set(member, branch.name);
-        if (nodeByKey.get(member)?.kind === 'fork') {
-          addFault(
-            faults,
-            'DEF_FORK_NESTED',
-            `/nodes/${sourceIndexes.get(member) ?? 0}`,
-            'Nested forks are forbidden.',
-          );
-        }
-        if (nodeByKey.get(member)?.kind === 'join') {
-          addFault(
-            faults,
-            'DEF_FORK_REGION',
-            `/nodes/${sourceIndexes.get(member) ?? 0}`,
-            'Foreign join in fork region.',
-          );
-        }
-      }
-      const exit = nodeByKey.get(branch.exit);
-      if (exit?.kind !== 'task' || !members.includes(branch.exit)) {
-        addFault(
-          faults,
-          'DEF_FORK_REGION',
-          `${branchPath}/exit`,
-          'Branch exit must be a member task.',
-        );
-      }
-      const exitEdges = outgoingEdges.get(branch.exit) ?? [];
-      if (
-        exitEdges.length !== TASK_OUTCOMES.length ||
-        exitEdges.some((edge) => edge.to !== join.key)
-      ) {
-        addFault(
-          faults,
-          'DEF_FORK_REGION',
-          `/nodes/${sourceIndexes.get(branch.exit) ?? 0}`,
-          'Every exit outcome must target the join.',
-        );
-      }
-      for (const edge of exitEdges) {
-        edge.role = 'readiness';
-        edge.fork = fork.key;
-        edge.branch = branch.name;
-      }
-      return { ...branch, members };
-    });
-    const regionEdges = new Set<MutableCompiledEdge>(outgoingEdges.get(fork.key) ?? []);
-    for (const member of memberOwners.keys()) {
-      for (const edge of outgoingEdges.get(member) ?? []) {
-        regionEdges.add(edge);
-      }
-      for (const edge of incomingEdges.get(member) ?? []) {
-        regionEdges.add(edge);
-      }
-    }
-    for (const edge of regionEdges) {
-      const fromOwner = memberOwners.get(edge.from);
-      const toOwner = memberOwners.get(edge.to);
-      const permittedExit =
-        fromOwner !== undefined && edge.from === branchExits.get(fromOwner) && edge.to === join.key;
-      const permittedEntry = edge.from === fork.key && toOwner !== undefined;
-      const permittedInternal = fromOwner !== undefined && fromOwner === toOwner;
-      const directBarrier = edge.from === fork.key && edge.to === join.key;
-      if (
-        (fromOwner !== undefined || toOwner !== undefined) &&
-        !permittedExit &&
-        !permittedEntry &&
-        !permittedInternal &&
-        !directBarrier
-      ) {
-        addFault(
-          faults,
-          'DEF_FORK_REGION',
-          `/nodes/${sourceIndexes.get(edge.from) ?? 0}`,
-          'Invalid fork-region edge.',
-        );
-      }
-    }
-    const threshold = join.policy.kind === 'threshold' ? join.policy.count : undefined;
-    if (
-      threshold !== undefined &&
-      (!Number.isSafeInteger(threshold) || threshold < 1 || threshold > fork.branches.length)
-    ) {
-      addFault(
-        faults,
-        'DEF_JOIN_THRESHOLD',
-        `/nodes/${sourceIndexes.get(join.key) ?? 0}/policy/count`,
-        'Join threshold exceeds branch count.',
-      );
-    }
-    regions.push({ fork: fork.key, join: join.key, branches });
-  }
+  const context: RegionContext = {
+    adjacency: buildGraphAdjacency(edges),
+    buckets: buildEdgeBuckets(edges),
+    nodeByKey,
+    sourceIndexes,
+    sourceNodes,
+  };
+  const regions = nodes
+    .filter((node) => node.kind === 'fork')
+    .map((fork) => classifyForkRegion(fork, context, faults))
+    .filter((region): region is CompiledForkRegion => region !== undefined);
   for (const join of nodes.filter((node) => node.kind === 'join')) {
-    const fork = nodeByKey.get(join.fork);
-    if (fork?.kind !== 'fork' || fork.join !== join.key) {
-      addFault(
-        faults,
-        'DEF_FORK_JOIN',
-        `/nodes/${sourceIndexes.get(join.key) ?? 0}/fork`,
-        'Join/fork is not reciprocal.',
-      );
-    }
-  }
-  for (const join of nodes.filter((node) => node.kind === 'join')) {
-    const fork = nodeByKey.get(join.fork);
-    const declaredExits =
-      fork?.kind === 'fork'
-        ? new Set(fork.branches.map((branch) => branch.exit))
-        : new Set<string>();
-    for (const edge of incomingEdges.get(join.key) ?? []) {
-      const owningForkActivation =
-        edge.from === join.fork && edge.role === 'activation' && edge.outcome === 'forked';
-      const declaredReadiness =
-        declaredExits.has(edge.from) && edge.role === 'readiness' && edge.fork === join.fork;
-      if (!owningForkActivation && !declaredReadiness) {
-        addFault(
-          faults,
-          'DEF_FORK_REGION',
-          `/nodes/${sourceIndexes.get(edge.from) ?? 0}`,
-          'Invalid join ingress.',
-        );
-      }
-    }
+    validateJoinReciprocity(join, context, faults);
+    validateJoinIngress(join, context, faults);
   }
   return { edges, regions };
 };
