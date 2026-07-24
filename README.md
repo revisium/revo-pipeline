@@ -19,10 +19,11 @@ their readonly definition, compiled graph, facts, policy, fault, and decision ty
 frozen canonical portable data; decisions are synchronous, pure, deterministic, and
 total over supplied facts.
 
-The current internal foundation implements readonly contract types, immutable limits,
-canonical scalar/ordering policy, bounded portable-value inspection, and fault-ordering
-primitives. Compiler, graph traversal, and transition evaluation are not implemented or
-exported.
+The current internal implementation includes readonly contract types, immutable limits,
+canonical scalar/ordering policy, bounded portable-value inspection, deterministic graph
+algorithms, and definition compilation with canonical frozen output. These internal
+layers are not exported from the package root. Transition evaluation is not implemented
+or exported.
 
 The package owns graph semantics for task, branch, fork, join, consensus, human gate,
 and terminal nodes. It excludes runs, attempts, IDs, time, persistence, CAS, leases,
