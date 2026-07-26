@@ -1,5 +1,6 @@
 import type { DecisionFault, DecisionFaultCode, PipelineDecision } from '../errors/index.js';
 import {
+  compareUnicodeCodePoints,
   DECISION_FAULT_PHASES,
   inspectPortableValueSet,
   isValidKey,
@@ -31,10 +32,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const hasExactFields = (value: Record<string, unknown>, fields: readonly string[]): boolean => {
-  const keys = Object.keys(value).sort();
-  return (
-    keys.length === fields.length && keys.every((key, index) => key === [...fields].sort()[index])
-  );
+  const keys = Object.keys(value).sort(compareUnicodeCodePoints);
+  const expected = [...fields].sort(compareUnicodeCodePoints);
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 };
 
 const addFault = (
@@ -453,7 +453,7 @@ const validateCausality = (
     }
     const activated = (graph.incomingByKey.get(fact.key) ?? []).some((edgeOffset) => {
       const edge = pipeline.edges[edgeOffset];
-      if (!edge || edge.role !== 'activation') {
+      if (edge?.role !== 'activation') {
         return false;
       }
       const source = byNode.get(edge.from);

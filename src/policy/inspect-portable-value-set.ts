@@ -11,6 +11,13 @@ const rejected = (context: Context, code: Issue['code'], path: string): null => 
   return null;
 };
 
+const inspectNumber = (input: number, path: string, context: Context): number | null => {
+  if (!Number.isSafeInteger(input)) {
+    return rejected(context, 'type', path);
+  }
+  return Object.is(input, -0) ? 0 : input;
+};
+
 const inspect = (input: unknown, path: string, depth: number, context: Context): unknown => {
   if (context.exhausted) {
     return null;
@@ -27,11 +34,7 @@ const inspect = (input: unknown, path: string, depth: number, context: Context):
     return input;
   }
   if (typeof input === 'number') {
-    return Number.isSafeInteger(input)
-      ? Object.is(input, -0)
-        ? 0
-        : input
-      : rejected(context, 'type', path);
+    return inspectNumber(input, path, context);
   }
   if (typeof input === 'string') {
     const normalized = input.normalize('NFC');
@@ -72,7 +75,7 @@ const inspect = (input: unknown, path: string, depth: number, context: Context):
   }
   const keys = isArray
     ? Array.from({ length: input.length }, (_entry, index) => String(index))
-    : reflectedKeys.sort(compareUnicodeCodePoints);
+    : reflectedKeys.toSorted(compareUnicodeCodePoints);
   const outputArray: unknown[] = [];
   const outputObject: Record<string, unknown> = {};
   for (const key of keys) {
