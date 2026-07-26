@@ -34,7 +34,7 @@ type ValidatedFacts = {
   readonly consensusByNode: ReadonlyMap<string, ConsensusFacts>;
   readonly gateResolutions: readonly IndexedFact<GateResolution>[];
   readonly gateResolutionByNode: ReadonlyMap<string, GateResolution>;
-  readonly nodes: readonly NodeFact[];
+  readonly nodes: readonly IndexedFact<NodeFact>[];
   readonly nodeByKey: ReadonlyMap<string, NodeFact>;
   readonly values: readonly PipelineValueFact[];
   readonly valueByKey: ReadonlyMap<string, JsonScalar>;
@@ -116,6 +116,7 @@ const validateValueFacts = (
     const definition = definitions.get(key);
     if (seen.has(key)) {
       addFault(faults, 'FACT_DUPLICATE', `${path}/key`, 'Duplicate value fact.');
+      return;
     }
     seen.add(key);
     if (!definition) {
@@ -142,10 +143,10 @@ const validateNodeFacts = (
   input: readonly unknown[],
   pipeline: CompiledPipeline,
   faults: MutableFault[],
-): readonly NodeFact[] => {
+): readonly IndexedFact<NodeFact>[] => {
   const nodes = new Map(pipeline.nodes.map((node) => [node.key, node]));
   const seen = new Set<string>();
-  const facts: NodeFact[] = [];
+  const facts: IndexedFact<NodeFact>[] = [];
   input.forEach((entry, index) => {
     if (entry === INVALID_PORTABLE_ENTRY) {
       return;
@@ -159,6 +160,7 @@ const validateNodeFacts = (
     const node = nodes.get(key);
     if (seen.has(key)) {
       addFault(faults, 'FACT_DUPLICATE', `${path}/key`, 'Duplicate node fact.');
+      return;
     }
     seen.add(key);
     if (!node) {
@@ -170,7 +172,7 @@ const validateNodeFacts = (
         addFault(faults, 'FACT_TYPE', path, 'Invalid enabled node fact.');
         return;
       }
-      facts.push({ key, state: 'enabled' });
+      facts.push({ fact: { key, state: 'enabled' }, sourceIndex: index });
       return;
     }
     if (
@@ -182,7 +184,7 @@ const validateNodeFacts = (
       addFault(faults, 'FACT_OUTCOME', `${path}/outcome`, 'Invalid node outcome.');
       return;
     }
-    facts.push({ key, state: 'terminal', outcome: entry.outcome });
+    facts.push({ fact: { key, state: 'terminal', outcome: entry.outcome }, sourceIndex: index });
   });
   return facts;
 };
@@ -293,7 +295,7 @@ const validateCandidateFacts = (
       !isRecord(entry) ||
       !hasExactFields(entry, ['candidate', 'nodeKey', 'verdict']) ||
       !isValidKey(entry.nodeKey) ||
-      !isValidKey(entry.candidate) ||
+      !isValidSemanticName(entry.candidate) ||
       (entry.verdict !== 'abstain' && entry.verdict !== 'approve' && entry.verdict !== 'reject')
     ) {
       addFault(faults, 'FACT_TYPE', path, 'Invalid candidate verdict fact.');
@@ -302,6 +304,7 @@ const validateCandidateFacts = (
     const identity = `${entry.nodeKey}\u0000${entry.candidate}`;
     if (seen.has(identity)) {
       addFault(faults, 'FACT_DUPLICATE', path, 'Duplicate candidate verdict fact.');
+      return;
     }
     seen.add(identity);
     const node = graph.nodeByKey.get(entry.nodeKey);
@@ -351,9 +354,11 @@ const validateGateFacts = (
       Array.from(entry.resolution).length > PIPELINE_LIMITS.portable.displayCodePoints
     ) {
       addFault(faults, 'FACT_RESOLUTION', `${path}/resolution`, 'Invalid gate resolution.');
+      return;
     }
     if (seen.has(entry.nodeKey)) {
       addFault(faults, 'FACT_DUPLICATE', path, 'Duplicate gate resolution fact.');
+      return;
     }
     seen.add(entry.nodeKey);
     const node = graph.nodeByKey.get(entry.nodeKey);
@@ -484,7 +489,7 @@ const validateFactShape = (
     values: validatedValues,
     valueByKey: new Map(validatedValues.map((fact) => [fact.key, fact.value])),
     nodes: validatedNodes,
-    nodeByKey: new Map(validatedNodes.map((fact) => [fact.key, fact])),
+    nodeByKey: new Map(validatedNodes.map(({ fact }) => [fact.key, fact])),
   };
 };
 
@@ -685,7 +690,7 @@ const validateCausality = (
       );
     }
   });
-  facts.nodes.forEach((fact, index) => {
+  facts.nodes.forEach(({ fact, sourceIndex }) => {
     if (fact.key === pipeline.entry) {
       return;
     }
@@ -698,7 +703,12 @@ const validateCausality = (
       return source?.state === 'terminal' && source.outcome === edge.outcome;
     });
     if (!activated) {
-      addFault(faults, 'FACT_CAUSAL', `/nodes/${index}`, 'Node fact has no activation cause.');
+      addFault(
+        faults,
+        'FACT_CAUSAL',
+        `/nodes/${sourceIndex}`,
+        'Node fact has no activation cause.',
+      );
     }
     const owningFork = graph.regionOwnerByNode.get(fact.key);
     const forkFact = owningFork ? byNode.get(owningFork) : undefined;
@@ -706,12 +716,12 @@ const validateCausality = (
       addFault(
         faults,
         'FACT_CAUSAL',
-        `/nodes/${index}`,
+        `/nodes/${sourceIndex}`,
         'Fork-region fact is missing its owning fork.',
       );
     }
   });
-  facts.nodes.forEach((fact, index) => {
+  facts.nodes.forEach(({ fact, sourceIndex }) => {
     if (fact.state !== 'terminal') {
       return;
     }
@@ -725,7 +735,7 @@ const validateCausality = (
         addFault(
           faults,
           'FACT_OUTCOME',
-          `/nodes/${index}/outcome`,
+          `/nodes/${sourceIndex}/outcome`,
           'Branch outcome contradicts fact.',
         );
         return;
@@ -737,7 +747,7 @@ const validateCausality = (
         addFault(
           faults,
           'FACT_CAUSAL',
-          `/nodes/${index}`,
+          `/nodes/${sourceIndex}`,
           'Terminal branch is missing or contradicts its atomic target.',
         );
       }
@@ -748,7 +758,7 @@ const validateCausality = (
       addFault(
         faults,
         'FACT_PREMATURE',
-        `/nodes/${index}`,
+        `/nodes/${sourceIndex}`,
         'Terminal selector has no determined outcome.',
       );
       return;
@@ -757,7 +767,7 @@ const validateCausality = (
       addFault(
         faults,
         'FACT_OUTCOME',
-        `/nodes/${index}/outcome`,
+        `/nodes/${sourceIndex}/outcome`,
         'Selector outcome contradicts facts.',
       );
       return;
@@ -766,7 +776,7 @@ const validateCausality = (
       addFault(
         faults,
         'FACT_CAUSAL',
-        `/nodes/${index}`,
+        `/nodes/${sourceIndex}`,
         'Terminal selector is missing its atomic target.',
       );
     }

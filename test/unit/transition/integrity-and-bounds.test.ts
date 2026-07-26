@@ -643,3 +643,66 @@ describe('fact bounds and diagnostics', () => {
     });
   });
 });
+
+describe('pruned transition inputs', () => {
+  test('preserves the original node source index after a portable-invalid sibling', () => {
+    const input = emptyFacts();
+    Reflect.set(input, 'nodes', [null, { key: 'yes', state: 'enabled' }]);
+
+    const decision = decidePipeline(branchPipeline(), input);
+
+    expect(decision).toEqual({
+      kind: 'reject',
+      faults: [
+        { code: 'FACT_TYPE', path: '/nodes/0', message: 'Invalid node fact.' },
+        {
+          code: 'FACT_CAUSAL',
+          path: '/nodes/1',
+          message: 'Node fact has no activation cause.',
+        },
+      ],
+    });
+  });
+
+  test('rejects locally invalid and duplicate records without downstream fact cascades', () => {
+    const input = emptyFacts();
+    Reflect.set(input, 'nodes', [
+      { key: 'choose', state: 'enabled' },
+      { key: 'choose', state: 'terminal', outcome: 'true' },
+    ]);
+
+    const decision = decidePipeline(branchPipeline(), input);
+
+    expect(decision).toEqual({
+      kind: 'reject',
+      faults: [
+        {
+          code: 'FACT_DUPLICATE',
+          path: '/nodes/1/key',
+          message: 'Duplicate node fact.',
+        },
+      ],
+    });
+  });
+
+  test.each([
+    ['nodes', [null]],
+    ['nodes', [{ key: 'missing' }]],
+    ['nodes', [{ kind: 'consensus' }]],
+    ['facts', [null]],
+    ['edges', [null]],
+    ['incomingIndex', [null]],
+  ] as const)(
+    'returns only PIPELINE_INVALID for plain malformed compiled input %#',
+    (key, value) => {
+      const malformed = structuredClone(branchPipeline());
+      Reflect.set(malformed, key, value);
+
+      expect(() => decidePipeline(malformed, emptyFacts())).not.toThrow();
+      expect(decidePipeline(malformed, emptyFacts())).toEqual({
+        kind: 'reject',
+        faults: [{ code: 'PIPELINE_INVALID', path: '', message: 'Compiled pipeline is invalid.' }],
+      });
+    },
+  );
+});

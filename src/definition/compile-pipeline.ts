@@ -10,7 +10,7 @@ import {
   compareUnicodeCodePoints,
   DEFINITION_FAULT_PHASES,
   escapeJsonPointerSegment,
-  inspectPortableValue,
+  inspectPortableValueSet,
   isValidKey,
   isValidSemanticName,
   jsonScalarsEqual,
@@ -1240,22 +1240,43 @@ const orderedFaults = (faults: readonly MutableFault[]): readonly DefinitionFaul
     return Object.freeze({ code: fault.code, path: fault.path, message: fault.message });
   });
 
+const definitionArrayLimit = (path: string): number => {
+  if (path === '/facts') {
+    return PIPELINE_LIMITS.definition.declaredFacts;
+  }
+  if (path === '/nodes') {
+    return PIPELINE_LIMITS.definition.nodes;
+  }
+  if (/^\/nodes\/(?:0|[1-9]\d*)\/cases$/u.test(path)) {
+    return PIPELINE_LIMITS.definition.branchCasesPerNode;
+  }
+  if (/^\/nodes\/(?:0|[1-9]\d*)\/cases\/(?:0|[1-9]\d*)\/when\/values$/u.test(path)) {
+    return PIPELINE_LIMITS.definition.predicateValuesPerCase;
+  }
+  if (/^\/nodes\/(?:0|[1-9]\d*)\/branches$/u.test(path)) {
+    return PIPELINE_LIMITS.definition.forkBranchesPerNode;
+  }
+  if (/^\/nodes\/(?:0|[1-9]\d*)\/candidates$/u.test(path)) {
+    return PIPELINE_LIMITS.definition.candidatesPerNode;
+  }
+  if (/^\/nodes\/(?:0|[1-9]\d*)\/resolutions$/u.test(path)) {
+    return PIPELINE_LIMITS.definition.resolutionsPerNode;
+  }
+  return PIPELINE_LIMITS.facts.total;
+};
+
 export const compilePipeline = (definition: PipelineDefinition): PipelineCompilation => {
-  const portable = inspectPortableValue(definition, {
-    maxArrayLength: PIPELINE_LIMITS.facts.total,
-    maxStringCodePoints: PIPELINE_LIMITS.portable.displayCodePoints,
-  });
-  if (!portable.ok) {
-    const code = ['array-length', 'depth', 'object-keys', 'visited-values'].includes(
-      portable.issue.code,
-    )
-      ? 'DEF_LIMIT'
-      : 'DEF_TYPE';
+  const portable = inspectPortableValueSet(definition, { arrayLimit: definitionArrayLimit });
+  if (portable.issues.length > 0) {
     return {
       ok: false,
-      faults: orderedFaults([
-        { code, path: portable.issue.path, message: 'Invalid portable input.' },
-      ]),
+      faults: orderedFaults(
+        portable.issues.map((issue) => ({
+          code: issue.code === 'limit' ? 'DEF_LIMIT' : 'DEF_TYPE',
+          path: issue.path,
+          message: 'Invalid portable input.',
+        })),
+      ),
     };
   }
   if (!isRecord(portable.value)) {

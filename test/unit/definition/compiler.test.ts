@@ -699,4 +699,97 @@ describe('pipeline definition compilation', () => {
     expect(bounded.ok).toBe(false);
     expect(bounded.ok ? Number.POSITIVE_INFINITY : bounded.faults.length).toBeLessThanOrEqual(100);
   });
+
+  test('prechecks known definition container limits before generic portable traversal', () => {
+    let reads = 0;
+    const nodes = new Array<unknown>(257);
+    Object.defineProperty(nodes, '0', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        reads += 1;
+        throw new Error('oversized definition must not inspect descendants');
+      },
+    });
+    const definition = { schemaVersion: 1, entry: 'finish', facts: [], nodes };
+
+    // @ts-expect-error exercises malformed runtime input
+    expect(compilePipeline(definition)).toEqual({
+      ok: false,
+      faults: [{ code: 'DEF_LIMIT', path: '/nodes', message: 'Invalid portable input.' }],
+    });
+    expect(reads).toBe(0);
+  });
+
+  test('collects sibling descriptor and nested limit faults while pruning the oversized array', () => {
+    let caseReads = 0;
+    let nodeReads = 0;
+    const cases = new Array<unknown>(65);
+    Object.defineProperty(cases, '0', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        caseReads += 1;
+        throw new Error('oversized cases must not inspect descendants');
+      },
+    });
+    const nodes: unknown[] = [
+      {
+        kind: 'branch',
+        key: 'branch',
+        fact: 'choice',
+        cases,
+        default: { name: 'default', to: 'finish' },
+      },
+    ];
+    Object.defineProperty(nodes, '1', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        nodeReads += 1;
+        throw new Error('node accessor must not execute');
+      },
+    });
+    nodes.length = 2;
+    const definition = {
+      schemaVersion: 1,
+      entry: 'branch',
+      facts: [{ key: 'choice', type: 'string' }],
+      nodes,
+    };
+
+    // @ts-expect-error exercises malformed runtime input
+    const first = compilePipeline(definition);
+    // @ts-expect-error exercises malformed runtime input
+    const second = compilePipeline(definition);
+
+    expect(first).toEqual({
+      ok: false,
+      faults: [
+        { code: 'DEF_TYPE', path: '/nodes/1', message: 'Invalid portable input.' },
+        { code: 'DEF_LIMIT', path: '/nodes/0/cases', message: 'Invalid portable input.' },
+      ],
+    });
+    expect(second).toEqual(first);
+    expect(caseReads).toBe(0);
+    expect(nodeReads).toBe(0);
+  });
+
+  test('collects independent portable definition defects without semantic cascades', () => {
+    const definition = {
+      schemaVersion: 1,
+      entry: 'finish',
+      facts: [{ key: undefined, type: 'boolean' }],
+      nodes: [{ kind: 'terminal', key: 'finish', outcome: () => 'done' }],
+    };
+
+    // @ts-expect-error exercises malformed runtime input
+    expect(compilePipeline(definition)).toEqual({
+      ok: false,
+      faults: [
+        { code: 'DEF_TYPE', path: '/facts/0/key', message: 'Invalid portable input.' },
+        { code: 'DEF_TYPE', path: '/nodes/0/outcome', message: 'Invalid portable input.' },
+      ],
+    });
+  });
 });

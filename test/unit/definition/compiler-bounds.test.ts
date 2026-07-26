@@ -104,6 +104,7 @@ describe('exact compiler bounds', () => {
       nodes.push(terminal);
       return { schemaVersion: 1, entry: 'n-000', facts: [], nodes };
     };
+    expect(compilePipeline(make(129)).ok).toBe(true);
     expect(compilePipeline(make(PIPELINE_LIMITS.definition.nodes)).ok).toBe(true);
     expect(codes(make(PIPELINE_LIMITS.definition.nodes + 1))).toContain('DEF_LIMIT');
   });

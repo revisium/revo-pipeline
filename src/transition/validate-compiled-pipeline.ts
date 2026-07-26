@@ -743,12 +743,17 @@ const arraysAreBounded = (pipeline: CompiledPipeline): boolean =>
   pipeline.nodes.length <= PIPELINE_LIMITS.definition.nodes &&
   pipeline.edges.length <= PIPELINE_LIMITS.definition.edges &&
   pipeline.facts.length <= PIPELINE_LIMITS.definition.declaredFacts &&
+  pipeline.nodes.every(isRecord) &&
   pipeline.nodes.reduce(
-    (total, node) => total + (node.kind === 'consensus' ? node.candidates.length : 0),
+    (total, node) =>
+      total +
+      (node.kind === 'consensus' && Array.isArray(node.candidates) ? node.candidates.length : 0),
     0,
   ) <= PIPELINE_LIMITS.definition.candidatesTotal &&
   pipeline.nodes.reduce(
-    (total, node) => total + (node.kind === 'humanGate' ? node.resolutions.length : 0),
+    (total, node) =>
+      total +
+      (node.kind === 'humanGate' && Array.isArray(node.resolutions) ? node.resolutions.length : 0),
     0,
   ) <= PIPELINE_LIMITS.definition.resolutionsTotal;
 
