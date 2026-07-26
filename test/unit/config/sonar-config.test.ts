@@ -11,9 +11,32 @@ const acceptedAliasCriteria = new Map([
   ['acceptedResolutionNameAlias', 'src/spec/resolution-name.ts'],
 ]);
 
+const acceptedImplementationCriteria = new Map([
+  [
+    'boundedFactInspection',
+    { resourceKey: 'src/policy/inspect-portable-value-set.ts', ruleKey: 'typescript:S3776' },
+  ],
+  [
+    'coreDecisionStateMachine',
+    { resourceKey: 'src/transition/decide-pipeline.ts', ruleKey: 'typescript:S3776' },
+  ],
+  [
+    'boundedCompiledInspection',
+    { resourceKey: 'src/transition/validate-compiled-pipeline.ts', ruleKey: 'typescript:S3776' },
+  ],
+]);
+
+const acceptedCriteria = new Map([
+  ...[...acceptedAliasCriteria].map(
+    ([criterion, resourceKey]) =>
+      [criterion, { resourceKey, ruleKey: 'typescript:S6564' }] as const,
+  ),
+  ...acceptedImplementationCriteria,
+]);
+
 const allowedIssueIgnoreKeys = [
   'sonar.issue.ignore.multicriteria',
-  ...[...acceptedAliasCriteria.keys()].flatMap((criterion) => [
+  ...[...acceptedCriteria.keys()].flatMap((criterion) => [
     `sonar.issue.ignore.multicriteria.${criterion}.resourceKey`,
     `sonar.issue.ignore.multicriteria.${criterion}.ruleKey`,
   ]),
@@ -31,7 +54,7 @@ const readProperties = async (): Promise<Map<string, string>> => {
   return properties;
 };
 
-test('limits the S6564 exception to the accepted semantic public aliases', async () => {
+test('limits Sonar exceptions to reviewed semantic and bounded-validation cases', async () => {
   const properties = await readProperties();
   const criteria = properties.get('sonar.issue.ignore.multicriteria')?.split(',');
   const issueIgnoreKeys = [...properties.keys()]
@@ -39,18 +62,13 @@ test('limits the S6564 exception to the accepted semantic public aliases', async
     .sort();
 
   expect(issueIgnoreKeys).toEqual(allowedIssueIgnoreKeys);
-  expect(criteria).toEqual([...acceptedAliasCriteria.keys()]);
+  expect(criteria).toEqual([...acceptedCriteria.keys()]);
   expect(
     criteria?.map((criterion) => ({
       resourceKey: properties.get(`sonar.issue.ignore.multicriteria.${criterion}.resourceKey`),
       ruleKey: properties.get(`sonar.issue.ignore.multicriteria.${criterion}.ruleKey`),
     })),
-  ).toEqual(
-    [...acceptedAliasCriteria.values()].map((resourceKey) => ({
-      resourceKey,
-      ruleKey: 'typescript:S6564',
-    })),
-  );
+  ).toEqual([...acceptedCriteria.values()]);
   expect(properties.get('sonar.exclusions')).toBe(
     'dist/**,coverage/**,node_modules/**,**/generated/**,**/fixtures/**',
   );

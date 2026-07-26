@@ -3,6 +3,7 @@ export { DECISION_FAULT_PHASES } from './decision-fault-phases.js';
 export { DEFINITION_FAULT_PHASES } from './definition-fault-phases.js';
 export { escapeJsonPointerSegment } from './escape-json-pointer-segment.js';
 export { inspectPortableValue } from './inspect-portable-value.js';
+export { inspectPortableValueSet } from './inspect-portable-value-set.js';
 export { isValidKey } from './is-valid-key.js';
 export { isValidSemanticName } from './is-valid-semantic-name.js';
 export { jsonScalarsEqual } from './json-scalars-equal.js';

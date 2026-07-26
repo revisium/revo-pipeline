@@ -11,6 +11,7 @@ src/policy/                        immutable limits and pure bounded utilities
 src/errors/                        type-only fault and result contracts
 src/graph/                         bounded topology, reachability and region algorithms
 src/definition/                    identity helper, validation and deterministic compilation
+src/transition/                    internal pure core-node transition evaluation
 scripts/architecture/              structural source validation
 scripts/verify-architecture.ts     positive graph and exact negative probes
 scripts/verify-package.ts          one-tarball package/consumer proof
@@ -18,6 +19,7 @@ test/unit/policy/                  portable policy and bound behavior
 test/unit/spec/                    type contract assertions
 test/unit/graph/                   graph algorithm behavior
 test/unit/definition/              compiler validation, canonicalization and isolation
+test/unit/transition/              core transition precedence, integrity and replay
 test/unit/scripts/                 validator behavior
 test/package/                      bootstrap source/package assertions
 docs/adr/                          decisions
