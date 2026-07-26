@@ -123,9 +123,39 @@ Evaluation MUST use this order:
 A wait MUST NOT mask a later action. A reached terminal MUST globally outrank residual
 losing-branch work after an `any` or threshold join. Activation arrays MUST use
 topological order and MUST omit targets already present in `nodes`. If an activation
-becomes empty, evaluation MUST continue rather than return an empty activation.
+becomes empty defensively, evaluation MUST continue rather than return an empty activation.
+For compiler-produced graphs and causally valid facts, however, an enabled selector with
+every target already present is unreachable by the graph invariant below.
 Unchanged pre-application facts MUST repeat the same intent; post-application facts
 MUST NOT reactivate a target.
+
+### Quiescence and empty-activation invariant
+
+Compiler-produced graphs are finite DAGs in which every node is reachable from the entry and
+leads to a terminal. Outside a fork, every decision advances one selected activation path. A fork
+is the only fan-out: it atomically targets pairwise-disjoint branch entries and its join. Fork
+region validation rejects cross-branch ingress, region escape, and barrier bypass; only declared
+exit-task readiness edges reach the join. Therefore an enabled selector target cannot already
+have an independently satisfied activation edge. Its own activation edge is not satisfied until
+the selector is terminal.
+
+For any causally valid snapshot, the following exhaustive frontier argument applies:
+
+1. If the entry is omitted, entry activation is actionable.
+2. If a definition terminal is enabled or terminal with its declared outcome, terminal
+   precedence applies.
+3. An enabled task deterministically waits. An enabled autonomous selector either selects when
+   its prerequisites are present or deterministically waits.
+4. A terminal task with an omitted selected successor activates that successor. A terminal
+   selector already has every selected target by the atomic-target rule.
+5. Following present terminal-selector targets through the finite DAG must reach an enabled
+   node, a terminal task with an omitted successor, or a reached definition terminal.
+
+Consequently `{kind:'noop', reason:'quiescent'}` and empty selector activation are unreachable for
+compiler-produced graphs with valid facts. `NoopDecision` remains in the v1 public union to
+preserve the Accepted API and exhaustive consumer code, and the evaluator retains the fallback
+as a defensive totality guard. Implementations MUST NOT use noop to hide invalid compiled data,
+invalid facts, or a reachable action, wait, or terminal.
 
 ## Node × state matrix
 
@@ -293,8 +323,9 @@ Implementation MUST test:
 
 - every row and cell of the node × state matrix;
 - empty facts, initial activation, repeated intent, post-application continuation, empty
-  activation continuation, quiescent noop, one reached terminal, two reached terminals,
-  and a reached terminal with earlier actionable losing-branch work;
+  activation defense, the quiescence invariant and retained public noop discriminator, one
+  reached terminal, two reached terminals, and a reached terminal with earlier actionable
+  losing-branch work;
 - faults-before-actions, actions-before-waits, causal activation/readiness edges,
   autonomous atomic targets, candidate/gate prerequisites, foreign/duplicate/premature
   facts, and compiled round-trip/tamper;

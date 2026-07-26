@@ -73,9 +73,31 @@ test('limits Sonar exceptions to reviewed semantic and implementation cases', as
       ruleKey: properties.get(`sonar.issue.ignore.multicriteria.${criterion}.ruleKey`),
     })),
   ).toEqual([...acceptedCriteria.values()]);
-  expect(properties.get('sonar.exclusions')).toBe(
-    'dist/**,coverage/**,node_modules/**,**/generated/**,**/fixtures/**',
+  expect(properties.get('sonar.exclusions')).toBe(undefined);
+  expect(properties.get('sonar.coverage.exclusions')).toBe(undefined);
+  expect(properties.get('sonar.cpd.exclusions')).toBe(undefined);
+  expect(properties.get('sonar.sources')).toBe('src');
+  expect(properties.get('sonar.tests')).toBe('test');
+  expect(properties.get('sonar.test.inclusions')).toBe('test/**/*.ts');
+});
+
+test('makes the CI Sonar provider gate explicit for PR and branch analysis', async () => {
+  const workflow = await readFile(join(process.cwd(), '.github/workflows/ci.yml'), 'utf8');
+
+  expect(workflow).not.toMatch(/jobs:\n[\s\S]*?\n    env:\n[\s\S]*?SONAR_TOKEN:/u);
+  expect(workflow).toContain(
+    "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
   );
-  expect(properties.get('sonar.coverage.exclusions')).toBe('test/**,scripts/**');
-  expect(properties.get('sonar.cpd.exclusions')).toBe('test/**,**/generated/**,**/fixtures/**');
+  expect(workflow).toMatch(
+    /- name: Require Sonar provider access\n\s+env:\n\s+SONAR_TOKEN: \$\{\{ secrets\.SONAR_TOKEN \}\}\n\s+run: \|[\s\S]*?exit 1/u,
+  );
+  expect(workflow.match(/-Dsonar\.qualitygate\.wait=true/gu)).toHaveLength(2);
+  expect(workflow.match(/-Dsonar\.qualitygate\.timeout=300/gu)).toHaveLength(2);
+  expect(workflow).toContain('-Dsonar.branch.name=${{ github.ref_name }}');
+  expect(workflow).toContain('-Dsonar.scm.revision=${{ github.sha }}');
+  expect(workflow).toContain('-Dsonar.pullrequest.key=${{ github.event.pull_request.number }}');
+  expect(workflow).toContain('-Dsonar.scm.revision=${{ github.event.pull_request.head.sha }}');
+  expect(workflow).toMatch(
+    /- name: Inspect Sonar open issues\n\s+env:[\s\S]*?SONAR_EXPECTED_REVISION:[\s\S]*?SONAR_TOKEN: \$\{\{ secrets\.SONAR_TOKEN \}\}\n\s+run: pnpm sonar:issues:local/u,
+  );
 });
