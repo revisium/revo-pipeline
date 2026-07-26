@@ -5,7 +5,7 @@
 ## Current implementation
 
 ```text
-src/index.ts                       intentionally empty shipped entrypoint
+src/index.ts                       exact curated MVP public root
 src/spec/                          type-only accepted contract foundation
 src/policy/                        immutable limits and pure bounded utilities
 src/errors/                        type-only fault and result contracts
@@ -21,7 +21,7 @@ test/unit/graph/                   graph algorithm behavior
 test/unit/definition/              compiler validation, canonicalization and isolation
 test/unit/transition/              core/coordination policy, integrity, precedence and replay
 test/unit/scripts/                 validator behavior
-test/package/                      bootstrap source/package assertions
+test/package/                      exact source/package manifest assertions
 docs/adr/                          decisions
 docs/specs/                        Accepted contracts
 .github/workflows/                 CI, validation, release train, npm publish
@@ -60,8 +60,8 @@ Same-layer leaves may import other leaves directly but must not import their lay
 barrel. Relative imports use `.js`. Barrels use explicit named exports. Production leaves own one exported
 entity; `spec` and `errors` leaves and barrels remain type-only. Unknown `src/*` areas and
 production escapes into tests, scripts, build output, coverage, or probes fail closed.
-Internal layers never import the package root. During bootstrap, `src/index.ts` is exactly
-`export {};` and cannot import or re-export private layers.
+Internal layers never import the package root. The public root has a fail-closed exact
+manifest and curates only definition, transition, spec, and errors layer barrels.
 
 Tests may use only the root or curated layer barrels. Public consumers use only declared
 package exports. Package exports, not folders, define public API.

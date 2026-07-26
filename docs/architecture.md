@@ -9,11 +9,11 @@ PipelineDefinition --compilePipeline--> CompiledPipeline
 CompiledPipeline + PipelineFacts --decidePipeline--> PipelineDecision
 ```
 
-The accepted API is planned but not shipped: the root source remains exactly `export {};`.
-Graph algorithms, definition compilation, and transition evaluation for all seven v1
-node kinds are implemented behind internal layer barrels. Fork/join readiness,
-consensus, and human-gate decisions are calculated exclusively from compiled topology
-and the supplied portable fact snapshot.
+The Accepted MVP API is shipped from the single curated root: `definePipeline`,
+`compilePipeline`, `decidePipeline`, and exactly 63 readonly contract types. Internal
+policy, graph, compiled-data validation, and decoder helpers are not exported.
+Fork/join readiness, consensus, and human-gate decisions are calculated exclusively
+from compiled topology and the supplied portable fact snapshot.
 
 ## Ownership boundary
 
@@ -27,6 +27,11 @@ model/profile/prompt/workspace/provider binding, or host lifecycle. It never acc
 `@revisium/revo-run` may depend on this package; reverse dependency is forbidden. A host
 reads durable state, maps it to portable facts, atomically applies a decision, and reloads
 after conflicts. That host work is deliberately outside this package.
+
+The current Draft `@revisium/revo-run` architecture expects a future public decoder for
+untrusted persisted compiled JSON. The Accepted pipeline manifest contains no decoder,
+so this MVP provides a typed one-way seam but does not claim that Draft decoding
+integration is implemented.
 
 ## Semantic invariants
 

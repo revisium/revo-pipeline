@@ -1,13 +1,13 @@
 # Testing
 
-PR1 retains tooling and package tests only. Each later behavior slice MUST add
-table-driven tests at its owning boundary and MUST pass `corepack pnpm verify`.
+The MVP slices retain table-driven proof at each owning boundary and MUST pass
+`corepack pnpm verify`.
 
 ## Slice matrix
 
 | Slice | Required proof                                                                                                   |
 | ----- | ---------------------------------------------------------------------------------------------------------------- |
-| 1     | accepted contracts, exact empty root/package proof, full DAG positive graph, and exact negative probes           |
+| 1     | accepted contracts, bootstrap root/package proof, full DAG positive graph, and exact negative probes             |
 | 2     | every public spec/policy/error type, JSON guards/equality, every limit, stable fault ordering/truncation         |
 | 3     | compiler normalization, graph/fork regions, canonical indexes, freeze/isolation, round-trip and tamper rejection |
 | 4     | entry/task/branch/terminal/noop, causal facts, faults-before-actions, actions-before-waits, terminal precedence  |

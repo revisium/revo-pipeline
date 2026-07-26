@@ -6,6 +6,6 @@
 | [Pipeline transition v1](./pipeline-transition-v1.spec.md)       | Accepted |
 | [Internal module structure](./internal-module-structure.spec.md) | Accepted |
 
-Acceptance fixes the contract for later implementation. It does not ship an API: until a
-subsequent implementation slice changes `src/index.ts`, the package root remains exactly
-`export {};` and the accepted API sketches are planned declarations only.
+Acceptance fixes the contract implemented by the MVP root. The bootstrap guard kept
+`src/index.ts` empty until the separately approved public implementation slice; the
+exact Accepted manifest is now shipped.
