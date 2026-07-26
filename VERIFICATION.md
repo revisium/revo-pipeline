@@ -45,6 +45,26 @@ architecture validator.
 
 ## Remote gates
 
+Sonar is a required remote provider gate. CI blocks explicitly when `SONAR_TOKEN` is absent
+or authenticated provider access fails; a skipped scan or unauthenticated issue query is not a
+passing result. Pull requests check out and analyze `github.event.pull_request.head.sha`; branch
+and manual runs analyze `github.sha`. Both modes pass explicit Sonar scope and revision
+parameters, wait up to 300 seconds for the quality gate, verify the provider's latest analysis
+revision is the expected SHA, and then fail on any scoped open issue.
+
+GitHub withholds repository secrets from fork pull requests and Dependabot-triggered workflows.
+External fork and Dependabot pull requests are therefore unsupported by this mandatory provider
+gate, and rerunning the same untrusted event does not make it trusted. Never expose the secret to
+fork-controlled code. After reviewing the external changes, a maintainer must recreate or
+cherry-pick them onto a trusted same-repository branch whose workflow and scripts have also been
+reviewed; only that trusted branch's exact analysis revision can supply merge evidence.
+
+Sonar measures production coverage from `src` only (`sonar.sources=src`); `test` is registered
+as test code and repository scripts are verified by the primary local gate, not counted as
+production coverage. The scanner deliberately has no broad source, coverage, or duplication
+exclusions. Add a future exclusion only when it names a concrete non-production source path and
+its reason is documented and tested.
+
 After push, inspect CI and Sonar on the exact head, then all valid review threads.
 Release validation may create an artifact but never publishes. Do not merge, tag,
 release, or publish without the corresponding explicit approval.

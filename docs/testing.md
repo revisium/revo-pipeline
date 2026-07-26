@@ -17,21 +17,21 @@ The MVP slices retain table-driven proof at each owning boundary and MUST pass
 
 ## Semantic matrix
 
-| Area          | Required partitions                                                                                                  |
-| ------------- | -------------------------------------------------------------------------------------------------------------------- |
-| node state    | every node kind × omitted/enabled/terminal cell                                                                      |
-| progression   | empty facts, initial activation, repeated intent, post-application continuation, empty activation continuation, noop |
-| terminal      | zero/one/two reached terminals and reached terminal before earlier residual parallel work                            |
-| causality     | ordinary activation, fork activation/readiness, selector atomic targets, candidate/gate prerequisites                |
-| branch        | fact missing, each case, default, typed equality, overlap/non-exhaustive/unreachable default                         |
-| join          | accepted/rejected/skipped/pending/impossible for all, any, and every threshold boundary                              |
-| consensus     | unanimous/quorum/threshold approved/rejected/tied/insufficient/wait, abstain, irreversible result                    |
-| gate          | unresolved, every resolution, duplicate/foreign/premature/invalid resolution                                         |
-| compiled data | canonical sort/indexes, JSON round-trip, stale/tampered/noncanonical indexes                                         |
-| bounded input | over-limit array precheck, in-range key-count pruning, 33-key object pruning, every remaining bound                  |
-| reflection    | one array/object own-key reflection, documented O(K) caveats, numeric/canonical descriptor-first inspection          |
-| diagnostics   | insertion/overflow permutations, global truncation, definition lexical ties, decision code priority                  |
-| determinism   | input permutations, repeated evaluation, mutation isolation, recursive freeze                                        |
+| Area          | Required partitions                                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| node state    | every node kind × omitted/enabled/terminal cell                                                                                       |
+| progression   | empty facts, initial activation, repeated intent, post-application continuation, defensive empty-activation and quiescence invariants |
+| terminal      | zero/one/two reached terminals and reached terminal before earlier residual parallel work                                             |
+| causality     | ordinary activation, fork activation/readiness, selector atomic targets, candidate/gate prerequisites                                 |
+| branch        | fact missing, each case, default, typed equality, overlap/non-exhaustive/unreachable default                                          |
+| join          | accepted/rejected/skipped/pending/impossible for all, any, and every threshold boundary                                               |
+| consensus     | unanimous/quorum/threshold approved/rejected/tied/insufficient/wait, abstain, irreversible result                                     |
+| gate          | unresolved, every resolution, duplicate/foreign/premature/invalid resolution                                                          |
+| compiled data | canonical sort/indexes, JSON round-trip, stale/tampered/noncanonical indexes                                                          |
+| bounded input | over-limit array precheck, in-range key-count pruning, 33-key object pruning, every remaining bound                                   |
+| reflection    | one array/object own-key reflection, documented O(K) caveats, numeric/canonical descriptor-first inspection                           |
+| diagnostics   | insertion/overflow permutations, global truncation, definition lexical ties, decision code priority                                   |
+| determinism   | input permutations, repeated evaluation, mutation isolation, recursive freeze                                                         |
 
 Architecture proof MUST cover the current graph, every allowed layer edge, and exact
 representative failures for every structural rule. Package proof MUST use one tarball for
@@ -39,3 +39,9 @@ ATTW, contents, ESM, strict TypeScript, and runtime/type-level deep-import denia
 
 Before merge, exact-head CI, a real Sonar quality gate with zero valid open issues, and
 zero valid unresolved review threads are REQUIRED.
+
+Sonar coverage is intentionally the production `src` surface only. `test` is registered as test
+code, while scripts and package checks remain covered by `corepack pnpm verify` rather than a
+coverage exclusion. See [transition test traceability](./transition-test-traceability.md) for
+the named-test and graph-invariant evidence behind every normative transition and testing matrix
+row.

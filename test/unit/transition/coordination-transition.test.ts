@@ -199,6 +199,52 @@ describe('fork and join coordination', () => {
     ).toMatchObject({ kind: 'reject', faults: [{ code: 'FACT_CAUSAL' }] });
   });
 
+  test('characterizes entry-omitted fork and pre-activation omitted join states plus enabled and terminal facts', () => {
+    const pipeline = joinPipeline({ kind: 'all' });
+
+    expect(decidePipeline(pipeline, facts())).toEqual({
+      kind: 'activate',
+      cause: { kind: 'entry' },
+      nodeKeys: ['fork'],
+    });
+    expect(decidePipeline(pipeline, facts([{ key: 'fork', state: 'enabled' }]))).toEqual({
+      kind: 'select',
+      nodeKey: 'fork',
+      outcome: 'forked',
+      activate: ['a', 'b', 'join'],
+    });
+    expect(
+      decidePipeline(
+        pipeline,
+        facts([
+          { key: 'fork', state: 'terminal', outcome: 'forked' },
+          { key: 'a', state: 'enabled' },
+          { key: 'b', state: 'enabled' },
+          { key: 'join', state: 'enabled' },
+        ]),
+      ),
+    ).toEqual({ kind: 'wait', nodeKey: 'a', reason: 'task-incomplete' });
+
+    expect(decidePipeline(pipeline, facts(joinFacts('completed', 'completed')))).toEqual({
+      kind: 'select',
+      nodeKey: 'join',
+      outcome: 'completed',
+      activate: ['end'],
+    });
+    expect(
+      decidePipeline(
+        pipeline,
+        facts([
+          { key: 'fork', state: 'terminal', outcome: 'forked' },
+          { key: 'a', state: 'terminal', outcome: 'completed' },
+          { key: 'b', state: 'terminal', outcome: 'completed' },
+          { key: 'join', state: 'terminal', outcome: 'completed' },
+          { key: 'end', state: 'enabled' },
+        ]),
+      ),
+    ).toEqual({ kind: 'terminal', nodeKey: 'end', outcome: 'done' });
+  });
+
   test.each([
     [{ kind: 'all' } as const, 'completed', 'skipped', 'completed'],
     [{ kind: 'all' } as const, 'skipped', 'skipped', 'insufficient'],
@@ -280,6 +326,60 @@ describe('fork and join coordination', () => {
         ]),
       ),
     ).toMatchObject({ kind: 'reject', faults: [{ code: 'FACT_CAUSAL' }] });
+  });
+
+  test('a reached terminal outranks earlier actionable residual work after an any join', () => {
+    const pipeline = compile({
+      schemaVersion: 1,
+      entry: 'fork',
+      facts: [{ key: 'path', type: 'boolean' }],
+      nodes: [
+        {
+          kind: 'fork',
+          key: 'fork',
+          join: 'join',
+          branches: [
+            { name: 'accepted', entry: 'accepted', exit: 'accepted' },
+            { name: 'residual', entry: 'choose', exit: 'residual' },
+          ],
+        },
+        { kind: 'task', key: 'accepted', outcomes: taskRoutes('join') },
+        {
+          kind: 'branch',
+          key: 'choose',
+          fact: 'path',
+          cases: [{ name: 'continue', when: { op: 'equals', value: true }, to: 'residual' }],
+          default: { name: 'stop', to: 'residual' },
+        },
+        { kind: 'task', key: 'residual', outcomes: taskRoutes('join') },
+        {
+          kind: 'join',
+          key: 'join',
+          fork: 'fork',
+          policy: { kind: 'any', remaining: 'unconstrained' },
+          outcomes: { completed: 'end', insufficient: 'end', rejected: 'end' },
+        },
+        { kind: 'terminal', key: 'end', outcome: 'done' },
+      ],
+    });
+    const input: PipelineFacts = {
+      values: [{ key: 'path', value: true }],
+      nodes: [
+        { key: 'fork', state: 'terminal', outcome: 'forked' },
+        { key: 'accepted', state: 'terminal', outcome: 'completed' },
+        { key: 'choose', state: 'enabled' },
+        { key: 'join', state: 'terminal', outcome: 'completed' },
+        { key: 'end', state: 'enabled' },
+      ],
+      candidateVerdicts: [],
+      gateResolutions: [],
+    };
+
+    expect(decidePipeline(pipeline, input)).toEqual({
+      kind: 'terminal',
+      nodeKey: 'end',
+      outcome: 'done',
+    });
   });
 
   test('JSON-round-tripped coordination graph retains exact region integrity', () => {
@@ -423,6 +523,33 @@ describe('fork and join coordination', () => {
 });
 
 describe('consensus coordination', () => {
+  test('characterizes omitted, enabled, and terminal fact states for consensus nodes', () => {
+    const pipeline = consensusPipeline({ kind: 'unanimous' });
+
+    expect(decidePipeline(pipeline, facts())).toEqual({
+      kind: 'activate',
+      cause: { kind: 'entry' },
+      nodeKeys: ['vote'],
+    });
+    expect(decidePipeline(pipeline, facts([{ key: 'vote', state: 'enabled' }]))).toEqual({
+      kind: 'wait',
+      nodeKey: 'vote',
+      reason: 'consensus-incomplete',
+    });
+    expect(
+      decidePipeline(
+        pipeline,
+        facts(
+          [
+            { key: 'vote', state: 'terminal', outcome: 'approved' },
+            { key: 'end', state: 'enabled' },
+          ],
+          verdicts('approve', 'approve', 'approve'),
+        ),
+      ),
+    ).toEqual({ kind: 'terminal', nodeKey: 'end', outcome: 'done' });
+  });
+
   test.each([
     [{ kind: 'unanimous' } as const, ['reject'], 'rejected'],
     [{ kind: 'unanimous' } as const, ['approve', 'approve', 'approve'], 'approved'],
@@ -575,6 +702,32 @@ describe('human gate coordination', () => {
     ],
   });
 
+  test('characterizes omitted, enabled, and terminal fact states for human-gate nodes', () => {
+    expect(decidePipeline(pipeline, facts())).toEqual({
+      kind: 'activate',
+      cause: { kind: 'entry' },
+      nodeKeys: ['gate'],
+    });
+    expect(decidePipeline(pipeline, facts([{ key: 'gate', state: 'enabled' }]))).toEqual({
+      kind: 'wait',
+      nodeKey: 'gate',
+      reason: 'gate-unresolved',
+    });
+    expect(
+      decidePipeline(
+        pipeline,
+        facts(
+          [
+            { key: 'gate', state: 'terminal', outcome: 'approved' },
+            { key: 'yes', state: 'enabled' },
+          ],
+          [],
+          [{ nodeKey: 'gate', resolution: 'approved' }],
+        ),
+      ),
+    ).toEqual({ kind: 'terminal', nodeKey: 'yes', outcome: 'yes' });
+  });
+
   test('waits unresolved and selects every declared resolution', () => {
     expect(decidePipeline(pipeline, facts([{ key: 'gate', state: 'enabled' }]))).toEqual({
       kind: 'wait',
@@ -669,7 +822,7 @@ describe('human gate coordination', () => {
 });
 
 describe('all-seven-node pure scenario', () => {
-  test('progresses deterministically without hidden coordination state', () => {
+  test('keeps non-entry omissions inert and progresses without hidden coordination state', () => {
     const pipeline = compile({
       schemaVersion: 1,
       entry: 'choose',
@@ -725,6 +878,11 @@ describe('all-seven-node pure scenario', () => {
       ],
     });
     const valueFacts = [{ key: 'path', value: true }] as const;
+    expect(decidePipeline(pipeline, facts([{ key: 'choose', state: 'enabled' }]))).toEqual({
+      kind: 'wait',
+      nodeKey: 'choose',
+      reason: 'branch-fact-missing',
+    });
     const base: NodeFact[] = [
       { key: 'choose', state: 'terminal', outcome: 'parallel' },
       { key: 'fork', state: 'terminal', outcome: 'forked' },

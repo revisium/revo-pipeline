@@ -197,7 +197,7 @@ describe('core pipeline transitions', () => {
     });
   });
 
-  test('continues after an empty branch activation and returns the target wait', () => {
+  test('continues after an applied branch target is present and returns its wait', () => {
     const pipeline = compile({
       schemaVersion: 1,
       entry: 'choose',
@@ -238,7 +238,7 @@ describe('core pipeline transitions', () => {
     expect(decidePipeline(pipeline, left)).toEqual(decidePipeline(pipeline, right));
   });
 
-  test('covers omitted, enabled, and terminal states for each core node kind', () => {
+  test('characterizes entry-omitted, enabled, and terminal fact states for task, branch, and terminal nodes', () => {
     const terminalEntry = compile({
       schemaVersion: 1,
       entry: 'finish',
@@ -274,6 +274,31 @@ describe('core pipeline transitions', () => {
     expect(
       decidePipeline(linear(), facts([{ key: 'start', state: 'terminal', outcome: 'completed' }])),
     ).toMatchObject({ kind: 'activate' });
+  });
+
+  test('non-entry omitted nodes emit no decision before their activation edge is satisfied', () => {
+    const pipeline = compile({
+      schemaVersion: 1,
+      entry: 'choose',
+      facts: [{ key: 'choice', type: 'boolean' }],
+      nodes: [
+        {
+          kind: 'branch',
+          key: 'choose',
+          fact: 'choice',
+          cases: [{ name: 'yes', when: { op: 'equals', value: true }, to: 'work' }],
+          default: { name: 'no', to: 'work' },
+        },
+        { kind: 'task', key: 'work', outcomes: taskRoutes('finish') },
+        { kind: 'terminal', key: 'finish', outcome: 'done' },
+      ],
+    });
+
+    expect(decidePipeline(pipeline, facts([{ key: 'choose', state: 'enabled' }]))).toEqual({
+      kind: 'wait',
+      nodeKey: 'choose',
+      reason: 'branch-fact-missing',
+    });
   });
 
   test('rejects malformed, foreign, duplicate, mistyped, and noncausal facts before progress', () => {
