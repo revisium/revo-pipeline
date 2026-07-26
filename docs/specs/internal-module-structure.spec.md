@@ -126,5 +126,13 @@ anywhere in either file MUST fail architecture verification until the complete f
 boundary is reviewed and the file digest, owner digests, specification, and adversarial
 fixtures are reconciled together. Updating only a digest is not an accepted fix.
 
+Sonar issue exceptions MUST equal the reviewed criterion-name, rule-key, and exact
+production-file allowlist in `sonar-project.properties`. Globs, directories, global or
+rule-wide ignores, coverage exclusions, and duplication exclusions are forbidden.
+`compilerParameterSurface` (`typescript:S107` on
+`src/definition/compile-pipeline.ts`) expires in PR4a.
+`boundedCompiledInspection` (`typescript:S3776` on
+`src/transition/validate-compiled-internally.ts`) expires in PR4b.
+
 A DAG rule change MUST update this specification, structural validator, unit partition,
 and positive/negative executable harness in the same change.

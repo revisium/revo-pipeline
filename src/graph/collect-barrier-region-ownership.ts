@@ -149,14 +149,24 @@ const ownershipFromBranchWords = (
   });
 };
 
-const sharedRows = (
+const mergeWords = (
+  destination: Uint32Array,
+  source: Uint32Array,
+  sink: GraphOperationSink | undefined,
+): void => {
+  for (let word = 0; word < destination.length; word += 1) {
+    sink?.add('bitsetWord', 1);
+    destination[word] = (destination[word] ?? 0) | (source[word] ?? 0);
+  }
+};
+
+const sharedForwardRows = (
   kernel: GraphKernel,
   topologicalOffsets: readonly number[],
+  words: number,
   sink: GraphOperationSink | undefined,
-): { readonly forward: readonly Uint32Array[]; readonly reverse: readonly Uint32Array[] } => {
-  const words = wordCount(kernel);
+): readonly Uint32Array[] => {
   const forward = Array.from({ length: kernel.nodeKeys.length }, () => new Uint32Array(words));
-  const reverse = Array.from({ length: kernel.nodeKeys.length }, () => new Uint32Array(words));
   for (const offset of [...topologicalOffsets].reverse()) {
     const row = forward[offset];
     if (!row) {
@@ -170,12 +180,19 @@ const sharedRows = (
       if (!source) {
         continue;
       }
-      for (let word = 0; word < words; word += 1) {
-        sink?.add('bitsetWord', 1);
-        row[word] = (row[word] ?? 0) | (source[word] ?? 0);
-      }
+      mergeWords(row, source, sink);
     }
   }
+  return forward;
+};
+
+const sharedReverseRows = (
+  kernel: GraphKernel,
+  topologicalOffsets: readonly number[],
+  words: number,
+  sink: GraphOperationSink | undefined,
+): readonly Uint32Array[] => {
+  const reverse = Array.from({ length: kernel.nodeKeys.length }, () => new Uint32Array(words));
   for (const offset of topologicalOffsets) {
     const row = reverse[offset];
     if (!row) {
@@ -189,12 +206,20 @@ const sharedRows = (
       if (!target) {
         continue;
       }
-      for (let word = 0; word < words; word += 1) {
-        sink?.add('bitsetWord', 1);
-        target[word] = (target[word] ?? 0) | (row[word] ?? 0);
-      }
+      mergeWords(target, row, sink);
     }
   }
+  return reverse;
+};
+
+const sharedRows = (
+  kernel: GraphKernel,
+  topologicalOffsets: readonly number[],
+  sink: GraphOperationSink | undefined,
+): { readonly forward: readonly Uint32Array[]; readonly reverse: readonly Uint32Array[] } => {
+  const words = wordCount(kernel);
+  const forward = sharedForwardRows(kernel, topologicalOffsets, words, sink);
+  const reverse = sharedReverseRows(kernel, topologicalOffsets, words, sink);
   return { forward, reverse };
 };
 

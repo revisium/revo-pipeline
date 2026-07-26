@@ -22,7 +22,14 @@ const acceptedImplementationCriteria = new Map([
   ],
   [
     'boundedCompiledInspection',
-    { resourceKey: 'src/transition/validate-compiled-pipeline.ts', ruleKey: 'typescript:S3776' },
+    {
+      resourceKey: 'src/transition/validate-compiled-internally.ts',
+      ruleKey: 'typescript:S3776',
+    },
+  ],
+  [
+    'compilerParameterSurface',
+    { resourceKey: 'src/definition/compile-pipeline.ts', ruleKey: 'typescript:S107' },
   ],
   [
     'coreDecisionMembership',
@@ -69,13 +76,26 @@ test('limits Sonar exceptions to reviewed semantic and implementation cases', as
   expect(criteria).toEqual([...acceptedCriteria.keys()]);
   expect(
     criteria?.map((criterion) => ({
+      criterion,
       resourceKey: properties.get(`sonar.issue.ignore.multicriteria.${criterion}.resourceKey`),
       ruleKey: properties.get(`sonar.issue.ignore.multicriteria.${criterion}.ruleKey`),
     })),
-  ).toEqual([...acceptedCriteria.values()]);
+  ).toEqual(
+    [...acceptedCriteria].map(([criterion, accepted]) => ({
+      criterion,
+      ...accepted,
+    })),
+  );
+  for (const { resourceKey, ruleKey } of acceptedCriteria.values()) {
+    expect(resourceKey).toMatch(/^src\/[^*?{},[\]]+\.ts$/u);
+    expect(resourceKey).not.toMatch(/(?:^|\/)\.\.(?:\/|$)/u);
+    expect(ruleKey).toMatch(/^typescript:S[0-9]+$/u);
+  }
   expect(properties.get('sonar.exclusions')).toBeUndefined();
   expect(properties.get('sonar.coverage.exclusions')).toBeUndefined();
   expect(properties.get('sonar.cpd.exclusions')).toBeUndefined();
+  expect(properties.get('sonar.issue.ignore.allfile')).toBeUndefined();
+  expect(properties.get('sonar.issue.ignore.block')).toBeUndefined();
   expect(properties.get('sonar.sources')).toBe('src');
   expect(properties.get('sonar.tests')).toBe('test');
   expect(properties.get('sonar.test.inclusions')).toBe('test/**/*.ts');
