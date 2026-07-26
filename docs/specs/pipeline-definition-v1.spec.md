@@ -8,8 +8,9 @@ The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**, 
 **MAY** in this document are to be interpreted as described in BCP 14 (RFC 2119 and
 RFC 8174) when, and only when, they appear in all capitals.
 
-This specification fixes the contract for later implementation. It does not ship an API:
-`src/index.ts` MUST remain exactly `export {};` until the public implementation slice.
+This specification fixed the contract before implementation. Its bootstrap guard
+required `src/index.ts` to remain exactly `export {};` until the public implementation
+slice; that slice now ships the exact manifest below.
 
 ## Public contract
 
@@ -285,9 +286,9 @@ globally first 99 plus a fixed root `DEF_LIMIT` truncation fault as item 100.
 Compilation MUST be bounded `O(V + E)` plus bounded sorting. Recursion MUST NOT depend
 on unbounded caller input depth.
 
-## Exact planned root export manifest
+## Exact root export manifest
 
-The eventual root MUST export exactly these runtime values:
+The root MUST export exactly these runtime values:
 
 - `definePipeline`
 - `compilePipeline`

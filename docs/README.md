@@ -9,6 +9,7 @@
 - [Accepted pipeline transition v1](./specs/pipeline-transition-v1.spec.md)
 - [Accepted internal module structure](./specs/internal-module-structure.spec.md)
 
-Accepted specifications authorize later implementation, not an immediate export. The
-bootstrap root is intentionally empty until an implementation slice passes behavior,
-package, and architecture proof.
+The Accepted specifications now back the implemented MVP root, its tests, declarations,
+docs, and packed-consumer proof. Historical “later implementation slice” language in a
+normative spec describes the former bootstrap condition; the exact Accepted export
+manifest is now shipped.

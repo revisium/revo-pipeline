@@ -50,6 +50,104 @@ const ALLOWED_DEPENDENCIES: Readonly<Record<Layer, readonly Layer[]>> = {
   transition: ['spec', 'policy', 'errors', 'graph'],
 };
 
+interface RootExport {
+  readonly name: string;
+  readonly source: string;
+  readonly typeOnly: boolean;
+}
+
+const rootExports = (
+  source: string,
+  typeOnly: boolean,
+  names: readonly string[],
+): readonly RootExport[] => names.map((name) => ({ name, source, typeOnly }));
+
+const ROOT_EXPORTS: readonly RootExport[] = [
+  ...rootExports('./definition/index.js', false, ['compilePipeline', 'definePipeline']),
+  ...rootExports('./transition/index.js', false, ['decidePipeline']),
+  ...rootExports('./spec/index.js', true, [
+    'ActivateDecision',
+    'ActivationCause',
+    'AllJoinPolicy',
+    'AnyJoinPolicy',
+    'BranchCase',
+    'BranchDefault',
+    'BranchName',
+    'BranchNode',
+    'BranchPredicate',
+    'CandidateKey',
+    'CandidateVerdict',
+    'CompiledEdge',
+    'CompiledEdgeIndexEntry',
+    'CompiledEdgeRole',
+    'CompiledForkBranch',
+    'CompiledForkRegion',
+    'CompiledNode',
+    'CompiledNodeIndexEntry',
+    'CompiledPipeline',
+    'ConsensusNode',
+    'ConsensusOutcome',
+    'ConsensusPolicy',
+    'ConsensusRoutes',
+    'FactDefinition',
+    'FactKey',
+    'FactType',
+    'ForkBranch',
+    'ForkNode',
+    'GateResolution',
+    'HumanGateNode',
+    'HumanGateRoute',
+    'JoinNode',
+    'JoinOutcome',
+    'JoinPolicy',
+    'JoinRoutes',
+    'JsonScalar',
+    'NodeFact',
+    'NodeKey',
+    'NoopDecision',
+    'PipelineDefinition',
+    'PipelineFacts',
+    'PipelineNode',
+    'PipelineValueFact',
+    'QuorumConsensusPolicy',
+    'ResolutionName',
+    'SelectDecision',
+    'TaskNode',
+    'TaskOutcome',
+    'TaskRoutes',
+    'TerminalDecision',
+    'TerminalNode',
+    'ThresholdConsensusPolicy',
+    'ThresholdJoinPolicy',
+    'UnanimousConsensusPolicy',
+    'WaitDecision',
+    'WaitReason',
+  ]),
+  ...rootExports('./errors/index.js', true, [
+    'DecisionFault',
+    'DecisionFaultCode',
+    'DefinitionFault',
+    'DefinitionFaultCode',
+    'PipelineCompilation',
+    'PipelineDecision',
+    'RejectDecision',
+  ]),
+];
+
+const rootExportNames = (source: string, typeOnly: boolean): readonly string[] =>
+  ROOT_EXPORTS.filter(
+    (rootExport) => rootExport.source === source && rootExport.typeOnly === typeOnly,
+  ).map(({ name }) => name);
+
+const ROOT_SOURCE = [
+  `export { ${rootExportNames('./definition/index.js', false).join(', ')} } from './definition/index.js';`,
+  `export { ${rootExportNames('./transition/index.js', false).join(', ')} } from './transition/index.js';`,
+  `export type { ${rootExportNames('./spec/index.js', true).join(', ')} } from './spec/index.js';`,
+  `export type { ${rootExportNames('./errors/index.js', true).join(', ')} } from './errors/index.js';`,
+].join('\n');
+
+const rootTokens = (source: string): string => source.replaceAll(/\s/gu, '').replaceAll(',}', '}');
+
 const fail = (rule: ArchitectureRule, path: string): never => {
   throw new Error(`[${rule}] ${path}`);
 };
@@ -134,17 +232,7 @@ const validateRoot = (path: string, sourceFile: SourceFile): void => {
   if (!isRoot(path)) {
     return;
   }
-  const statement = sourceFile.statements[0];
-  if (
-    sourceFile.statements.length !== 1 ||
-    !statement ||
-    !ts.isExportDeclaration(statement) ||
-    statement.isTypeOnly ||
-    statement.moduleSpecifier !== undefined ||
-    !statement.exportClause ||
-    !ts.isNamedExports(statement.exportClause) ||
-    statement.exportClause.elements.length !== 0
-  ) {
+  if (rootTokens(sourceFile.text) !== rootTokens(ROOT_SOURCE)) {
     fail('root-public-api', path);
   }
 };

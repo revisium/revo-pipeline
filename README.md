@@ -3,40 +3,94 @@
 Portable pipeline definitions, deterministic compilation, and pure semantic decisions
 for Revo.
 
-> [!IMPORTANT]
-> The v1 contract is accepted, but no public runtime API is shipped. The package is unpublished
-> and `src/index.ts` is exactly `export {};`. The API below is a planned declaration for
-> later implementation slices, not an importable API today.
+The MVP root API is implemented and package-ready, but this `0.0.0` package is not
+published. It exports exactly `definePipeline`, `compilePipeline`, `decidePipeline`, and
+the 63 Accepted readonly contract types. No decoder, default export, alias, subpath,
+policy helper, graph helper, or runtime dependency is public.
 
 ```text
 PipelineDefinition --compilePipeline--> CompiledPipeline
 CompiledPipeline + PipelineFacts --decidePipeline--> PipelineDecision
 ```
 
-The planned root surface is `definePipeline`, `compilePipeline`, `decidePipeline`, and
-their readonly definition, compiled graph, facts, policy, fault, and decision types.
-`definePipeline` is identity/type inference only. Compilation is bounded and creates
-frozen canonical portable data; decisions are synchronous, pure, deterministic, and
-total over supplied facts.
+`definePipeline` preserves literal inference. Compilation produces recursively frozen,
+canonical, JSON-compatible graph data. Decisions are synchronous, deterministic, and
+pure over the compiled graph and complete supplied fact snapshot.
 
-The current internal implementation includes readonly contract types, immutable limits,
-canonical scalar/ordering policy, bounded portable-value inspection, deterministic graph
-algorithms, definition compilation with canonical frozen output, and pure transition
-evaluation for task, branch, fork, join, consensus, human-gate, and terminal nodes.
-These internal layers are not exported from the package root. Coordination is derived
-only from supplied portable facts and compiled regions; the package retains no run or
-arrival state.
+## Working root example
 
-The package owns graph semantics for task, branch, fork, join, consensus, human gate,
-and terminal nodes. It excludes runs, attempts, IDs, time, persistence, CAS, leases,
-retries, resume, queues, authorization, agent/script execution, and host bindings.
-Join readiness uses declared exit-node facts, never `JoinArrival`; branch predicates are
-disjoint, never first-match; v1 forbids nested forks.
+```ts
+import { compilePipeline, decidePipeline, definePipeline } from '@revisium/revo-pipeline';
 
-See the accepted [definition contract](./docs/specs/pipeline-definition-v1.spec.md),
+const definition = definePipeline({
+  schemaVersion: 1,
+  entry: 'approval',
+  facts: [],
+  nodes: [
+    {
+      kind: 'humanGate',
+      key: 'approval',
+      subject: 'Approve the change',
+      resolutions: [
+        { resolution: 'approved', to: 'published' },
+        { resolution: 'rejected', to: 'cancelled' },
+      ],
+    },
+    { kind: 'terminal', key: 'published', outcome: 'published' },
+    { kind: 'terminal', key: 'cancelled', outcome: 'cancelled' },
+  ],
+});
+
+const compilation = compilePipeline(definition);
+if (!compilation.ok) {
+  throw new Error(compilation.faults.map((fault) => fault.message).join('\n'));
+}
+
+const pipeline = JSON.parse(JSON.stringify(compilation.pipeline));
+const emptyFacts = { values: [], nodes: [], candidateVerdicts: [], gateResolutions: [] };
+
+decidePipeline(pipeline, emptyFacts);
+// { kind: 'activate', cause: { kind: 'entry' }, nodeKeys: ['approval'] }
+
+const unresolvedFacts = {
+  ...emptyFacts,
+  nodes: [{ key: 'approval', state: 'enabled' as const }],
+};
+decidePipeline(pipeline, unresolvedFacts);
+// { kind: 'wait', nodeKey: 'approval', reason: 'gate-unresolved' }
+
+const resolvedFacts = {
+  ...unresolvedFacts,
+  gateResolutions: [{ nodeKey: 'approval', resolution: 'approved' }],
+};
+const first = decidePipeline(pipeline, resolvedFacts);
+const repeated = decidePipeline(pipeline, resolvedFacts);
+// both: { kind: 'select', nodeKey: 'approval', outcome: 'approved', activate: ['published'] }
+```
+
+The package owns graph semantics for `task`, `branch`, `fork`, `join`, `consensus`,
+`humanGate`, and `terminal`. Fork/join readiness is derived from declared exit facts;
+consensus and gates are derived from supplied verdicts and resolutions. There is no
+hidden arrival, vote, gate, or run state.
+
+## Boundary and future integration
+
+This package owns definitions, validation, canonical compilation, graph semantics, and
+one decision from facts. A host owns storage, clocks, IDs, attempts, leases, CAS,
+retries, resume, authorization, queues, agents, scripts, and atomic application of the
+returned decision. `@revisium/revo-run` can consume the public `CompiledPipeline`,
+`PipelineFacts`, and `PipelineDecision` types through a one-way dependency.
+
+The current Draft `@revisium/revo-run` documents a public `decodePipeline` seam for
+untrusted persisted JSON. This MVP intentionally does not export a decoder, so that
+Draft integration remains unresolved and is not proven by this package. A host may use
+already trusted typed compiled data today; a future Accepted decoder contract is needed
+before claiming safe unknown-JSON ingestion.
+
+See the Accepted [definition contract](./docs/specs/pipeline-definition-v1.spec.md),
 [transition contract](./docs/specs/pipeline-transition-v1.spec.md),
-[module DAG](./docs/specs/internal-module-structure.spec.md), and planned
-[consumer example](./docs/examples/consumer.md).
+[module DAG](./docs/specs/internal-module-structure.spec.md), and
+[executable consumer example](./docs/examples/consumer.md).
 
 ## Development
 
@@ -47,7 +101,8 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm verify
 ```
 
-`verify` runs formatting, strict type checking, type-aware linting, tooling/package
-tests and coverage, architecture probes, ESM declarations/build, publint, and the exact
-packed-consumer proof. Do not publish, tag, release, merge, or add a root export without
-the separately approved implementation and release path.
+`verify` covers formatting, strict TypeScript, type-aware linting, unit/coverage and
+architecture proof, declarations/build, and one exact packed tarball reused for
+contents, publint, ATTW, isolated ESM/strict TypeScript consumers, all 63 public types,
+and runtime/type deep-import denial. Publishing, tagging, releasing, or merging requires
+separate approval.

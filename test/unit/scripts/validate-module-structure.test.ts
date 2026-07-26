@@ -10,6 +10,12 @@ const expectViolation = (module: SourceModule, rule: ArchitectureRule): void => 
   expect(() => validateModuleStructure([module])).toThrowError(`[${rule}]`);
 };
 
+const validRootSource =
+  "export { compilePipeline, definePipeline } from './definition/index.js';\n" +
+  "export { decidePipeline } from './transition/index.js';\n" +
+  "export type { ActivateDecision, ActivationCause, AllJoinPolicy, AnyJoinPolicy, BranchCase, BranchDefault, BranchName, BranchNode, BranchPredicate, CandidateKey, CandidateVerdict, CompiledEdge, CompiledEdgeIndexEntry, CompiledEdgeRole, CompiledForkBranch, CompiledForkRegion, CompiledNode, CompiledNodeIndexEntry, CompiledPipeline, ConsensusNode, ConsensusOutcome, ConsensusPolicy, ConsensusRoutes, FactDefinition, FactKey, FactType, ForkBranch, ForkNode, GateResolution, HumanGateNode, HumanGateRoute, JoinNode, JoinOutcome, JoinPolicy, JoinRoutes, JsonScalar, NodeFact, NodeKey, NoopDecision, PipelineDefinition, PipelineFacts, PipelineNode, PipelineValueFact, QuorumConsensusPolicy, ResolutionName, SelectDecision, TaskNode, TaskOutcome, TaskRoutes, TerminalDecision, TerminalNode, ThresholdConsensusPolicy, ThresholdJoinPolicy, UnanimousConsensusPolicy, WaitDecision, WaitReason } from './spec/index.js';\n" +
+  "export type { DecisionFault, DecisionFaultCode, DefinitionFault, DefinitionFaultCode, PipelineCompilation, PipelineDecision, RejectDecision } from './errors/index.js';\n";
+
 test('accepts the complete layer dependency matrix', () => {
   expect(() =>
     validateModuleStructure([
@@ -63,7 +69,7 @@ test('accepts the complete layer dependency matrix', () => {
       },
       {
         path: 'src/index.ts',
-        source: 'export {};\n',
+        source: validRootSource,
       },
     ]),
   ).not.toThrow();
@@ -331,21 +337,76 @@ test.each([
   [
     {
       path: 'src/index.ts',
-      source: 'export const leaked = true;\n',
+      source: validRootSource.replace(', definePipeline', ''),
     },
     'root-public-api',
   ],
   [
     {
       path: 'src/index.ts',
-      source: 'export type Leaked = string;\n',
+      source: `${validRootSource}export type { Leaked } from './spec/index.js';\n`,
     },
     'root-public-api',
   ],
   [
     {
       path: 'src/index.ts',
-      source: "export { readEdges } from './graph/index.js';\n",
+      source: validRootSource.replace(
+        'export { compilePipeline, definePipeline }',
+        'export type { compilePipeline, definePipeline }',
+      ),
+    },
+    'root-public-api',
+  ],
+  [
+    {
+      path: 'src/index.ts',
+      source: "export * from './spec/index.js';\n",
+    },
+    'root-public-api',
+  ],
+  [
+    {
+      path: 'src/index.ts',
+      source: "export { default } from './definition/index.js';\n",
+    },
+    'root-public-api',
+  ],
+  [
+    {
+      path: 'src/index.ts',
+      source: 'export const definePipeline = true;\n',
+    },
+    'root-public-api',
+  ],
+  [
+    {
+      path: 'src/index.ts',
+      source: validRootSource.replace(
+        "'./definition/index.js'",
+        "'./definition/define-pipeline.js'",
+      ),
+    },
+    'root-public-api',
+  ],
+  [
+    {
+      path: 'src/index.ts',
+      source: `${validRootSource}export { PIPELINE_LIMITS } from './policy/index.js';\n`,
+    },
+    'root-public-api',
+  ],
+  [
+    {
+      path: 'src/index.ts',
+      source: `${validRootSource}export { topologicalSort } from './graph/index.js';\n`,
+    },
+    'root-public-api',
+  ],
+  [
+    {
+      path: 'src/index.ts',
+      source: validRootSource.replace('compilePipeline', 'compilePipeline as compile'),
     },
     'root-public-api',
   ],
