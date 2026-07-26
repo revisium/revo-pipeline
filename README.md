@@ -21,11 +21,11 @@ total over supplied facts.
 
 The current internal implementation includes readonly contract types, immutable limits,
 canonical scalar/ordering policy, bounded portable-value inspection, deterministic graph
-algorithms, definition compilation with canonical frozen output, and pure core
-task/branch/terminal transition evaluation. These internal layers are not exported from
-the package root. Coordination-node transition evaluation is reserved for the next
-implementation slice; compiled graphs containing coordination nodes are rejected
-deterministically by the current internal evaluator.
+algorithms, definition compilation with canonical frozen output, and pure transition
+evaluation for task, branch, fork, join, consensus, human-gate, and terminal nodes.
+These internal layers are not exported from the package root. Coordination is derived
+only from supplied portable facts and compiled regions; the package retains no run or
+arrival state.
 
 The package owns graph semantics for task, branch, fork, join, consensus, human gate,
 and terminal nodes. It excludes runs, attempts, IDs, time, persistence, CAS, leases,

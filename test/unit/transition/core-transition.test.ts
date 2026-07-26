@@ -331,7 +331,7 @@ describe('core pipeline transitions', () => {
     });
   });
 
-  test('rejects coordination graphs explicitly until coordination transitions are implemented', () => {
+  test('accepts coordination graphs in the internal evaluator', () => {
     const pipeline = compile({
       schemaVersion: 1,
       entry: 'fork',
@@ -363,9 +363,10 @@ describe('core pipeline transitions', () => {
       ],
     });
 
-    expect(decidePipeline(pipeline, facts())).toMatchObject({
-      kind: 'reject',
-      faults: [{ code: 'PIPELINE_INVALID' }],
+    expect(decidePipeline(pipeline, facts())).toEqual({
+      kind: 'activate',
+      cause: { kind: 'entry' },
+      nodeKeys: ['fork'],
     });
   });
 });

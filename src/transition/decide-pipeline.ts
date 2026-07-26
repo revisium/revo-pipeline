@@ -4,13 +4,16 @@ import {
   DECISION_FAULT_PHASES,
   inspectPortableValueSet,
   isValidKey,
+  isValidSemanticName,
   jsonScalarsEqual,
   orderFaults,
   PIPELINE_LIMITS,
 } from '../policy/index.js';
 import type {
   BranchNode,
+  CandidateVerdict,
   CompiledPipeline,
+  GateResolution,
   JsonScalar,
   NodeFact,
   PipelineFacts,
@@ -20,9 +23,21 @@ import type {
 import { validateCompiledPipeline } from './validate-compiled-pipeline.js';
 
 type MutableFault = { code: DecisionFaultCode; path: string; message: string };
+type IndexedFact<T> = { readonly fact: T; readonly sourceIndex: number };
+type ConsensusFacts = {
+  readonly approvals: number;
+  readonly rejections: number;
+  readonly total: number;
+};
 type ValidatedFacts = {
+  readonly candidateVerdicts: readonly IndexedFact<CandidateVerdict>[];
+  readonly consensusByNode: ReadonlyMap<string, ConsensusFacts>;
+  readonly gateResolutions: readonly IndexedFact<GateResolution>[];
+  readonly gateResolutionByNode: ReadonlyMap<string, GateResolution>;
   readonly nodes: readonly NodeFact[];
+  readonly nodeByKey: ReadonlyMap<string, NodeFact>;
   readonly values: readonly PipelineValueFact[];
+  readonly valueByKey: ReadonlyMap<string, JsonScalar>;
 };
 
 const FACT_FIELDS = ['candidateVerdicts', 'gateResolutions', 'nodes', 'values'] as const;
@@ -47,7 +62,9 @@ const addFault = (
 };
 
 const isDecisionFaultCode = (value: string): value is DecisionFaultCode =>
-  DECISION_FAULT_PHASES.some((phase) => (phase.codes as readonly string[]).includes(value));
+  DECISION_FAULT_PHASES.some((phase) =>
+    (phase.codes as readonly string[]).some((code) => code === value),
+  );
 
 const orderedFaults = (faults: readonly MutableFault[]): readonly DecisionFault[] =>
   orderFaults(faults, DECISION_FAULT_PHASES, 'FACT_LIMIT', 'decision').map((fault) => {
@@ -63,11 +80,17 @@ const reject = (faults: readonly MutableFault[]): PipelineDecision => ({
 });
 
 const nodeOutcomeExists = (node: PipelineNode, outcome: string): boolean => {
-  if (node.kind === 'task') {
+  if (node.kind === 'task' || node.kind === 'join' || node.kind === 'consensus') {
     return Object.hasOwn(node.outcomes, outcome);
   }
   if (node.kind === 'branch') {
     return node.cases.some((entry) => entry.name === outcome) || node.default?.name === outcome;
+  }
+  if (node.kind === 'fork') {
+    return outcome === 'forked';
+  }
+  if (node.kind === 'humanGate') {
+    return node.resolutions.some((route) => route.resolution === outcome);
   }
   return node.kind === 'terminal' && node.outcome === outcome;
 };
@@ -256,11 +279,11 @@ const precheckFactArrayBounds = (input: unknown, faults: MutableFault[]): boolea
 
 const validateCandidateFacts = (
   input: readonly unknown[],
-  pipeline: CompiledPipeline,
+  graph: EvaluationIndex,
   faults: MutableFault[],
-): void => {
-  const nodes = new Map(pipeline.nodes.map((node) => [node.key, node]));
+): readonly IndexedFact<CandidateVerdict>[] => {
   const seen = new Set<string>();
+  const validated: IndexedFact<CandidateVerdict>[] = [];
   input.forEach((entry, index) => {
     if (entry === INVALID_PORTABLE_ENTRY) {
       return;
@@ -271,7 +294,7 @@ const validateCandidateFacts = (
       !hasExactFields(entry, ['candidate', 'nodeKey', 'verdict']) ||
       !isValidKey(entry.nodeKey) ||
       !isValidKey(entry.candidate) ||
-      !['abstain', 'approve', 'reject'].includes(String(entry.verdict))
+      (entry.verdict !== 'abstain' && entry.verdict !== 'approve' && entry.verdict !== 'reject')
     ) {
       addFault(faults, 'FACT_TYPE', path, 'Invalid candidate verdict fact.');
       return;
@@ -281,24 +304,34 @@ const validateCandidateFacts = (
       addFault(faults, 'FACT_DUPLICATE', path, 'Duplicate candidate verdict fact.');
     }
     seen.add(identity);
-    const node = nodes.get(entry.nodeKey);
+    const node = graph.nodeByKey.get(entry.nodeKey);
     if (node?.kind !== 'consensus') {
       addFault(faults, 'FACT_FOREIGN', `${path}/nodeKey`, 'Foreign verdict node.');
       return;
     }
-    if (!node.candidates.includes(entry.candidate)) {
+    if (!graph.candidatesByNode.get(entry.nodeKey)?.has(entry.candidate)) {
       addFault(faults, 'FACT_CANDIDATE', `${path}/candidate`, 'Candidate is not declared.');
+      return;
     }
+    validated.push({
+      fact: {
+        nodeKey: entry.nodeKey,
+        candidate: entry.candidate,
+        verdict: entry.verdict,
+      },
+      sourceIndex: index,
+    });
   });
+  return validated;
 };
 
 const validateGateFacts = (
   input: readonly unknown[],
-  pipeline: CompiledPipeline,
+  graph: EvaluationIndex,
   faults: MutableFault[],
-): void => {
-  const nodes = new Map(pipeline.nodes.map((node) => [node.key, node]));
+): readonly IndexedFact<GateResolution>[] => {
   const seen = new Set<string>();
+  const validated: IndexedFact<GateResolution>[] = [];
   input.forEach((entry, index) => {
     if (entry === INVALID_PORTABLE_ENTRY) {
       return;
@@ -308,7 +341,7 @@ const validateGateFacts = (
       !isRecord(entry) ||
       !hasExactFields(entry, ['nodeKey', 'resolution']) ||
       !isValidKey(entry.nodeKey) ||
-      typeof entry.resolution !== 'string'
+      !isValidSemanticName(entry.resolution)
     ) {
       addFault(faults, 'FACT_TYPE', path, 'Invalid gate resolution fact.');
       return;
@@ -323,20 +356,27 @@ const validateGateFacts = (
       addFault(faults, 'FACT_DUPLICATE', path, 'Duplicate gate resolution fact.');
     }
     seen.add(entry.nodeKey);
-    const node = nodes.get(entry.nodeKey);
+    const node = graph.nodeByKey.get(entry.nodeKey);
     if (node?.kind !== 'humanGate') {
       addFault(faults, 'FACT_FOREIGN', `${path}/nodeKey`, 'Foreign gate node.');
       return;
     }
-    if (!node.resolutions.some((route) => route.resolution === entry.resolution)) {
+    if (!graph.resolutionsByNode.get(entry.nodeKey)?.has(entry.resolution)) {
       addFault(faults, 'FACT_RESOLUTION', `${path}/resolution`, 'Resolution is not declared.');
+      return;
     }
+    validated.push({
+      fact: { nodeKey: entry.nodeKey, resolution: entry.resolution },
+      sourceIndex: index,
+    });
   });
+  return validated;
 };
 
 const validateFactShape = (
   input: unknown,
   pipeline: CompiledPipeline,
+  index: EvaluationIndex,
   faults: MutableFault[],
 ): ValidatedFacts | undefined => {
   if (!precheckFactArrayBounds(input, faults)) {
@@ -363,7 +403,8 @@ const validateFactShape = (
   const value = inspected.value;
   const issues = portableIssueIndex(inspected.issues.map((issue) => issue.path));
   const keys = Object.keys(value);
-  if (keys.length !== FACT_FIELDS.length || FACT_FIELDS.some((key) => !keys.includes(key))) {
+  const keySet = new Set(keys);
+  if (keys.length !== FACT_FIELDS.length || FACT_FIELDS.some((key) => !keySet.has(key))) {
     addFault(faults, 'FACT_TYPE', '', 'Invalid facts object.');
   }
   const values = validPortableEntries(
@@ -416,28 +457,206 @@ const validateFactShape = (
   ) {
     addFault(faults, 'FACT_LIMIT', '', 'Aggregate fact limit exceeded.');
   }
-  validateCandidateFacts(verdicts, pipeline, faults);
-  validateGateFacts(resolutions, pipeline, faults);
+  const candidateVerdicts = validateCandidateFacts(verdicts, index, faults);
+  const gateResolutions = validateGateFacts(resolutions, index, faults);
+  const validatedNodes = validateNodeFacts(nodes, pipeline, faults);
+  const validatedValues = validateValueFacts(values, pipeline, faults);
+  const consensusByNode = new Map<
+    string,
+    { approvals: number; rejections: number; total: number }
+  >();
+  for (const { fact } of candidateVerdicts) {
+    const aggregate = consensusByNode.get(fact.nodeKey) ?? {
+      approvals: 0,
+      rejections: 0,
+      total: 0,
+    };
+    aggregate.total += 1;
+    aggregate.approvals += fact.verdict === 'approve' ? 1 : 0;
+    aggregate.rejections += fact.verdict === 'reject' ? 1 : 0;
+    consensusByNode.set(fact.nodeKey, aggregate);
+  }
   return {
-    values: validateValueFacts(values, pipeline, faults),
-    nodes: validateNodeFacts(nodes, pipeline, faults),
+    candidateVerdicts,
+    consensusByNode,
+    gateResolutions,
+    gateResolutionByNode: new Map(gateResolutions.map(({ fact }) => [fact.nodeKey, fact])),
+    values: validatedValues,
+    valueByKey: new Map(validatedValues.map((fact) => [fact.key, fact.value])),
+    nodes: validatedNodes,
+    nodeByKey: new Map(validatedNodes.map((fact) => [fact.key, fact])),
   };
 };
 
-const nodeFactMap = (facts: readonly NodeFact[]): ReadonlyMap<string, NodeFact> =>
-  new Map(facts.map((fact) => [fact.key, fact]));
-
 type EvaluationIndex = {
+  readonly candidatesByNode: ReadonlyMap<string, ReadonlySet<string>>;
   readonly nodeByKey: ReadonlyMap<string, PipelineNode>;
   readonly incomingByKey: ReadonlyMap<string, readonly number[]>;
   readonly outgoingByKey: ReadonlyMap<string, readonly number[]>;
+  readonly regionByFork: ReadonlyMap<string, CompiledPipeline['forkRegions'][number]>;
+  readonly regionByJoin: ReadonlyMap<string, CompiledPipeline['forkRegions'][number]>;
+  readonly regionOwnerByNode: ReadonlyMap<string, string>;
+  readonly resolutionsByNode: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly topologicalPosition: ReadonlyMap<string, number>;
 };
 
-const evaluationIndex = (pipeline: CompiledPipeline): EvaluationIndex => ({
-  nodeByKey: new Map(pipeline.nodes.map((node) => [node.key, node])),
-  incomingByKey: new Map(pipeline.incomingIndex.map((entry) => [entry.key, entry.edges])),
-  outgoingByKey: new Map(pipeline.outgoingIndex.map((entry) => [entry.key, entry.edges])),
-});
+const evaluationIndex = (pipeline: CompiledPipeline): EvaluationIndex => {
+  const regionOwnerByNode = new Map<string, string>();
+  pipeline.forkRegions.forEach((region) => {
+    region.branches.forEach((branch) => {
+      branch.members.forEach((member) => regionOwnerByNode.set(member, region.fork));
+    });
+    regionOwnerByNode.set(region.join, region.fork);
+  });
+  return {
+    nodeByKey: new Map(pipeline.nodes.map((node) => [node.key, node])),
+    candidatesByNode: new Map(
+      pipeline.nodes.flatMap((node) =>
+        node.kind === 'consensus' ? [[node.key, new Set(node.candidates)] as const] : [],
+      ),
+    ),
+    incomingByKey: new Map(pipeline.incomingIndex.map((entry) => [entry.key, entry.edges])),
+    outgoingByKey: new Map(pipeline.outgoingIndex.map((entry) => [entry.key, entry.edges])),
+    regionByFork: new Map(pipeline.forkRegions.map((region) => [region.fork, region])),
+    regionByJoin: new Map(pipeline.forkRegions.map((region) => [region.join, region])),
+    regionOwnerByNode,
+    resolutionsByNode: new Map(
+      pipeline.nodes.flatMap((node) =>
+        node.kind === 'humanGate'
+          ? [[node.key, new Set(node.resolutions.map((route) => route.resolution))] as const]
+          : [],
+      ),
+    ),
+    topologicalPosition: new Map(pipeline.topologicalOrder.map((key, position) => [key, position])),
+  };
+};
+
+type Selection = { readonly outcome: string; readonly targets: readonly string[] };
+type JoinOutcome = 'completed' | 'insufficient' | 'rejected';
+type ConsensusOutcome = 'approved' | 'insufficient' | 'rejected' | 'tied';
+
+const selectJoinOutcome = (
+  policy: Extract<PipelineNode, { readonly kind: 'join' }>['policy'],
+  accepted: number,
+  pending: number,
+  rejected: boolean,
+): JoinOutcome | undefined => {
+  if (policy.kind === 'all') {
+    if (rejected) {
+      return 'rejected';
+    }
+    if (pending > 0) {
+      return undefined;
+    }
+    return accepted > 0 ? 'completed' : 'insufficient';
+  }
+  if (policy.kind === 'any') {
+    if (accepted > 0) {
+      return 'completed';
+    }
+    if (pending > 0) {
+      return undefined;
+    }
+    return rejected ? 'rejected' : 'insufficient';
+  }
+  if (accepted >= policy.count) {
+    return 'completed';
+  }
+  if (accepted + pending >= policy.count) {
+    return undefined;
+  }
+  return rejected ? 'rejected' : 'insufficient';
+};
+
+const selectConsensusOutcome = (
+  node: Extract<PipelineNode, { readonly kind: 'consensus' }>,
+  approvals: number,
+  rejections: number,
+  remaining: number,
+): ConsensusOutcome | undefined => {
+  if (node.policy.kind === 'unanimous') {
+    if (rejections > 0) {
+      return 'rejected';
+    }
+    if (remaining > 0) {
+      return undefined;
+    }
+    return approvals === node.candidates.length ? 'approved' : 'insufficient';
+  }
+  if (node.policy.kind === 'quorum') {
+    if (remaining > 0) {
+      return undefined;
+    }
+    const votes = approvals + rejections;
+    if (votes < node.policy.quorum) {
+      return 'insufficient';
+    }
+    if (approvals > rejections) {
+      return 'approved';
+    }
+    return rejections > approvals ? 'rejected' : 'tied';
+  }
+  if (approvals >= node.policy.approve) {
+    return 'approved';
+  }
+  if (rejections >= node.policy.reject) {
+    return 'rejected';
+  }
+  if (approvals + remaining < node.policy.approve && rejections + remaining < node.policy.reject) {
+    return 'insufficient';
+  }
+  return undefined;
+};
+
+const joinSelection = (
+  node: Extract<PipelineNode, { readonly kind: 'join' }>,
+  facts: ValidatedFacts,
+  index: EvaluationIndex,
+): Selection | undefined => {
+  const region = index.regionByJoin.get(node.key);
+  if (!region) {
+    return undefined;
+  }
+  const byNode = facts.nodeByKey;
+  const statuses = region.branches.map((branch) => {
+    const fact = byNode.get(branch.exit);
+    if (fact?.state !== 'terminal') {
+      return 'pending' as const;
+    }
+    if (fact.outcome === 'completed') {
+      return 'accepted' as const;
+    }
+    return fact.outcome === 'skipped' ? ('skipped' as const) : ('rejected' as const);
+  });
+  const accepted = statuses.filter((status) => status === 'accepted').length;
+  const pending = statuses.filter((status) => status === 'pending').length;
+  const rejected = statuses.some((status) => status === 'rejected');
+  const outcome = selectJoinOutcome(node.policy, accepted, pending, rejected);
+  return outcome ? { outcome, targets: [node.outcomes[outcome]] } : undefined;
+};
+
+const consensusSelection = (
+  node: Extract<PipelineNode, { readonly kind: 'consensus' }>,
+  facts: ValidatedFacts,
+): Selection | undefined => {
+  const aggregate = facts.consensusByNode.get(node.key);
+  const approvals = aggregate?.approvals ?? 0;
+  const rejections = aggregate?.rejections ?? 0;
+  const remaining = node.candidates.length - (aggregate?.total ?? 0);
+  const outcome = selectConsensusOutcome(node, approvals, rejections, remaining);
+  return outcome ? { outcome, targets: [node.outcomes[outcome]] } : undefined;
+};
+
+const gateSelection = (
+  node: Extract<PipelineNode, { readonly kind: 'humanGate' }>,
+  facts: ValidatedFacts,
+): Selection | undefined => {
+  const resolution = facts.gateResolutionByNode.get(node.key);
+  const route = resolution
+    ? node.resolutions.find((candidate) => candidate.resolution === resolution.resolution)
+    : undefined;
+  return route ? { outcome: route.resolution, targets: [route.to] } : undefined;
+};
 
 const validateCausality = (
   pipeline: CompiledPipeline,
@@ -445,8 +664,27 @@ const validateCausality = (
   graph: EvaluationIndex,
   faults: MutableFault[],
 ): void => {
-  const byNode = nodeFactMap(facts.nodes);
-  const values = new Map(facts.values.map((fact) => [fact.key, fact.value]));
+  const byNode = facts.nodeByKey;
+  facts.candidateVerdicts.forEach(({ fact, sourceIndex }) => {
+    if (!byNode.has(fact.nodeKey)) {
+      addFault(
+        faults,
+        'FACT_PREMATURE',
+        `/candidateVerdicts/${sourceIndex}`,
+        'Verdict node is not activated.',
+      );
+    }
+  });
+  facts.gateResolutions.forEach(({ fact, sourceIndex }) => {
+    if (!byNode.has(fact.nodeKey)) {
+      addFault(
+        faults,
+        'FACT_PREMATURE',
+        `/gateResolutions/${sourceIndex}`,
+        'Gate node is not activated.',
+      );
+    }
+  });
   facts.nodes.forEach((fact, index) => {
     if (fact.key === pipeline.entry) {
       return;
@@ -462,34 +700,74 @@ const validateCausality = (
     if (!activated) {
       addFault(faults, 'FACT_CAUSAL', `/nodes/${index}`, 'Node fact has no activation cause.');
     }
+    const owningFork = graph.regionOwnerByNode.get(fact.key);
+    const forkFact = owningFork ? byNode.get(owningFork) : undefined;
+    if (owningFork && (forkFact?.state !== 'terminal' || forkFact.outcome !== 'forked')) {
+      addFault(
+        faults,
+        'FACT_CAUSAL',
+        `/nodes/${index}`,
+        'Fork-region fact is missing its owning fork.',
+      );
+    }
   });
   facts.nodes.forEach((fact, index) => {
     if (fact.state !== 'terminal') {
       return;
     }
     const node = graph.nodeByKey.get(fact.key);
-    if (node?.kind !== 'branch') {
+    if (!node || node.kind === 'task' || node.kind === 'terminal') {
       return;
     }
-    const selection = branchSelection(node, values);
-    if (selection && selection.outcome !== fact.outcome) {
+    if (node.kind === 'branch') {
+      const selection = branchSelection(node, facts.valueByKey);
+      if (selection && selection.outcome !== fact.outcome) {
+        addFault(
+          faults,
+          'FACT_OUTCOME',
+          `/nodes/${index}/outcome`,
+          'Branch outcome contradicts fact.',
+        );
+        return;
+      }
+      const edge = (graph.outgoingByKey.get(node.key) ?? [])
+        .map((edgeOffset) => pipeline.edges[edgeOffset])
+        .find((candidate) => candidate?.outcome === fact.outcome);
+      if ((selection && edge?.to !== selection.target) || (edge && !byNode.has(edge.to))) {
+        addFault(
+          faults,
+          'FACT_CAUSAL',
+          `/nodes/${index}`,
+          'Terminal branch is missing or contradicts its atomic target.',
+        );
+      }
+      return;
+    }
+    const selection = selectorSelection(node, pipeline, facts, graph);
+    if (!selection) {
+      addFault(
+        faults,
+        'FACT_PREMATURE',
+        `/nodes/${index}`,
+        'Terminal selector has no determined outcome.',
+      );
+      return;
+    }
+    if (selection.outcome !== fact.outcome) {
       addFault(
         faults,
         'FACT_OUTCOME',
         `/nodes/${index}/outcome`,
-        'Branch outcome contradicts fact.',
+        'Selector outcome contradicts facts.',
       );
       return;
     }
-    const edge = (graph.outgoingByKey.get(node.key) ?? [])
-      .map((edgeOffset) => pipeline.edges[edgeOffset])
-      .find((candidate) => candidate?.outcome === fact.outcome);
-    if ((selection && edge?.to !== selection.target) || (edge && !byNode.has(edge.to))) {
+    if (selection.targets.some((target) => !byNode.has(target))) {
       addFault(
         faults,
         'FACT_CAUSAL',
         `/nodes/${index}`,
-        'Terminal branch is missing or contradicts its atomic target.',
+        'Terminal selector is missing its atomic target.',
       );
     }
   });
@@ -500,7 +778,7 @@ const reachedTerminals = (
   facts: ValidatedFacts,
   index: EvaluationIndex,
 ): readonly { readonly key: string; readonly outcome: string }[] => {
-  const byNode = nodeFactMap(facts.nodes);
+  const byNode = facts.nodeByKey;
   return pipeline.topologicalOrder.flatMap((key) => {
     const node = index.nodeByKey.get(key);
     if (node?.kind !== 'terminal') {
@@ -534,13 +812,41 @@ const branchSelection = (
   return selected ? { outcome: selected.name, target: selected.to } : undefined;
 };
 
+const selectorSelection = (
+  node: Exclude<PipelineNode, { readonly kind: 'task' | 'terminal' }>,
+  pipeline: CompiledPipeline,
+  facts: ValidatedFacts,
+  index: EvaluationIndex,
+): Selection | undefined => {
+  if (node.kind === 'branch') {
+    const selection = branchSelection(node, facts.valueByKey);
+    return selection ? { outcome: selection.outcome, targets: [selection.target] } : undefined;
+  }
+  if (node.kind === 'fork') {
+    const region = index.regionByFork.get(node.key);
+    return region
+      ? {
+          outcome: 'forked',
+          targets: [...region.branches.map((branch) => branch.entry), region.join].sort(
+            (left, right) =>
+              (index.topologicalPosition.get(left) ?? 0) -
+              (index.topologicalPosition.get(right) ?? 0),
+          ),
+        }
+      : undefined;
+  }
+  if (node.kind === 'join') {
+    return joinSelection(node, facts, index);
+  }
+  return node.kind === 'consensus' ? consensusSelection(node, facts) : gateSelection(node, facts);
+};
+
 const firstAction = (
   pipeline: CompiledPipeline,
   facts: ValidatedFacts,
   index: EvaluationIndex,
 ): PipelineDecision | undefined => {
-  const byNode = nodeFactMap(facts.nodes);
-  const values = new Map(facts.values.map((fact) => [fact.key, fact.value]));
+  const byNode = facts.nodeByKey;
   if (!byNode.has(pipeline.entry)) {
     return { kind: 'activate', cause: { kind: 'entry' }, nodeKeys: [pipeline.entry] };
   }
@@ -559,14 +865,15 @@ const firstAction = (
         };
       }
     }
-    if (node?.kind === 'branch' && fact?.state === 'enabled') {
-      const selection = branchSelection(node, values);
-      if (selection && !byNode.has(selection.target)) {
+    if (node && node.kind !== 'task' && node.kind !== 'terminal' && fact?.state === 'enabled') {
+      const selection = selectorSelection(node, pipeline, facts, index);
+      const activate = selection?.targets.filter((target) => !byNode.has(target)) ?? [];
+      if (selection && activate.length > 0) {
         return {
           kind: 'select',
           nodeKey: key,
           outcome: selection.outcome,
-          activate: [selection.target],
+          activate,
         };
       }
     }
@@ -579,8 +886,7 @@ const firstWait = (
   facts: ValidatedFacts,
   index: EvaluationIndex,
 ): PipelineDecision | undefined => {
-  const byNode = nodeFactMap(facts.nodes);
-  const values = new Map(facts.values.map((fact) => [fact.key, fact.value]));
+  const byNode = facts.nodeByKey;
   for (const key of pipeline.topologicalOrder) {
     const node = index.nodeByKey.get(key);
     const fact = byNode.get(key);
@@ -590,8 +896,17 @@ const firstWait = (
     if (node?.kind === 'task') {
       return { kind: 'wait', nodeKey: key, reason: 'task-incomplete' };
     }
-    if (node?.kind === 'branch' && !values.has(node.fact)) {
+    if (node?.kind === 'branch' && !facts.valueByKey.has(node.fact)) {
       return { kind: 'wait', nodeKey: key, reason: 'branch-fact-missing' };
+    }
+    if (node?.kind === 'join' && !joinSelection(node, facts, index)) {
+      return { kind: 'wait', nodeKey: key, reason: 'join-incomplete' };
+    }
+    if (node?.kind === 'consensus' && !consensusSelection(node, facts)) {
+      return { kind: 'wait', nodeKey: key, reason: 'consensus-incomplete' };
+    }
+    if (node?.kind === 'humanGate' && !gateSelection(node, facts)) {
+      return { kind: 'wait', nodeKey: key, reason: 'gate-unresolved' };
     }
   }
   return undefined;
@@ -607,9 +922,9 @@ export const decidePipeline = (
       { code: 'PIPELINE_INVALID', path: '', message: 'Compiled pipeline is invalid.' },
     ]);
   }
-  const faults: MutableFault[] = [];
-  const facts = validateFactShape(factsInput, compiled.pipeline, faults);
   const index = evaluationIndex(compiled.pipeline);
+  const faults: MutableFault[] = [];
+  const facts = validateFactShape(factsInput, compiled.pipeline, index, faults);
   if (facts) {
     validateCausality(compiled.pipeline, facts, index, faults);
   }

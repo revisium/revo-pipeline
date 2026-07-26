@@ -24,6 +24,10 @@ const acceptedImplementationCriteria = new Map([
     'boundedCompiledInspection',
     { resourceKey: 'src/transition/validate-compiled-pipeline.ts', ruleKey: 'typescript:S3776' },
   ],
+  [
+    'coreDecisionMembership',
+    { resourceKey: 'src/transition/decide-pipeline.ts', ruleKey: 'typescript:S7765' },
+  ],
 ]);
 
 const acceptedCriteria = new Map([
@@ -54,7 +58,7 @@ const readProperties = async (): Promise<Map<string, string>> => {
   return properties;
 };
 
-test('limits Sonar exceptions to reviewed semantic and bounded-validation cases', async () => {
+test('limits Sonar exceptions to reviewed semantic and implementation cases', async () => {
   const properties = await readProperties();
   const criteria = properties.get('sonar.issue.ignore.multicriteria')?.split(',');
   const issueIgnoreKeys = [...properties.keys()]
