@@ -389,6 +389,14 @@ describe('fork and join coordination', () => {
     const tampered = structuredClone(pipeline);
     Reflect.set(tampered.forkRegions[0]!.branches[0]!, 'members', []);
     expect(validateCompiledPipeline(tampered)).toEqual({ ok: false });
+    const plausible = structuredClone(pipeline);
+    const members = plausible.forkRegions[0]?.branches[0]?.members ?? [];
+    Reflect.set(
+      plausible.forkRegions[0]!.branches[0]!,
+      'members',
+      members.map((member, index) => (index === members.length - 1 ? 'fork' : member)),
+    );
+    expect(validateCompiledPipeline(plausible)).toEqual({ ok: false });
   });
 
   test.each([

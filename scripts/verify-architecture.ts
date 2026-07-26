@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 
+import { validateGraphKernelFlow } from './architecture/validate-graph-kernel-flow.js';
 import {
   validateModuleStructure,
   type ArchitectureRule,
@@ -136,14 +137,92 @@ const positiveGraph: readonly SourceModule[] = [
 ];
 
 validateModuleStructure(positiveGraph);
-validateModuleStructure([
-  ...(await collectModules(join(root, 'src'))),
-  ...(await collectModules(join(root, 'test'))),
-]);
+const sourceModules = await collectModules(join(root, 'src'));
+const testModules = await collectModules(join(root, 'test'));
+const architectureModules = await collectModules(join(root, 'scripts/architecture'));
+validateModuleStructure([...sourceModules, ...testModules, ...architectureModules]);
+assert.deepEqual(validateGraphKernelFlow(root), []);
 execFileSync(oxlint, ['--config', config, '--deny-warnings', 'src', 'test'], {
   cwd: root,
   stdio: 'pipe',
 });
+
+const sourceOf = (path: string): string => {
+  const source = sourceModules.find((module) => module.path === path)?.source;
+  if (source === undefined) {
+    throw new Error(`Missing required source module: ${path}`);
+  }
+  return source;
+};
+const sourceTokens = (source: string): string =>
+  source.replaceAll(/\s/gu, '').replaceAll(',}', '}');
+
+const graphModulePaths = sourceModules
+  .map((module) => module.path)
+  .filter((path) => path.startsWith('src/graph/'))
+  .sort();
+assert.deepEqual(graphModulePaths, [
+  'src/graph/barrier-region-ownership.ts',
+  'src/graph/barrier-region-query.ts',
+  'src/graph/build-graph-kernel.ts',
+  'src/graph/collect-barrier-region-ownership.ts',
+  'src/graph/graph-kernel-build.ts',
+  'src/graph/graph-kernel-input.ts',
+  'src/graph/graph-kernel.ts',
+  'src/graph/graph-operation-kind.ts',
+  'src/graph/graph-operation-sink.ts',
+  'src/graph/index.ts',
+  'src/graph/reachable-node-offsets.ts',
+  'src/graph/reverse-reachable-node-offsets.ts',
+  'src/graph/topological-order.ts',
+]);
+assert.equal(
+  sourceTokens(sourceOf('src/graph/index.ts')),
+  sourceTokens(
+    "export { buildGraphKernel } from './build-graph-kernel.js';\n" +
+      "export { collectBarrierRegionOwnership } from './collect-barrier-region-ownership.js';\n" +
+      "export { reachableNodeOffsets } from './reachable-node-offsets.js';\n" +
+      "export { reverseReachableNodeOffsets } from './reverse-reachable-node-offsets.js';\n" +
+      "export { topologicalOrder } from './topological-order.js';\n" +
+      "export type { BarrierRegionOwnership } from './barrier-region-ownership.js';\n" +
+      "export type { BarrierRegionQuery } from './barrier-region-query.js';\n" +
+      "export type { GraphKernelBuild } from './graph-kernel-build.js';\n" +
+      "export type { GraphKernelInput } from './graph-kernel-input.js';\n" +
+      "export type { GraphKernel } from './graph-kernel.js';\n" +
+      "export type { GraphOperationKind } from './graph-operation-kind.js';\n" +
+      "export type { GraphOperationSink } from './graph-operation-sink.js';\n",
+  ),
+  'Graph barrel must retain its exact private allowlist.',
+);
+
+const productionOutsideGraph = sourceModules.filter(
+  (module) => !module.path.startsWith('src/graph/'),
+);
+for (const module of productionOutsideGraph) {
+  assert.doesNotMatch(
+    module.source,
+    /\bGraphOperation(?:Kind|Sink)\b/u,
+    `Production instrumentation leaked outside graph: ${module.path}`,
+  );
+}
+assert.doesNotMatch(
+  sourceOf('src/transition/decide-pipeline.ts'),
+  /\bbuildGraphKernel\b/u,
+  'Evaluation must receive the validated kernel rather than build a replacement.',
+);
+assert.equal(
+  (sourceOf('src/definition/compile-pipeline.ts').match(/\bbuildGraphKernel\s*\(/gu) ?? []).length,
+  1,
+  'Compiler must build one canonical graph kernel.',
+);
+assert.equal(
+  (
+    sourceOf('src/transition/validate-compiled-internally.ts').match(/\bbuildGraphKernel\s*\(/gu) ??
+    []
+  ).length,
+  1,
+  'Hostile validation must build one post-equality graph kernel.',
+);
 
 const structuralProbes: readonly (readonly [SourceModule, ArchitectureRule])[] = [
   [

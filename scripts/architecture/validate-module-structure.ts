@@ -18,6 +18,7 @@ export interface SourceModule {
 }
 
 export type ArchitectureRule =
+  | 'architecture-one-export-per-leaf'
   | 'cross-layer-private-import'
   | 'explicit-barrel-exports'
   | 'forbidden-external-import'
@@ -391,6 +392,12 @@ const validateReferences = (path: string, references: readonly ModuleReference[]
 };
 
 const validateSourceFile = (path: string, sourceFile: SourceFile): void => {
+  if (
+    path === 'scripts/architecture/validate-graph-kernel-flow.ts' &&
+    exportedEntityCount(sourceFile.statements) !== 1
+  ) {
+    fail('architecture-one-export-per-leaf', path);
+  }
   validateProductionArea(path);
   validateRoot(path, sourceFile);
   validateExplicitBarrel(path, sourceFile);

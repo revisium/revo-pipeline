@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'vitest';
 
 import { compilePipeline } from '../../../src/definition/index.js';
-import { topologicalSort } from '../../../src/graph/index.js';
+import {
+  buildGraphKernel,
+  topologicalOrder as kernelTopologicalOrder,
+} from '../../../src/graph/index.js';
 import { compareUnicodeCodePoints, PIPELINE_LIMITS } from '../../../src/policy/index.js';
 import type {
   BranchNode,
@@ -139,10 +142,15 @@ const forgedOverlappingRegion = (): {
       compareUnicodeCodePoints(left.branch ?? '', right.branch ?? ''),
   );
   const keys = nodes.map((node) => node.key);
-  const topologicalOrder = topologicalSort(keys, edges);
-  if (!topologicalOrder) {
+  const built = buildGraphKernel({ nodeKeys: keys, edges });
+  if (!built.ok) {
+    throw new Error('Forged test graph must have valid endpoints.');
+  }
+  const topologicalOffsets = kernelTopologicalOrder(built.kernel);
+  if (!topologicalOffsets) {
     throw new Error('Forged test graph must remain acyclic.');
   }
+  const topologicalOrder = topologicalOffsets.map((offset) => built.kernel.nodeKeys[offset] ?? '');
   const edgeIndex = (direction: 'incoming' | 'outgoing') =>
     nodes.map((node) => ({
       key: node.key,
@@ -372,6 +380,23 @@ describe('compiled integrity', () => {
     });
     expect(validateCompiledPipeline(offsetPipeline)).toEqual({ ok: false });
     expect(offsetReads).toBe(0);
+  });
+
+  test('rejects aggregate incoming and outgoing index occurrences before portable traversal', () => {
+    for (const direction of ['incomingIndex', 'outgoingIndex'] as const) {
+      const malformed = structuredClone(branchPipeline());
+      const offsets = Array.from({ length: 513 }, () => 0);
+      Reflect.set(
+        malformed,
+        direction,
+        malformed[direction].map((entry) => ({ ...entry, edges: offsets })),
+      );
+      expect(validateCompiledPipeline(malformed)).toEqual({ ok: false });
+      expect(decidePipeline(malformed, emptyFacts())).toEqual({
+        kind: 'reject',
+        faults: [{ code: 'PIPELINE_INVALID', path: '', message: 'Compiled pipeline is invalid.' }],
+      });
+    }
   });
 
   test('prunes oversized nested case and predicate arrays before element inspection', () => {
