@@ -1,0 +1,76 @@
+{
+  "formatVersion": 1,
+  "provenance": {
+    "repository": "@revisium/revo-pipeline",
+    "pr3Sha": "c5dafd574269c230e4921614a481fc7277f2ff00",
+    "implementationBriefSha256": "32f42beb2194e8a4c06317ff871fd102354c9022a72500a693174d8747950933",
+    "schemas": {
+      "pipelineDefinition": 1,
+      "compiledPipeline": 1,
+      "pipelineFacts": 1
+    },
+    "node": ">=24.11.1 <25",
+    "pnpm": "11.13.0",
+    "productionTreeSha256": "81e04568af318f7c7146d741ee8c43a7aa223237e1643a47c1cb481550c3ed93",
+    "graphFlowDigests": {
+      "owners": {
+        "src/definition/compile-pipeline.ts#compilePipeline": "5e601cebbdf06ebe1882a7a46b2ce1485ed27c331eafd94b4eca0362259c1669",
+        "src/definition/compile-pipeline.ts#preflightForkRegions": "f619d28422ddc193db794b6be3a10d851215cf271c135128f71f16be5aac5528",
+        "src/definition/compile-pipeline.ts#classifyForkRegions": "d4e293cc77b4548642ee22f8a3d18e4f079c829bd57ff08df5f2527a82f44eb1",
+        "src/transition/validate-compiled-internally.ts#validateCompiledInternally": "a67ae89bf1609012ca61ddb8af71d4d1977fb706a7fd5b5c716374677630aed6",
+        "src/transition/validate-compiled-internally.ts#canonicalCoreGraph": "14bd423f973be6e501259781a512d0c217154189f53bd4e8561e914a9cc25267",
+        "src/transition/validate-compiled-internally.ts#canonicalRegions": "7ed0e7ad7eccc190c19b6fefb899144d300c095d1fa0c55b221a5cfbbcdc3b9a",
+        "src/transition/validate-compiled-internally.ts#independentlyDerivedRegionMembers": "e34e5e22da2f182384cbffd75ade50e4aa25f194e8c9805033e9e9d9dd9cd084"
+      },
+      "files": {
+        "src/definition/compile-pipeline.ts": "f061385d4fa3ee91972301b589afc0a9a5c16de4ed00d2cab322011ce6f63acc",
+        "src/transition/validate-compiled-internally.ts": "dff379567b2b2fac80d733e248f806182788127c13f7dece9959ed76f7a8958d"
+      }
+    }
+  },
+  "artifacts": [
+    {
+      "path": "corpus/inputs/compiler.json",
+      "sha256": "61b9674b1591710ec1da25c584d4a151f6c09ec3e9203697a18199de1cb03aa1"
+    },
+    {
+      "path": "corpus/inputs/decisions.json",
+      "sha256": "e435401199c7221b4898833c36c99dea1d00b3f39808d268224d298ebcc53cfc"
+    },
+    {
+      "path": "corpus/inputs/frontiers.json",
+      "sha256": "452d61513245cbb479e046113627f6c52583c92d37633d460379f1450a466654"
+    },
+    {
+      "path": "corpus/inputs/properties.json",
+      "sha256": "d45f9b0fac29e2447239a6b337df05a2040ca3ceb6f1888ec35a0b5e4a762d67"
+    },
+    {
+      "path": "corpus/outputs/compiler.json",
+      "sha256": "4afe08b99ab6d8f4e70542039590f8712ce63d1f05a095e6253111a8bbd0032c"
+    },
+    {
+      "path": "corpus/outputs/decisions.json",
+      "sha256": "751dd621c9910f466c53804f6c302c917778a5d622e71794dbb3ee8d1c4fcf83"
+    },
+    {
+      "path": "corpus/outputs/properties.json",
+      "sha256": "8eef2821c560ad0e1bc81a43c62d6b514688a65c904a01622d0329d480bff444"
+    }
+  ],
+  "implementation": {
+    "capture": {
+      "path": "test/characterization/capture-characterization.ts",
+      "sha256": "14f13ad8e6d82f0dce5e7f0b851fdea1747b2ccb4fea5497a1c8e5b9e352f8fe"
+    },
+    "verifier": {
+      "path": "scripts/verify-characterization.ts",
+      "sha256": "1f28b1273d11d614d5175f96589d73e9a2469d7c03de2b0adf910c68885ba93f"
+    },
+    "propertyEvaluator": {
+      "path": "test/characterization/evaluate-properties.ts",
+      "sha256": "0b255f62769acedb3621d636c47f05620aabb672b575a628ad2e37656fed7438"
+    }
+  },
+  "rootDigest": "29186644fb2b3b9bf1ccd1fc7ccb7805815b12232e5225886222ccf2e13bb08e"
+}

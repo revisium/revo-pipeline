@@ -9,6 +9,10 @@ import {
   type ArchitectureRule,
   type SourceModule,
 } from './architecture/validate-module-structure.js';
+import {
+  sourceMetricScope,
+  validateSourceMetrics,
+} from './architecture/validate-source-metrics.js';
 
 const root = process.cwd();
 const oxlint = join(root, 'node_modules/.bin/oxlint');
@@ -141,6 +145,7 @@ const sourceModules = await collectModules(join(root, 'src'));
 const testModules = await collectModules(join(root, 'test'));
 const architectureModules = await collectModules(join(root, 'scripts/architecture'));
 validateModuleStructure([...sourceModules, ...testModules, ...architectureModules]);
+validateSourceMetrics(sourceModules, sourceMetricScope(sourceModules, 'PR4-0'));
 assert.deepEqual(validateGraphKernelFlow(root), []);
 execFileSync(oxlint, ['--config', config, '--deny-warnings', 'src', 'test'], {
   cwd: root,

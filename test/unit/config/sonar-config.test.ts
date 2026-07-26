@@ -53,6 +53,23 @@ const allowedIssueIgnoreKeys = [
   ]),
 ].sort();
 
+const temporarySonarExpiries = {
+  boundedCompiledInspection: {
+    owner: 'PR4b',
+    resourceKey: 'src/transition/validate-compiled-internally.ts',
+    ruleKey: 'typescript:S3776',
+  },
+  compilerParameterSurface: {
+    owner: 'PR4a',
+    resourceKey: 'src/definition/compile-pipeline.ts',
+    ruleKey: 'typescript:S107',
+  },
+} as const;
+
+const validateTemporarySonarExpiries = (registry: unknown): void => {
+  expect(registry).toEqual(temporarySonarExpiries);
+};
+
 const readProperties = async (): Promise<Map<string, string>> => {
   const source = await readFile(join(process.cwd(), 'sonar-project.properties'), 'utf8');
   const properties = new Map<string, string>();
@@ -99,6 +116,55 @@ test('limits Sonar exceptions to reviewed semantic and implementation cases', as
   expect(properties.get('sonar.sources')).toBe('src');
   expect(properties.get('sonar.tests')).toBe('test');
   expect(properties.get('sonar.test.inclusions')).toBe('test/**/*.ts');
+});
+
+test('locks temporary Sonar criteria to their exact removal owners', async () => {
+  const registry = JSON.parse(
+    await readFile(
+      join(process.cwd(), 'scripts/architecture/temporary-sonar-expiries.json'),
+      'utf8',
+    ),
+  ) as unknown;
+  if (typeof registry !== 'object' || registry === null) {
+    throw new TypeError('Temporary Sonar expiry registry must be an object.');
+  }
+
+  validateTemporarySonarExpiries(registry);
+  expect(Object.keys(registry).sort()).toEqual([
+    'boundedCompiledInspection',
+    'compilerParameterSurface',
+  ]);
+});
+
+test('rejects temporary Sonar expiry scope or ownership drift', () => {
+  expect(() =>
+    validateTemporarySonarExpiries({
+      ...temporarySonarExpiries,
+      compilerParameterSurface: {
+        ...temporarySonarExpiries.compilerParameterSurface,
+        resourceKey: 'src/definition/*.ts',
+      },
+    }),
+  ).toThrowError('expected');
+  expect(() =>
+    validateTemporarySonarExpiries({
+      ...temporarySonarExpiries,
+      additionalCriterion: {
+        owner: 'PR4c',
+        resourceKey: 'src/transition/decide-pipeline.ts',
+        ruleKey: 'typescript:S3776',
+      },
+    }),
+  ).toThrowError('expected');
+  expect(() =>
+    validateTemporarySonarExpiries({
+      ...temporarySonarExpiries,
+      boundedCompiledInspection: {
+        ...temporarySonarExpiries.boundedCompiledInspection,
+        owner: 'PR4a',
+      },
+    }),
+  ).toThrowError('expected');
 });
 
 test('makes the CI Sonar provider gate explicit for PR and branch analysis', async () => {

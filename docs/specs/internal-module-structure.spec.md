@@ -133,6 +133,31 @@ rule-wide ignores, coverage exclusions, and duplication exclusions are forbidden
 `src/definition/compile-pipeline.ts`) expires in PR4a.
 `boundedCompiledInspection` (`typescript:S3776` on
 `src/transition/validate-compiled-internally.ts`) expires in PR4b.
+The temporary expiry registry MUST equal only those two exact criterion, rule, resource,
+and removal-owner records. Additional criteria, globs, directory scopes, and owner changes
+MUST fail verification.
+
+Formatted physical source metrics are independently checked for explicitly enabled
+production leaves. A leaf spans its first line through its final non-terminal-newline line;
+blank and comment lines count. 250 lines pass and 251 fail `production-leaf-span`.
+Runtime callable spans are measured recursively from the first declaration or expression
+token through the closing body or expression token. Function declarations, function
+expressions, arrows, methods, constructors, getters, setters, object methods, and nested
+callables are included; type-only and body-less signatures are excluded. 60 lines is an
+advisory review target; 80 pass and 81 fail `production-callable-span`. PR4-0 enables no
+production path and has no grandfather list.
+
+Metric scopes MUST reject duplicate entries and paths absent from the collected production
+modules before selecting files. PR4a MUST activate its scope through complete derivation
+from every `src/definition/**` TypeScript production leaf, excluding only the layer barrel;
+it MUST NOT use a manually enumerated subset or grandfather list. Adding a definition leaf
+therefore adds it to the derived PR4a scope without a registry update. This future scope
+contract is locked during PR4-0, but PR4-0 continues to activate the empty scope only.
+
+The graph-flow proof remains bound to the reviewed owner-body and complete-file SHA-256
+digests above. A later decomposition slice MUST replace each affected digest assertion
+atomically with equivalent structural and dataflow proof. Blind digest refresh, weaker
+scanning, or temporary analyzer disablement is forbidden.
 
 A DAG rule change MUST update this specification, structural validator, unit partition,
 and positive/negative executable harness in the same change.

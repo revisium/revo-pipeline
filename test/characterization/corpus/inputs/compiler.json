@@ -1,0 +1,106 @@
+[
+  {
+    "id": "canonical-linear",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "start",
+      "facts": [
+        { "key": "z", "type": "string" },
+        { "key": "a", "type": "boolean" }
+      ],
+      "nodes": [
+        { "kind": "terminal", "key": "finish", "outcome": "done" },
+        {
+          "kind": "task",
+          "key": "start",
+          "outcomes": {
+            "cancelled": "finish",
+            "completed": "finish",
+            "failed": "finish",
+            "skipped": "finish"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "canonical-fork",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "fork",
+      "facts": [],
+      "nodes": [
+        { "kind": "terminal", "key": "end", "outcome": "done" },
+        {
+          "kind": "join",
+          "key": "join",
+          "fork": "fork",
+          "policy": { "kind": "all" },
+          "outcomes": { "completed": "end", "insufficient": "end", "rejected": "end" }
+        },
+        {
+          "kind": "task",
+          "key": "b",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "task",
+          "key": "a",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "fork",
+          "key": "fork",
+          "join": "join",
+          "branches": [
+            { "name": "beta", "entry": "b", "exit": "b" },
+            { "name": "alpha", "entry": "a", "exit": "a" }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "ordered-faults",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "missing",
+      "facts": [
+        { "key": "x", "type": "boolean" },
+        { "key": "x", "type": "string" }
+      ],
+      "nodes": [
+        {
+          "kind": "task",
+          "key": "z",
+          "outcomes": {
+            "cancelled": "ghost",
+            "completed": "ghost",
+            "failed": "ghost",
+            "skipped": "ghost"
+          }
+        },
+        {
+          "kind": "task",
+          "key": "z",
+          "outcomes": {
+            "cancelled": "ghost",
+            "completed": "ghost",
+            "failed": "ghost",
+            "skipped": "ghost"
+          }
+        }
+      ]
+    }
+  }
+]
