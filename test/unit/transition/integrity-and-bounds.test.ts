@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
 import { compilePipeline } from '../../../src/definition/index.js';
-import { PIPELINE_LIMITS } from '../../../src/policy/index.js';
+import { topologicalSort } from '../../../src/graph/index.js';
+import { compareUnicodeCodePoints, PIPELINE_LIMITS } from '../../../src/policy/index.js';
 import type {
   BranchNode,
+  CompiledEdge,
   CompiledPipeline,
   PipelineDefinition,
   PipelineFacts,
@@ -47,6 +49,132 @@ const branchPipeline = (): CompiledPipeline =>
       { kind: 'terminal', key: 'yes', outcome: 'yes' },
     ],
   });
+
+const forgedOverlappingRegion = (): {
+  readonly definition: PipelineDefinition;
+  readonly pipeline: CompiledPipeline;
+} => {
+  const routes = (to: string) => ({
+    cancelled: to,
+    completed: to,
+    failed: to,
+    skipped: to,
+  });
+  const definition: PipelineDefinition = {
+    schemaVersion: 1,
+    entry: 'fork',
+    facts: [],
+    nodes: [
+      { kind: 'task', key: 'a', outcomes: routes('shared') },
+      { kind: 'task', key: 'b', outcomes: routes('shared') },
+      {
+        kind: 'fork',
+        key: 'fork',
+        join: 'join',
+        branches: [
+          { name: 'a', entry: 'a', exit: 'x' },
+          { name: 'b', entry: 'b', exit: 'y' },
+        ],
+      },
+      {
+        kind: 'join',
+        key: 'join',
+        fork: 'fork',
+        policy: { kind: 'all' },
+        outcomes: { completed: 'terminal', insufficient: 'terminal', rejected: 'terminal' },
+      },
+      {
+        kind: 'task',
+        key: 'shared',
+        outcomes: { cancelled: 'x', completed: 'x', failed: 'y', skipped: 'y' },
+      },
+      { kind: 'terminal', key: 'terminal', outcome: 'done' },
+      { kind: 'task', key: 'x', outcomes: routes('join') },
+      { kind: 'task', key: 'y', outcomes: routes('join') },
+    ],
+  };
+  const nodes = [...definition.nodes].sort((left, right) =>
+    compareUnicodeCodePoints(left.key, right.key),
+  );
+  const activationEdge = (from: string, outcome: string, to: string): CompiledEdge => ({
+    from,
+    outcome,
+    to,
+    role: 'activation',
+    fork: null,
+    branch: null,
+  });
+  const edges = nodes.flatMap((node): readonly CompiledEdge[] => {
+    if (node.kind === 'task' || node.kind === 'join') {
+      return Object.entries(node.outcomes).map(([outcome, to]) =>
+        node.kind === 'task' && (node.key === 'x' || node.key === 'y')
+          ? {
+              ...activationEdge(node.key, outcome, to),
+              role: 'readiness',
+              fork: 'fork',
+              branch: node.key,
+            }
+          : activationEdge(node.key, outcome, to),
+      );
+    }
+    if (node.kind === 'fork') {
+      return [
+        ...node.branches.map((branch) => ({
+          ...activationEdge(node.key, 'forked', branch.entry),
+          fork: node.key,
+          branch: branch.name,
+        })),
+        { ...activationEdge(node.key, 'forked', node.join), fork: node.key },
+      ];
+    }
+    return [];
+  });
+  edges.sort(
+    (left, right) =>
+      compareUnicodeCodePoints(left.from, right.from) ||
+      compareUnicodeCodePoints(left.outcome, right.outcome) ||
+      compareUnicodeCodePoints(left.to, right.to) ||
+      compareUnicodeCodePoints(left.role, right.role) ||
+      compareUnicodeCodePoints(left.fork ?? '', right.fork ?? '') ||
+      compareUnicodeCodePoints(left.branch ?? '', right.branch ?? ''),
+  );
+  const keys = nodes.map((node) => node.key);
+  const topologicalOrder = topologicalSort(keys, edges);
+  if (!topologicalOrder) {
+    throw new Error('Forged test graph must remain acyclic.');
+  }
+  const edgeIndex = (direction: 'incoming' | 'outgoing') =>
+    nodes.map((node) => ({
+      key: node.key,
+      edges: edges.flatMap((edge, offset) =>
+        edge[direction === 'incoming' ? 'to' : 'from'] === node.key ? [offset] : [],
+      ),
+    }));
+  return {
+    definition,
+    pipeline: {
+      schemaVersion: 1,
+      entry: definition.entry,
+      facts: [],
+      nodes,
+      edges,
+      topologicalOrder,
+      forkRegions: [
+        {
+          fork: 'fork',
+          join: 'join',
+          branches: [
+            { name: 'a', entry: 'a', exit: 'x', members: ['a', 'shared', 'x'] },
+            { name: 'b', entry: 'b', exit: 'y', members: ['b', 'shared', 'y'] },
+          ],
+        },
+      ],
+      nodeIndex: nodes.map((node, index) => ({ key: node.key, node: index })),
+      incomingIndex: edgeIndex('incoming'),
+      outgoingIndex: edgeIndex('outgoing'),
+    },
+  };
+};
 
 describe('compiled integrity', () => {
   test.each([0, 64, 65, 512])(
@@ -160,6 +288,20 @@ describe('compiled integrity', () => {
     const ghostTarget = structuredClone(branchPipeline());
     Reflect.set(ghostTarget.edges[0]!, 'to', 'ghost');
     expect(validateCompiledPipeline(ghostTarget)).toEqual({ ok: false });
+  });
+
+  test('rejects a canonical forged graph whose fork branches overlap', () => {
+    const forged = forgedOverlappingRegion();
+    const compilation = compilePipeline(forged.definition);
+    const regionFault = !compilation.ok
+      ? compilation.faults.find((fault) => fault.code === 'DEF_FORK_REGION')
+      : undefined;
+    expect(regionFault?.code).toBe('DEF_FORK_REGION');
+    expect(validateCompiledPipeline(forged.pipeline)).toEqual({ ok: false });
+    expect(decidePipeline(forged.pipeline, emptyFacts())).toMatchObject({
+      kind: 'reject',
+      faults: [{ code: 'PIPELINE_INVALID' }],
+    });
   });
 
   test.each([

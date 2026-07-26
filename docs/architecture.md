@@ -10,10 +10,10 @@ CompiledPipeline + PipelineFacts --decidePipeline--> PipelineDecision
 ```
 
 The accepted API is planned but not shipped: the root source remains exactly `export {};`.
-Graph algorithms, definition compilation, and core task/branch/terminal transition
-evaluation are implemented behind internal layer barrels. Coordination-node transition
-evaluation remains the next slice, so the current internal evaluator rejects compiled
-graphs containing coordination nodes rather than exposing partial behavior.
+Graph algorithms, definition compilation, and transition evaluation for all seven v1
+node kinds are implemented behind internal layer barrels. Fork/join readiness,
+consensus, and human-gate decisions are calculated exclusively from compiled topology
+and the supplied portable fact snapshot.
 
 ## Ownership boundary
 
