@@ -62,7 +62,9 @@ const addFault = (
 };
 
 const isDecisionFaultCode = (value: string): value is DecisionFaultCode =>
-  DECISION_FAULT_PHASES.some((phase) => (phase.codes as readonly string[]).includes(value));
+  DECISION_FAULT_PHASES.some((phase) =>
+    (phase.codes as readonly string[]).some((code) => code === value),
+  );
 
 const orderedFaults = (faults: readonly MutableFault[]): readonly DecisionFault[] =>
   orderFaults(faults, DECISION_FAULT_PHASES, 'FACT_LIMIT', 'decision').map((fault) => {
@@ -401,7 +403,8 @@ const validateFactShape = (
   const value = inspected.value;
   const issues = portableIssueIndex(inspected.issues.map((issue) => issue.path));
   const keys = Object.keys(value);
-  if (keys.length !== FACT_FIELDS.length || FACT_FIELDS.some((key) => !keys.includes(key))) {
+  const keySet = new Set(keys);
+  if (keys.length !== FACT_FIELDS.length || FACT_FIELDS.some((key) => !keySet.has(key))) {
     addFault(faults, 'FACT_TYPE', '', 'Invalid facts object.');
   }
   const values = validPortableEntries(
@@ -529,6 +532,81 @@ const evaluationIndex = (pipeline: CompiledPipeline): EvaluationIndex => {
 };
 
 type Selection = { readonly outcome: string; readonly targets: readonly string[] };
+type JoinOutcome = 'completed' | 'insufficient' | 'rejected';
+type ConsensusOutcome = 'approved' | 'insufficient' | 'rejected' | 'tied';
+
+const selectJoinOutcome = (
+  policy: Extract<PipelineNode, { readonly kind: 'join' }>['policy'],
+  accepted: number,
+  pending: number,
+  rejected: boolean,
+): JoinOutcome | undefined => {
+  if (policy.kind === 'all') {
+    if (rejected) {
+      return 'rejected';
+    }
+    if (pending > 0) {
+      return undefined;
+    }
+    return accepted > 0 ? 'completed' : 'insufficient';
+  }
+  if (policy.kind === 'any') {
+    if (accepted > 0) {
+      return 'completed';
+    }
+    if (pending > 0) {
+      return undefined;
+    }
+    return rejected ? 'rejected' : 'insufficient';
+  }
+  if (accepted >= policy.count) {
+    return 'completed';
+  }
+  if (accepted + pending >= policy.count) {
+    return undefined;
+  }
+  return rejected ? 'rejected' : 'insufficient';
+};
+
+const selectConsensusOutcome = (
+  node: Extract<PipelineNode, { readonly kind: 'consensus' }>,
+  approvals: number,
+  rejections: number,
+  remaining: number,
+): ConsensusOutcome | undefined => {
+  if (node.policy.kind === 'unanimous') {
+    if (rejections > 0) {
+      return 'rejected';
+    }
+    if (remaining > 0) {
+      return undefined;
+    }
+    return approvals === node.candidates.length ? 'approved' : 'insufficient';
+  }
+  if (node.policy.kind === 'quorum') {
+    if (remaining > 0) {
+      return undefined;
+    }
+    const votes = approvals + rejections;
+    if (votes < node.policy.quorum) {
+      return 'insufficient';
+    }
+    if (approvals > rejections) {
+      return 'approved';
+    }
+    return rejections > approvals ? 'rejected' : 'tied';
+  }
+  if (approvals >= node.policy.approve) {
+    return 'approved';
+  }
+  if (rejections >= node.policy.reject) {
+    return 'rejected';
+  }
+  if (approvals + remaining < node.policy.approve && rejections + remaining < node.policy.reject) {
+    return 'insufficient';
+  }
+  return undefined;
+};
 
 const joinSelection = (
   node: Extract<PipelineNode, { readonly kind: 'join' }>,
@@ -553,29 +631,7 @@ const joinSelection = (
   const accepted = statuses.filter((status) => status === 'accepted').length;
   const pending = statuses.filter((status) => status === 'pending').length;
   const rejected = statuses.some((status) => status === 'rejected');
-  let outcome: 'completed' | 'insufficient' | 'rejected' | undefined;
-  if (node.policy.kind === 'all') {
-    outcome = rejected
-      ? 'rejected'
-      : pending > 0
-        ? undefined
-        : accepted > 0
-          ? 'completed'
-          : 'insufficient';
-  } else if (node.policy.kind === 'any') {
-    outcome =
-      accepted > 0 ? 'completed' : pending > 0 ? undefined : rejected ? 'rejected' : 'insufficient';
-  } else {
-    const possible = accepted + pending;
-    outcome =
-      accepted >= node.policy.count
-        ? 'completed'
-        : possible >= node.policy.count
-          ? undefined
-          : rejected
-            ? 'rejected'
-            : 'insufficient';
-  }
+  const outcome = selectJoinOutcome(node.policy, accepted, pending, rejected);
   return outcome ? { outcome, targets: [node.outcomes[outcome]] } : undefined;
 };
 
@@ -587,39 +643,7 @@ const consensusSelection = (
   const approvals = aggregate?.approvals ?? 0;
   const rejections = aggregate?.rejections ?? 0;
   const remaining = node.candidates.length - (aggregate?.total ?? 0);
-  let outcome: keyof typeof node.outcomes | undefined;
-  if (node.policy.kind === 'unanimous') {
-    outcome =
-      rejections > 0
-        ? 'rejected'
-        : remaining > 0
-          ? undefined
-          : approvals === node.candidates.length
-            ? 'approved'
-            : 'insufficient';
-  } else if (node.policy.kind === 'quorum') {
-    if (remaining === 0) {
-      const votes = approvals + rejections;
-      outcome =
-        votes < node.policy.quorum
-          ? 'insufficient'
-          : approvals > rejections
-            ? 'approved'
-            : rejections > approvals
-              ? 'rejected'
-              : 'tied';
-    }
-  } else {
-    outcome =
-      approvals >= node.policy.approve
-        ? 'approved'
-        : rejections >= node.policy.reject
-          ? 'rejected'
-          : approvals + remaining < node.policy.approve &&
-              rejections + remaining < node.policy.reject
-            ? 'insufficient'
-            : undefined;
-  }
+  const outcome = selectConsensusOutcome(node, approvals, rejections, remaining);
   return outcome ? { outcome, targets: [node.outcomes[outcome]] } : undefined;
 };
 
