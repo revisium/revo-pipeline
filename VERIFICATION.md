@@ -21,16 +21,17 @@ Vitest v8 coverage, architecture positive/negative proof, ESM/declaration build,
 type-level deep-import proof. Foundation coverage includes the owned structural
 architecture validator.
 
-| Capability   | Command                             |
-| ------------ | ----------------------------------- |
-| Format       | `corepack pnpm format:check`        |
-| Typecheck    | `corepack pnpm typecheck`           |
-| Lint         | `corepack pnpm lint`                |
-| Tests        | `corepack pnpm test`                |
-| Coverage     | `corepack pnpm test:cov`            |
-| Architecture | `corepack pnpm verify:architecture` |
-| Build        | `corepack pnpm build`               |
-| Package      | `corepack pnpm verify:package`      |
+| Capability       | Command                               |
+| ---------------- | ------------------------------------- |
+| Format           | `corepack pnpm format:check`          |
+| Typecheck        | `corepack pnpm typecheck`             |
+| Lint             | `corepack pnpm lint`                  |
+| Tests            | `corepack pnpm test`                  |
+| Characterization | `corepack pnpm test:characterization` |
+| Coverage         | `corepack pnpm test:cov`              |
+| Architecture     | `corepack pnpm verify:architecture`   |
+| Build            | `corepack pnpm build`                 |
+| Package          | `corepack pnpm verify:package`        |
 
 ## Conditional gates
 

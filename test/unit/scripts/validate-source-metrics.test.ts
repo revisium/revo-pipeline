@@ -1,0 +1,123 @@
+import { describe, expect, test } from 'vitest';
+
+import {
+  ADVISORY_CALLABLE_LINES,
+  sourceMetricScope,
+  validateSourceMetrics,
+  type MetricSource,
+  type SourceMetricRule,
+} from '../../../scripts/architecture/validate-source-metrics.js';
+
+const path = 'src/definition/example.ts';
+const sourceWithLines = (lines: readonly string[]): MetricSource => ({
+  path,
+  source: `${lines.join('\n')}\n`,
+});
+const expectViolation = (source: MetricSource, rule: SourceMetricRule): void => {
+  expect(() => validateSourceMetrics([source], [path])).toThrowError(`[${rule}]`);
+};
+const callable = (opening: string, closing: string, lines: number): MetricSource =>
+  sourceWithLines([opening, ...Array.from({ length: lines - 2 }, () => '  void 0;'), closing]);
+const bodyless = (opening: string, closing: string): MetricSource =>
+  sourceWithLines([opening, ...Array.from({ length: 79 }, () => '  // signature'), closing]);
+
+test('keeps PR4-0 production scope empty without a grandfather list', () => {
+  expect(sourceMetricScope([sourceWithLines(['void 0;'])], 'PR4-0')).toEqual([]);
+  expect(() =>
+    validateSourceMetrics([sourceWithLines(Array.from({ length: 251 }, () => 'void 0;'))], []),
+  ).not.toThrow();
+});
+
+test('rejects duplicate and unknown production scope paths before filtering', () => {
+  const source = sourceWithLines(['void 0;']);
+  expect(() => validateSourceMetrics([source], [path, path])).toThrowError(
+    '[production-metric-scope] duplicate production path',
+  );
+  expect(() => validateSourceMetrics([source], ['src/definition/missing.ts'])).toThrowError(
+    '[production-metric-scope] unknown production path: src/definition/missing.ts',
+  );
+});
+
+test('derives the future PR4a scope from every definition production leaf', () => {
+  const modules: readonly MetricSource[] = [
+    sourceWithLines(['void 0;']),
+    { path: 'src/definition/index.ts', source: 'export {};\n' },
+    { path: 'src/definition/validation/nested.ts', source: 'export {};\n' },
+    { path: 'src/transition/decision.ts', source: 'export {};\n' },
+  ];
+
+  expect(sourceMetricScope(modules, 'PR4a')).toEqual([
+    'src/definition/example.ts',
+    'src/definition/validation/nested.ts',
+  ]);
+  expect(
+    sourceMetricScope(
+      [...modules, { path: 'src/definition/new-leaf.ts', source: 'export {};\n' }],
+      'PR4a',
+    ),
+  ).toContain('src/definition/new-leaf.ts');
+});
+
+test('enforces the inclusive formatted physical leaf boundary', () => {
+  expect(() =>
+    validateSourceMetrics([sourceWithLines(Array.from({ length: 250 }, () => 'void 0;'))], [path]),
+  ).not.toThrow();
+  expectViolation(
+    sourceWithLines(Array.from({ length: 251 }, () => 'void 0;')),
+    'production-leaf-span',
+  );
+});
+
+test('publishes 60 lines as an advisory target without enforcing it', () => {
+  expect(ADVISORY_CALLABLE_LINES).toBe(60);
+  expect(() =>
+    validateSourceMetrics([callable('export function example() {', '}', 61)], [path]),
+  ).not.toThrow();
+});
+
+describe.each([
+  ['function declaration', 'export function example() {', '}'],
+  ['function expression', 'export const example = function () {', '};'],
+  ['arrow function', 'export const example = () => {', '};'],
+  ['class method', 'export class Example {\n  method() {', '  }\n}'],
+  ['constructor', 'export class Example {\n  constructor() {', '  }\n}'],
+  ['getter', 'export class Example {\n  get value() {', '  }\n}'],
+  ['setter', 'export class Example {\n  set value(input: unknown) {', '  }\n}'],
+  ['object method', 'export const example = {\n  method() {', '  },\n};'],
+] as const)('recursive runtime callable measurement: %s', (_name, opening, closing) => {
+  test('accepts 80 and rejects 81 lines', () => {
+    expect(() => validateSourceMetrics([callable(opening, closing, 80)], [path])).not.toThrow();
+    expectViolation(callable(opening, closing, 81), 'production-callable-span');
+  });
+});
+
+test('detects an oversized callable nested inside another callable', () => {
+  const nested = callable('  const nested = () => {', '  };', 81).source.trimEnd();
+  const source = sourceWithLines(['export const outer = () => {', nested, '};']);
+  expect(() => validateSourceMetrics([source], [path])).toThrowError('[production-callable-span]');
+});
+
+test.each([
+  ['declared function', bodyless('export declare function example(', '): void;')],
+  [
+    'abstract method',
+    bodyless('export abstract class Example {\n  abstract method(', '  ): void;\n}'),
+  ],
+  [
+    'constructor overload',
+    bodyless(
+      'export class Example {\n  constructor(',
+      '  );\n  constructor() {\n    void 0;\n  }\n}',
+    ),
+  ],
+  [
+    'abstract getter',
+    bodyless('export abstract class Example {\n  abstract get value():', '  string;\n}'),
+  ],
+  [
+    'abstract setter',
+    bodyless('export abstract class Example {\n  abstract set value(', '  input: string);\n}'),
+  ],
+] as const)('excludes bodyless %s declarations', (_name, source) => {
+  expect(() => validateSourceMetrics([source], [path])).not.toThrow();
+});

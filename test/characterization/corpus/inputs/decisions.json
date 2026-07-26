@@ -1,0 +1,757 @@
+[
+  {
+    "id": "task-entry",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "task",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "task",
+          "key": "task",
+          "outcomes": { "cancelled": "end", "completed": "end", "failed": "end", "skipped": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": { "values": [], "nodes": [], "candidateVerdicts": [], "gateResolutions": [] }
+  },
+  {
+    "id": "branch-select",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "branch",
+      "facts": [{ "key": "choice", "type": "boolean" }],
+      "nodes": [
+        {
+          "kind": "branch",
+          "key": "branch",
+          "fact": "choice",
+          "cases": [{ "name": "yes", "when": { "op": "equals", "value": true }, "to": "end" }],
+          "default": { "name": "no", "to": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [{ "key": "choice", "value": true }],
+      "nodes": [{ "key": "branch", "state": "enabled" }],
+      "candidateVerdicts": [],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "fork-select",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "fork",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "fork",
+          "key": "fork",
+          "join": "join",
+          "branches": [
+            { "name": "a", "entry": "a", "exit": "a" },
+            { "name": "b", "entry": "b", "exit": "b" }
+          ]
+        },
+        {
+          "kind": "task",
+          "key": "a",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "task",
+          "key": "b",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "join",
+          "key": "join",
+          "fork": "fork",
+          "policy": { "kind": "all" },
+          "outcomes": { "completed": "end", "insufficient": "end", "rejected": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "fork", "state": "enabled" }],
+      "candidateVerdicts": [],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "join-threshold",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "fork",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "fork",
+          "key": "fork",
+          "join": "join",
+          "branches": [
+            { "name": "a", "entry": "a", "exit": "a" },
+            { "name": "b", "entry": "b", "exit": "b" }
+          ]
+        },
+        {
+          "kind": "task",
+          "key": "a",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "task",
+          "key": "b",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "join",
+          "key": "join",
+          "fork": "fork",
+          "policy": { "kind": "threshold", "count": 1 },
+          "outcomes": { "completed": "end", "insufficient": "end", "rejected": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [
+        { "key": "fork", "state": "terminal", "outcome": "forked" },
+        { "key": "a", "state": "terminal", "outcome": "completed" },
+        { "key": "b", "state": "enabled" },
+        { "key": "join", "state": "enabled" }
+      ],
+      "candidateVerdicts": [],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "consensus-unanimous",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "vote",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "consensus",
+          "key": "vote",
+          "candidates": ["a", "b"],
+          "policy": { "kind": "unanimous" },
+          "outcomes": { "approved": "end", "insufficient": "end", "rejected": "end", "tied": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "vote", "state": "enabled" }],
+      "candidateVerdicts": [
+        { "nodeKey": "vote", "candidate": "a", "verdict": "approve" },
+        { "nodeKey": "vote", "candidate": "b", "verdict": "approve" }
+      ],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "human-gate",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "gate",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "humanGate",
+          "key": "gate",
+          "subject": "release",
+          "resolutions": [
+            { "resolution": "approve", "to": "end" },
+            { "resolution": "reject", "to": "end" }
+          ]
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "gate", "state": "enabled" }],
+      "candidateVerdicts": [],
+      "gateResolutions": [{ "nodeKey": "gate", "resolution": "approve" }]
+    }
+  },
+  {
+    "id": "causality-reject",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "task",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "task",
+          "key": "task",
+          "outcomes": { "cancelled": "end", "completed": "end", "failed": "end", "skipped": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "end", "state": "enabled" }],
+      "candidateVerdicts": [],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "terminal-precedence",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "task",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "task",
+          "key": "task",
+          "outcomes": { "cancelled": "end", "completed": "end", "failed": "end", "skipped": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [
+        { "key": "task", "state": "terminal", "outcome": "completed" },
+        { "key": "end", "state": "enabled" }
+      ],
+      "candidateVerdicts": [],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "branch-wait",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "branch",
+      "facts": [{ "key": "choice", "type": "boolean" }],
+      "nodes": [
+        {
+          "kind": "branch",
+          "key": "branch",
+          "fact": "choice",
+          "cases": [{ "name": "yes", "when": { "op": "equals", "value": true }, "to": "end" }],
+          "default": { "name": "no", "to": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "branch", "state": "enabled" }],
+      "candidateVerdicts": [],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "join-any-completed",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "fork",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "fork",
+          "key": "fork",
+          "join": "join",
+          "branches": [
+            { "name": "a", "entry": "a", "exit": "a" },
+            { "name": "b", "entry": "b", "exit": "b" }
+          ]
+        },
+        {
+          "kind": "task",
+          "key": "a",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "task",
+          "key": "b",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "join",
+          "key": "join",
+          "fork": "fork",
+          "policy": { "kind": "any", "remaining": "unconstrained" },
+          "outcomes": { "completed": "end", "insufficient": "end", "rejected": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [
+        { "key": "fork", "state": "terminal", "outcome": "forked" },
+        { "key": "a", "state": "terminal", "outcome": "completed" },
+        { "key": "b", "state": "enabled" },
+        { "key": "join", "state": "enabled" }
+      ],
+      "candidateVerdicts": [],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "join-any-wait",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "fork",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "fork",
+          "key": "fork",
+          "join": "join",
+          "branches": [
+            { "name": "a", "entry": "a", "exit": "a" },
+            { "name": "b", "entry": "b", "exit": "b" }
+          ]
+        },
+        {
+          "kind": "task",
+          "key": "a",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "task",
+          "key": "b",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "join",
+          "key": "join",
+          "fork": "fork",
+          "policy": { "kind": "any", "remaining": "unconstrained" },
+          "outcomes": { "completed": "end", "insufficient": "end", "rejected": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [
+        { "key": "fork", "state": "terminal", "outcome": "forked" },
+        { "key": "a", "state": "terminal", "outcome": "skipped" },
+        { "key": "b", "state": "enabled" },
+        { "key": "join", "state": "enabled" }
+      ],
+      "candidateVerdicts": [],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "join-any-rejected",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "fork",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "fork",
+          "key": "fork",
+          "join": "join",
+          "branches": [
+            { "name": "a", "entry": "a", "exit": "a" },
+            { "name": "b", "entry": "b", "exit": "b" }
+          ]
+        },
+        {
+          "kind": "task",
+          "key": "a",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "task",
+          "key": "b",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "join",
+          "key": "join",
+          "fork": "fork",
+          "policy": { "kind": "any", "remaining": "unconstrained" },
+          "outcomes": { "completed": "end", "insufficient": "end", "rejected": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [
+        { "key": "fork", "state": "terminal", "outcome": "forked" },
+        { "key": "a", "state": "terminal", "outcome": "failed" },
+        { "key": "b", "state": "terminal", "outcome": "skipped" },
+        { "key": "join", "state": "enabled" }
+      ],
+      "candidateVerdicts": [],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "join-any-insufficient",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "fork",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "fork",
+          "key": "fork",
+          "join": "join",
+          "branches": [
+            { "name": "a", "entry": "a", "exit": "a" },
+            { "name": "b", "entry": "b", "exit": "b" }
+          ]
+        },
+        {
+          "kind": "task",
+          "key": "a",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "task",
+          "key": "b",
+          "outcomes": {
+            "cancelled": "join",
+            "completed": "join",
+            "failed": "join",
+            "skipped": "join"
+          }
+        },
+        {
+          "kind": "join",
+          "key": "join",
+          "fork": "fork",
+          "policy": { "kind": "any", "remaining": "unconstrained" },
+          "outcomes": { "completed": "end", "insufficient": "end", "rejected": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [
+        { "key": "fork", "state": "terminal", "outcome": "forked" },
+        { "key": "a", "state": "terminal", "outcome": "skipped" },
+        { "key": "b", "state": "terminal", "outcome": "skipped" },
+        { "key": "join", "state": "enabled" }
+      ],
+      "candidateVerdicts": [],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "consensus-quorum-wait",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "vote",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "consensus",
+          "key": "vote",
+          "candidates": ["a", "b", "c"],
+          "policy": { "kind": "quorum", "quorum": 2 },
+          "outcomes": { "approved": "end", "insufficient": "end", "rejected": "end", "tied": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "vote", "state": "enabled" }],
+      "candidateVerdicts": [
+        { "nodeKey": "vote", "candidate": "a", "verdict": "approve" },
+        { "nodeKey": "vote", "candidate": "b", "verdict": "approve" }
+      ],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "consensus-quorum-approved",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "vote",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "consensus",
+          "key": "vote",
+          "candidates": ["a", "b", "c"],
+          "policy": { "kind": "quorum", "quorum": 2 },
+          "outcomes": { "approved": "end", "insufficient": "end", "rejected": "end", "tied": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "vote", "state": "enabled" }],
+      "candidateVerdicts": [
+        { "nodeKey": "vote", "candidate": "a", "verdict": "approve" },
+        { "nodeKey": "vote", "candidate": "b", "verdict": "approve" },
+        { "nodeKey": "vote", "candidate": "c", "verdict": "reject" }
+      ],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "consensus-quorum-rejected",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "vote",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "consensus",
+          "key": "vote",
+          "candidates": ["a", "b", "c"],
+          "policy": { "kind": "quorum", "quorum": 2 },
+          "outcomes": { "approved": "end", "insufficient": "end", "rejected": "end", "tied": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "vote", "state": "enabled" }],
+      "candidateVerdicts": [
+        { "nodeKey": "vote", "candidate": "a", "verdict": "approve" },
+        { "nodeKey": "vote", "candidate": "b", "verdict": "reject" },
+        { "nodeKey": "vote", "candidate": "c", "verdict": "reject" }
+      ],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "consensus-quorum-tied",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "vote",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "consensus",
+          "key": "vote",
+          "candidates": ["a", "b", "c"],
+          "policy": { "kind": "quorum", "quorum": 2 },
+          "outcomes": { "approved": "end", "insufficient": "end", "rejected": "end", "tied": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "vote", "state": "enabled" }],
+      "candidateVerdicts": [
+        { "nodeKey": "vote", "candidate": "a", "verdict": "approve" },
+        { "nodeKey": "vote", "candidate": "b", "verdict": "reject" },
+        { "nodeKey": "vote", "candidate": "c", "verdict": "abstain" }
+      ],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "consensus-quorum-insufficient",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "vote",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "consensus",
+          "key": "vote",
+          "candidates": ["a", "b", "c"],
+          "policy": { "kind": "quorum", "quorum": 2 },
+          "outcomes": { "approved": "end", "insufficient": "end", "rejected": "end", "tied": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "vote", "state": "enabled" }],
+      "candidateVerdicts": [
+        { "nodeKey": "vote", "candidate": "a", "verdict": "approve" },
+        { "nodeKey": "vote", "candidate": "b", "verdict": "abstain" },
+        { "nodeKey": "vote", "candidate": "c", "verdict": "abstain" }
+      ],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "consensus-threshold-approved",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "vote",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "consensus",
+          "key": "vote",
+          "candidates": ["a", "b", "c"],
+          "policy": { "kind": "threshold", "approve": 2, "reject": 2 },
+          "outcomes": { "approved": "end", "insufficient": "end", "rejected": "end", "tied": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "vote", "state": "enabled" }],
+      "candidateVerdicts": [
+        { "nodeKey": "vote", "candidate": "a", "verdict": "approve" },
+        { "nodeKey": "vote", "candidate": "b", "verdict": "approve" }
+      ],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "consensus-threshold-rejected",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "vote",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "consensus",
+          "key": "vote",
+          "candidates": ["a", "b", "c"],
+          "policy": { "kind": "threshold", "approve": 2, "reject": 2 },
+          "outcomes": { "approved": "end", "insufficient": "end", "rejected": "end", "tied": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "vote", "state": "enabled" }],
+      "candidateVerdicts": [
+        { "nodeKey": "vote", "candidate": "a", "verdict": "reject" },
+        { "nodeKey": "vote", "candidate": "b", "verdict": "reject" }
+      ],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "consensus-threshold-wait",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "vote",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "consensus",
+          "key": "vote",
+          "candidates": ["a", "b", "c"],
+          "policy": { "kind": "threshold", "approve": 2, "reject": 2 },
+          "outcomes": { "approved": "end", "insufficient": "end", "rejected": "end", "tied": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "vote", "state": "enabled" }],
+      "candidateVerdicts": [
+        { "nodeKey": "vote", "candidate": "a", "verdict": "approve" },
+        { "nodeKey": "vote", "candidate": "b", "verdict": "reject" }
+      ],
+      "gateResolutions": []
+    }
+  },
+  {
+    "id": "consensus-threshold-insufficient",
+    "definition": {
+      "schemaVersion": 1,
+      "entry": "vote",
+      "facts": [],
+      "nodes": [
+        {
+          "kind": "consensus",
+          "key": "vote",
+          "candidates": ["a", "b", "c"],
+          "policy": { "kind": "threshold", "approve": 3, "reject": 2 },
+          "outcomes": { "approved": "end", "insufficient": "end", "rejected": "end", "tied": "end" }
+        },
+        { "kind": "terminal", "key": "end", "outcome": "done" }
+      ]
+    },
+    "facts": {
+      "values": [],
+      "nodes": [{ "key": "vote", "state": "enabled" }],
+      "candidateVerdicts": [
+        { "nodeKey": "vote", "candidate": "a", "verdict": "approve" },
+        { "nodeKey": "vote", "candidate": "b", "verdict": "abstain" }
+      ],
+      "gateResolutions": []
+    }
+  }
+]

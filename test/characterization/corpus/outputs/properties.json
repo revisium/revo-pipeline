@@ -1,0 +1,209 @@
+[
+  {
+    "id": "descriptor-definition-getter",
+    "output": {
+      "getterInvocations": 0,
+      "result": {
+        "ok": false,
+        "faults": [
+          {
+            "code": "DEF_TYPE",
+            "path": "/nodes",
+            "message": "Invalid portable input."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "descriptor-compiled-getter",
+    "output": {
+      "getterInvocations": 0,
+      "result": {
+        "ok": false
+      }
+    }
+  },
+  {
+    "id": "json-roundtrip",
+    "output": {
+      "ok": true,
+      "pipeline": {
+        "edges": [
+          {
+            "branch": null,
+            "fork": null,
+            "from": "start",
+            "outcome": "cancelled",
+            "role": "activation",
+            "to": "end"
+          },
+          {
+            "branch": null,
+            "fork": null,
+            "from": "start",
+            "outcome": "completed",
+            "role": "activation",
+            "to": "end"
+          },
+          {
+            "branch": null,
+            "fork": null,
+            "from": "start",
+            "outcome": "failed",
+            "role": "activation",
+            "to": "end"
+          },
+          {
+            "branch": null,
+            "fork": null,
+            "from": "start",
+            "outcome": "skipped",
+            "role": "activation",
+            "to": "end"
+          }
+        ],
+        "entry": "start",
+        "facts": [],
+        "forkRegions": [],
+        "incomingIndex": [
+          {
+            "edges": [0, 1, 2, 3],
+            "key": "end"
+          },
+          {
+            "edges": [],
+            "key": "start"
+          }
+        ],
+        "nodeIndex": [
+          {
+            "key": "end",
+            "node": 0
+          },
+          {
+            "key": "start",
+            "node": 1
+          }
+        ],
+        "nodes": [
+          {
+            "key": "end",
+            "kind": "terminal",
+            "outcome": "done"
+          },
+          {
+            "key": "start",
+            "kind": "task",
+            "outcomes": {
+              "cancelled": "end",
+              "completed": "end",
+              "failed": "end",
+              "skipped": "end"
+            }
+          }
+        ],
+        "outgoingIndex": [
+          {
+            "edges": [],
+            "key": "end"
+          },
+          {
+            "edges": [0, 1, 2, 3],
+            "key": "start"
+          }
+        ],
+        "schemaVersion": 1,
+        "topologicalOrder": ["start", "end"]
+      }
+    }
+  },
+  {
+    "id": "deep-freeze",
+    "output": {
+      "deeplyFrozen": true,
+      "frozenObjectCount": 26,
+      "objectCount": 26
+    }
+  },
+  {
+    "id": "mutation-isolation",
+    "output": {
+      "unchanged": true
+    }
+  },
+  {
+    "id": "source-permutation",
+    "output": {
+      "equal": true
+    }
+  },
+  {
+    "id": "fact-permutation",
+    "output": {
+      "equal": true
+    }
+  },
+  {
+    "id": "definition-bound",
+    "output": {
+      "ok": false,
+      "faults": [
+        {
+          "code": "DEF_LIMIT",
+          "path": "/nodes",
+          "message": "Invalid portable input."
+        }
+      ]
+    }
+  },
+  {
+    "id": "fault-truncation-99-plus-sentinel",
+    "output": {
+      "faultCount": 100,
+      "first": {
+        "code": "DEF_DUPLICATE",
+        "path": "/nodes/1/key",
+        "message": "Duplicate node key."
+      },
+      "last": {
+        "code": "DEF_LIMIT",
+        "path": "",
+        "message": "Fault limit exceeded."
+      }
+    }
+  },
+  {
+    "id": "decision-replay",
+    "output": {
+      "equal": true,
+      "decision": {
+        "kind": "activate",
+        "cause": {
+          "kind": "entry"
+        },
+        "nodeKeys": ["start"]
+      }
+    }
+  },
+  {
+    "id": "noop-reachability",
+    "output": {
+      "fixture": "linear-task-terminal",
+      "dimensions": {
+        "start": ["absent", "enabled", "terminal-completed"],
+        "end": ["absent", "enabled", "terminal-done"]
+      },
+      "combinations": 9,
+      "matrixSha256": "992abedef28ebffea5d28df39a6218fdecf16ca87ae6e4e7fadda0c631fb537a",
+      "decisionKindCounts": {
+        "activate": 2,
+        "reject": 4,
+        "terminal": 2,
+        "wait": 1
+      },
+      "noopReachable": false,
+      "conclusion": "No noop decision is reachable in this exhaustive bounded valid state matrix."
+    }
+  }
+]
