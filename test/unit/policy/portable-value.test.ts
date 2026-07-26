@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 
-import { inspectPortableValue, PIPELINE_LIMITS } from '../../../src/policy/index.js';
+import {
+  inspectPortableValue,
+  inspectPortableValueSet,
+  PIPELINE_LIMITS,
+} from '../../../src/policy/index.js';
 
 const issue = (value: unknown, options?: Parameters<typeof inspectPortableValue>[1]) => {
   const result = inspectPortableValue(value, options);
@@ -62,6 +66,62 @@ describe('bounded portable input inspection', () => {
     expect(Object.getPrototypeOf(result.value)).toBe(Object.prototype);
     expect(Object.hasOwn(result.value, '__proto__')).toBe(true);
     expect(Object.getOwnPropertyDescriptor(result.value, '__proto__')?.value).toBe('safe');
+  });
+
+  test('retains own __proto__ data in multi-fault inspection without prototype mutation', () => {
+    const value = {};
+    Object.defineProperty(value, '__proto__', { enumerable: true, value: 'safe' });
+    Object.defineProperty(value, 'invalid', { enumerable: true, value: undefined });
+
+    const result = inspectPortableValueSet(value);
+
+    expect(result.issues).toEqual([{ code: 'type', path: '/invalid' }]);
+    const output = typeof result.value === 'object' && result.value !== null ? result.value : null;
+    expect(output).not.toBeNull();
+    if (output === null) {
+      throw new Error('Expected a portable object.');
+    }
+    expect(Object.getPrototypeOf(output)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyDescriptor(output, '__proto__')?.value).toBe('safe');
+  });
+
+  test('reads all sibling descriptors before traversing any descendant', () => {
+    const reads: string[] = [];
+    let getterCalls = 0;
+    const child = new Proxy(
+      { value: true },
+      {
+        getOwnPropertyDescriptor(target, key) {
+          reads.push(`child:${String(key)}`);
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+      },
+    );
+    const subject = { a: child };
+    Object.defineProperty(subject, 'b', {
+      enumerable: true,
+      get() {
+        getterCalls += 1;
+        throw new Error('accessors must not execute');
+      },
+    });
+    const value = new Proxy(subject, {
+      getOwnPropertyDescriptor(target, key) {
+        reads.push(`root:${String(key)}`);
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+
+    expect(inspectPortableValueSet(value).issues).toEqual([{ code: 'type', path: '/b' }]);
+    expect(reads).toEqual(['root:a', 'root:b', 'child:value']);
+    expect(getterCalls).toBe(0);
+  });
+
+  test('normalizes multi-fault object traversal independently of insertion order', () => {
+    const first = inspectPortableValueSet({ z: undefined, a: () => true });
+    const second = inspectPortableValueSet({ a: () => true, z: undefined });
+
+    expect(first).toEqual(second);
   });
 
   test.each([

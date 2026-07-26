@@ -571,6 +571,37 @@ describe('consensus coordination', () => {
     ).toEqual({ kind: 'select', nodeKey: 'vote', outcome, activate: ['end'] });
   });
 
+  test('compiles and evaluates slash and tilde candidate semantic names consistently', () => {
+    const pipeline = compile({
+      schemaVersion: 1,
+      entry: 'vote',
+      facts: [],
+      nodes: [
+        {
+          kind: 'consensus',
+          key: 'vote',
+          candidates: ['/', '~'],
+          policy: { kind: 'unanimous' },
+          outcomes: { approved: 'end', insufficient: 'end', rejected: 'end', tied: 'end' },
+        },
+        { kind: 'terminal', key: 'end', outcome: 'done' },
+      ],
+    });
+
+    expect(
+      decidePipeline(
+        pipeline,
+        facts(
+          [{ key: 'vote', state: 'enabled' }],
+          [
+            { nodeKey: 'vote', candidate: '/', verdict: 'approve' },
+            { nodeKey: 'vote', candidate: '~', verdict: 'approve' },
+          ],
+        ),
+      ),
+    ).toEqual({ kind: 'select', nodeKey: 'vote', outcome: 'approved', activate: ['end'] });
+  });
+
   test.each([
     [{ kind: 'unanimous' } as const, ['approve']],
     [{ kind: 'quorum', quorum: 2 } as const, ['approve', 'approve']],
@@ -604,6 +635,30 @@ describe('consensus coordination', () => {
     expect(decision.faults.map(({ code }) => code)).toEqual(
       expect.arrayContaining(['FACT_DUPLICATE', 'FACT_CANDIDATE', 'FACT_PREMATURE']),
     );
+  });
+
+  test('prunes duplicate verdicts before consensus aggregation', () => {
+    const decision = decidePipeline(
+      consensusPipeline({ kind: 'unanimous' }),
+      facts(
+        [{ key: 'vote', state: 'enabled' }],
+        [
+          { nodeKey: 'vote', candidate: 'a', verdict: 'approve' },
+          { nodeKey: 'vote', candidate: 'a', verdict: 'reject' },
+        ],
+      ),
+    );
+
+    expect(decision).toEqual({
+      kind: 'reject',
+      faults: [
+        {
+          code: 'FACT_DUPLICATE',
+          path: '/candidateVerdicts/1',
+          message: 'Duplicate candidate verdict fact.',
+        },
+      ],
+    });
   });
 
   test('preserves the source index of a premature verdict after an invalid entry', () => {
@@ -774,7 +829,7 @@ describe('human gate coordination', () => {
     );
   });
 
-  test('preserves the source index of a premature resolution after an invalid entry', () => {
+  test('prunes a duplicate resolution after an invalid sibling before causal evaluation', () => {
     const decision = decidePipeline(
       pipeline,
       facts(
@@ -786,14 +841,20 @@ describe('human gate coordination', () => {
         ],
       ),
     );
-    const premature =
-      decision.kind === 'reject'
-        ? decision.faults.find((fault) => fault.code === 'FACT_PREMATURE')
-        : undefined;
-    expect(premature).toEqual({
-      code: 'FACT_PREMATURE',
-      path: '/gateResolutions/1',
-      message: 'Gate node is not activated.',
+    expect(decision).toEqual({
+      kind: 'reject',
+      faults: [
+        {
+          code: 'FACT_DUPLICATE',
+          path: '/gateResolutions/1',
+          message: 'Duplicate gate resolution fact.',
+        },
+        {
+          code: 'FACT_RESOLUTION',
+          path: '/gateResolutions/0/resolution',
+          message: 'Resolution is not declared.',
+        },
+      ],
     });
   });
 

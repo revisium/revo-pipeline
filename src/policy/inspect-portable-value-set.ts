@@ -3,7 +3,14 @@ import { PIPELINE_LIMITS } from './pipeline-limits.js';
 
 type Issue = { readonly code: 'type' | 'limit'; readonly path: string };
 type Result = { readonly value: unknown; readonly issues: readonly Issue[] };
-type Context = { visits: number; exhausted: boolean; readonly issues: Issue[] };
+type Options = { readonly arrayLimit?: (path: string) => number };
+type Context = {
+  readonly arrayLimit: (path: string) => number;
+  visits: number;
+  exhausted: boolean;
+  readonly issues: Issue[];
+};
+type DescriptorMap = ReadonlyMap<string, PropertyDescriptor | undefined>;
 
 const escapeSegment = (value: string): string => value.replaceAll('~', '~0').replaceAll('/', '~1');
 const rejected = (context: Context, code: Issue['code'], path: string): null => {
@@ -16,6 +23,38 @@ const inspectNumber = (input: number, path: string, context: Context): number | 
     return rejected(context, 'type', path);
   }
   return Object.is(input, -0) ? 0 : input;
+};
+
+const readDescriptors = (
+  input: object,
+  keys: readonly string[],
+  path: string,
+  context: Context,
+): DescriptorMap => {
+  const descriptors = new Map<string, PropertyDescriptor | undefined>();
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+      rejected(context, 'type', `${path}/${escapeSegment(key)}`);
+      descriptors.set(key, undefined);
+      continue;
+    }
+    descriptors.set(key, descriptor);
+  }
+  return descriptors;
+};
+
+const definePortableObjectValue = (
+  output: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): void => {
+  Object.defineProperty(output, key, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  });
 };
 
 const inspect = (input: unknown, path: string, depth: number, context: Context): unknown => {
@@ -46,7 +85,7 @@ const inspect = (input: unknown, path: string, depth: number, context: Context):
     return rejected(context, 'type', path);
   }
   const isArray = Array.isArray(input);
-  if (isArray && input.length > PIPELINE_LIMITS.facts.total) {
+  if (isArray && input.length > context.arrayLimit(path)) {
     return rejected(context, 'limit', path);
   }
   const prototype = Reflect.getPrototypeOf(input);
@@ -78,15 +117,16 @@ const inspect = (input: unknown, path: string, depth: number, context: Context):
     : reflectedKeys.toSorted(compareUnicodeCodePoints);
   const outputArray: unknown[] = [];
   const outputObject: Record<string, unknown> = {};
+  const descriptors = readDescriptors(input, keys, path, context);
   for (const key of keys) {
     const childPath = `${path}/${escapeSegment(key)}`;
-    const descriptor = Object.getOwnPropertyDescriptor(input, key);
-    if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
-      const value = rejected(context, 'type', childPath);
+    const descriptor = descriptors.get(key);
+    if (!descriptor) {
+      const value = null;
       if (isArray) {
         outputArray.push(value);
       } else {
-        outputObject[key] = value;
+        definePortableObjectValue(outputObject, key, value);
       }
       continue;
     }
@@ -94,7 +134,7 @@ const inspect = (input: unknown, path: string, depth: number, context: Context):
     if (isArray) {
       outputArray.push(value);
     } else {
-      outputObject[key] = value;
+      definePortableObjectValue(outputObject, key, value);
     }
     if (context.exhausted) {
       break;
@@ -103,7 +143,12 @@ const inspect = (input: unknown, path: string, depth: number, context: Context):
   return isArray ? outputArray : outputObject;
 };
 
-export const inspectPortableValueSet = (input: unknown): Result => {
-  const context: Context = { visits: 0, exhausted: false, issues: [] };
+export const inspectPortableValueSet = (input: unknown, options: Options = {}): Result => {
+  const context: Context = {
+    arrayLimit: options.arrayLimit ?? (() => PIPELINE_LIMITS.facts.total),
+    visits: 0,
+    exhausted: false,
+    issues: [],
+  };
   return { value: inspect(input, '', 0, context), issues: context.issues };
 };
