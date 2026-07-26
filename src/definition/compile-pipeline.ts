@@ -1,11 +1,12 @@
 import type { DefinitionFault, DefinitionFaultCode, PipelineCompilation } from '../errors/index.js';
 import {
-  buildGraphAdjacency,
-  collectRegionMembers,
-  nodesLeadingToTerminals,
-  reachableNodeKeys,
-  topologicalSort,
+  buildGraphKernel,
+  collectBarrierRegionOwnership,
+  reachableNodeOffsets,
+  reverseReachableNodeOffsets,
+  topologicalOrder as kernelTopologicalOrder,
 } from '../graph/index.js';
+import type { BarrierRegionOwnership, BarrierRegionQuery, GraphKernel } from '../graph/index.js';
 import {
   compareUnicodeCodePoints,
   DEFINITION_FAULT_PHASES,
@@ -871,44 +872,25 @@ const validateReferences = (
   }
 };
 
-type EdgeBuckets = {
-  readonly incoming: ReadonlyMap<string, readonly MutableCompiledEdge[]>;
-  readonly outgoing: ReadonlyMap<string, readonly MutableCompiledEdge[]>;
-};
-
-type RegionContext = {
-  readonly adjacency: ReturnType<typeof buildGraphAdjacency>;
-  readonly buckets: EdgeBuckets;
-  readonly nodeByKey: ReadonlyMap<string, PipelineNode>;
-  readonly sourceIndexes: ReadonlyMap<string, number>;
-  readonly sourceNodes: ReadonlyMap<string, PipelineNode>;
-};
-
 type ForkNode = Extract<PipelineNode, { readonly kind: 'fork' }>;
 type JoinNode = Extract<PipelineNode, { readonly kind: 'join' }>;
-type ForkBranchClassification = {
+type ForkBranchPreflight = {
   readonly branch: ForkNode['branches'][number];
-  readonly branchExits: Map<string, string>;
-  readonly context: RegionContext;
-  readonly faults: MutableFault[];
-  readonly fork: ForkNode;
-  readonly forkPath: string;
-  readonly join: JoinNode;
-  readonly memberOwners: Map<string, string>;
+  readonly branchPath: string;
 };
-
-const buildEdgeBuckets = (edges: readonly MutableCompiledEdge[]): EdgeBuckets => {
-  const outgoing = new Map<string, MutableCompiledEdge[]>();
-  const incoming = new Map<string, MutableCompiledEdge[]>();
-  for (const edge of edges) {
-    const outgoingForNode = outgoing.get(edge.from) ?? [];
-    outgoingForNode.push(edge);
-    outgoing.set(edge.from, outgoingForNode);
-    const incomingForNode = incoming.get(edge.to) ?? [];
-    incomingForNode.push(edge);
-    incoming.set(edge.to, incomingForNode);
-  }
-  return { incoming, outgoing };
+type ForkRegionPreflight = {
+  readonly branches: readonly ForkBranchPreflight[];
+  readonly fork: ForkNode;
+  readonly join: JoinNode;
+  readonly queryIndex: number | undefined;
+};
+type RegionPreflight = {
+  readonly forks: readonly ForkRegionPreflight[];
+  readonly queries: readonly BarrierRegionQuery[];
+};
+type RegionInterpretation = {
+  readonly edges: readonly CompiledEdge[];
+  readonly regions: readonly CompiledForkRegion[];
 };
 
 const sourceBranchIndex = (
@@ -933,7 +915,8 @@ const validateRegionMember = (
   branchName: string,
   branchPath: string,
   memberOwners: Map<string, string>,
-  context: RegionContext,
+  nodeByKey: ReadonlyMap<string, PipelineNode>,
+  sourceIndexes: ReadonlyMap<string, number>,
   faults: MutableFault[],
 ): void => {
   const owner = memberOwners.get(member);
@@ -941,12 +924,12 @@ const validateRegionMember = (
     addFault(faults, 'DEF_FORK_REGION', branchPath, 'Fork branches overlap.');
   }
   memberOwners.set(member, branchName);
-  const memberKind = context.nodeByKey.get(member)?.kind;
+  const memberKind = nodeByKey.get(member)?.kind;
   if (memberKind === 'fork') {
     addFault(
       faults,
       'DEF_FORK_NESTED',
-      `/nodes/${context.sourceIndexes.get(member) ?? 0}`,
+      `/nodes/${sourceIndexes.get(member) ?? 0}`,
       'Nested forks are forbidden.',
     );
   }
@@ -954,45 +937,10 @@ const validateRegionMember = (
     addFault(
       faults,
       'DEF_FORK_REGION',
-      `/nodes/${context.sourceIndexes.get(member) ?? 0}`,
+      `/nodes/${sourceIndexes.get(member) ?? 0}`,
       'Foreign join in fork region.',
     );
   }
-};
-
-const classifyForkBranch = (
-  classification: ForkBranchClassification,
-): CompiledForkRegion['branches'][number] => {
-  const { branch, branchExits, context, faults, fork, forkPath, join, memberOwners } =
-    classification;
-  const branchIndex = sourceBranchIndex(fork, branch, context.sourceNodes);
-  const branchPath = `${forkPath}/branches/${branchIndex}`;
-  branchExits.set(branch.name, branch.exit);
-  const members = [
-    ...collectRegionMembers(branch.entry, branch.exit, join.key, context.adjacency),
-  ].sort(compareUnicodeCodePoints);
-  for (const member of members) {
-    validateRegionMember(member, branch.name, branchPath, memberOwners, context, faults);
-  }
-  const exit = context.nodeByKey.get(branch.exit);
-  if (exit?.kind !== 'task' || !members.includes(branch.exit)) {
-    addFault(faults, 'DEF_FORK_REGION', `${branchPath}/exit`, 'Branch exit must be a member task.');
-  }
-  const exitEdges = context.buckets.outgoing.get(branch.exit) ?? [];
-  if (exitEdges.length !== TASK_OUTCOMES.length || exitEdges.some((edge) => edge.to !== join.key)) {
-    addFault(
-      faults,
-      'DEF_FORK_REGION',
-      `/nodes/${context.sourceIndexes.get(branch.exit) ?? 0}`,
-      'Every exit outcome must target the join.',
-    );
-  }
-  for (const edge of exitEdges) {
-    edge.role = 'readiness';
-    edge.fork = fork.key;
-    edge.branch = branch.name;
-  }
-  return { ...branch, members };
 };
 
 const regionEdgeIsPermitted = (
@@ -1018,29 +966,49 @@ const regionEdgeIsPermitted = (
   );
 };
 
+const semanticEdge = (
+  kernelEdgeOffset: number,
+  edges: readonly MutableCompiledEdge[],
+  inducedSemanticOffsets: readonly number[],
+): MutableCompiledEdge | undefined => {
+  const semanticOffset = inducedSemanticOffsets[kernelEdgeOffset];
+  return semanticOffset === undefined ? undefined : edges[semanticOffset];
+};
+
 const validateRegionEdges = (
   fork: ForkNode,
   join: JoinNode,
   memberOwners: ReadonlyMap<string, string>,
   branchExits: ReadonlyMap<string, string>,
-  context: RegionContext,
+  kernel: GraphKernel,
+  edges: readonly MutableCompiledEdge[],
+  inducedSemanticOffsets: readonly number[],
+  sourceIndexes: ReadonlyMap<string, number>,
   faults: MutableFault[],
 ): void => {
-  const regionEdges = new Set<MutableCompiledEdge>(context.buckets.outgoing.get(fork.key) ?? []);
+  const forkOffset = kernel.nodeOffset(fork.key);
+  const regionEdgeOffsets = new Set<number>(
+    forkOffset === undefined ? [] : (kernel.outgoingEdgeOffsets[forkOffset] ?? []),
+  );
   for (const member of memberOwners.keys()) {
-    for (const edge of context.buckets.outgoing.get(member) ?? []) {
-      regionEdges.add(edge);
+    const memberOffset = kernel.nodeOffset(member);
+    if (memberOffset === undefined) {
+      continue;
     }
-    for (const edge of context.buckets.incoming.get(member) ?? []) {
-      regionEdges.add(edge);
+    for (const edgeOffset of kernel.outgoingEdgeOffsets[memberOffset] ?? []) {
+      regionEdgeOffsets.add(edgeOffset);
+    }
+    for (const edgeOffset of kernel.incomingEdgeOffsets[memberOffset] ?? []) {
+      regionEdgeOffsets.add(edgeOffset);
     }
   }
-  for (const edge of regionEdges) {
-    if (!regionEdgeIsPermitted(edge, fork, join, memberOwners, branchExits)) {
+  for (const edgeOffset of regionEdgeOffsets) {
+    const edge = semanticEdge(edgeOffset, edges, inducedSemanticOffsets);
+    if (edge && !regionEdgeIsPermitted(edge, fork, join, memberOwners, branchExits)) {
       addFault(
         faults,
         'DEF_FORK_REGION',
-        `/nodes/${context.sourceIndexes.get(edge.from) ?? 0}`,
+        `/nodes/${sourceIndexes.get(edge.from) ?? 0}`,
         'Invalid fork-region edge.',
       );
     }
@@ -1067,60 +1035,126 @@ const validateJoinThreshold = (
   }
 };
 
-const classifyForkRegion = (
-  fork: ForkNode,
-  context: RegionContext,
+const preflightForkRegions = (
+  nodes: readonly PipelineNode[],
+  nodeKeys: readonly string[],
+  sourceIndexes: ReadonlyMap<string, number>,
+  sourceNodes: ReadonlyMap<string, PipelineNode>,
   faults: MutableFault[],
-): CompiledForkRegion | undefined => {
-  const forkPath = `/nodes/${context.sourceIndexes.get(fork.key) ?? 0}`;
-  const join = context.nodeByKey.get(fork.join);
-  if (join?.kind !== 'join' || join.fork !== fork.key) {
-    addFault(faults, 'DEF_FORK_JOIN', `${forkPath}/join`, 'Fork/join is not reciprocal.');
-    return undefined;
-  }
-  const memberOwners = new Map<string, string>();
-  const branchExits = new Map<string, string>();
-  const branches = fork.branches.map((branch) =>
-    classifyForkBranch({
+): RegionPreflight => {
+  const nodeByKey = new Map(nodes.map((node) => [node.key, node]));
+  const nodeOffsets = new Map(nodeKeys.map((key, offset) => [key, offset]));
+  const queries: BarrierRegionQuery[] = [];
+  const forks: ForkRegionPreflight[] = [];
+  for (const fork of nodes.filter((node): node is ForkNode => node.kind === 'fork')) {
+    const forkPath = `/nodes/${sourceIndexes.get(fork.key) ?? 0}`;
+    const join = nodeByKey.get(fork.join);
+    if (join?.kind !== 'join' || join.fork !== fork.key) {
+      addFault(faults, 'DEF_FORK_JOIN', `${forkPath}/join`, 'Fork/join is not reciprocal.');
+      continue;
+    }
+    validateJoinThreshold(join, fork.branches.length, sourceIndexes, faults);
+    const branches = fork.branches.map((branch) => ({
       branch,
-      branchExits,
-      context,
-      faults,
-      fork,
-      forkPath,
-      join,
-      memberOwners,
-    }),
-  );
-  validateRegionEdges(fork, join, memberOwners, branchExits, context, faults);
-  validateJoinThreshold(join, fork.branches.length, context.sourceIndexes, faults);
-  return { fork: fork.key, join: join.key, branches };
+      branchPath: `${forkPath}/branches/${sourceBranchIndex(fork, branch, sourceNodes)}`,
+    }));
+    const barrierNodeOffset = nodeOffsets.get(join.key);
+    const queryBranches = branches.map(({ branch }) => ({
+      entryNodeOffset: nodeOffsets.get(branch.entry),
+      exitNodeOffset: nodeOffsets.get(branch.exit),
+    }));
+    const queryIsKnown =
+      barrierNodeOffset !== undefined &&
+      queryBranches.every(
+        (branch) => branch.entryNodeOffset !== undefined && branch.exitNodeOffset !== undefined,
+      );
+    const queryIndex = queryIsKnown ? queries.length : undefined;
+    if (queryIsKnown) {
+      queries.push({
+        barrierNodeOffset,
+        branches: queryBranches.map((branch) => ({
+          entryNodeOffset: branch.entryNodeOffset!,
+          exitNodeOffset: branch.exitNodeOffset!,
+        })),
+      });
+    }
+    forks.push({ branches, fork, join, queryIndex });
+  }
+  for (const join of nodes.filter((node) => node.kind === 'join')) {
+    const fork = nodeByKey.get(join.fork);
+    if (fork?.kind !== 'fork' || fork.join !== join.key) {
+      addFault(
+        faults,
+        'DEF_FORK_JOIN',
+        `/nodes/${sourceIndexes.get(join.key) ?? 0}/fork`,
+        'Join/fork is not reciprocal.',
+      );
+    }
+  }
+  return { forks, queries };
 };
 
-const validateJoinReciprocity = (
-  join: JoinNode,
-  context: RegionContext,
+const normalizeBranchReadiness = (
+  preflight: ForkRegionPreflight,
+  branch: ForkBranchPreflight,
+  members: readonly string[],
+  kernel: GraphKernel,
+  edges: readonly MutableCompiledEdge[],
+  inducedSemanticOffsets: readonly number[],
+  nodeByKey: ReadonlyMap<string, PipelineNode>,
+  sourceIndexes: ReadonlyMap<string, number>,
   faults: MutableFault[],
 ): void => {
-  const fork = context.nodeByKey.get(join.fork);
-  if (fork?.kind !== 'fork' || fork.join !== join.key) {
+  const exit = nodeByKey.get(branch.branch.exit);
+  if (exit?.kind !== 'task' || !members.includes(branch.branch.exit)) {
     addFault(
       faults,
-      'DEF_FORK_JOIN',
-      `/nodes/${context.sourceIndexes.get(join.key) ?? 0}/fork`,
-      'Join/fork is not reciprocal.',
+      'DEF_FORK_REGION',
+      `${branch.branchPath}/exit`,
+      'Branch exit must be a member task.',
     );
+  }
+  const exitOffset = kernel.nodeOffset(branch.branch.exit);
+  const exitEdges = (exitOffset === undefined ? [] : (kernel.outgoingEdgeOffsets[exitOffset] ?? []))
+    .map((edgeOffset) => semanticEdge(edgeOffset, edges, inducedSemanticOffsets))
+    .filter((edge): edge is MutableCompiledEdge => edge !== undefined);
+  if (
+    exitEdges.length !== TASK_OUTCOMES.length ||
+    exitEdges.some((edge) => edge.to !== preflight.join.key)
+  ) {
+    addFault(
+      faults,
+      'DEF_FORK_REGION',
+      `/nodes/${sourceIndexes.get(branch.branch.exit) ?? 0}`,
+      'Every exit outcome must target the join.',
+    );
+  }
+  for (const edge of exitEdges) {
+    edge.role = 'readiness';
+    edge.fork = preflight.fork.key;
+    edge.branch = branch.branch.name;
   }
 };
 
 const validateJoinIngress = (
   join: JoinNode,
-  context: RegionContext,
+  nodeByKey: ReadonlyMap<string, PipelineNode>,
+  kernel: GraphKernel,
+  edges: readonly MutableCompiledEdge[],
+  inducedSemanticOffsets: readonly number[],
+  sourceIndexes: ReadonlyMap<string, number>,
   faults: MutableFault[],
 ): void => {
-  const fork = context.nodeByKey.get(join.fork);
+  const fork = nodeByKey.get(join.fork);
   const declaredExits = fork?.kind === 'fork' ? fork.branches.map((branch) => branch.exit) : [];
-  for (const edge of context.buckets.incoming.get(join.key) ?? []) {
+  const joinOffset = kernel.nodeOffset(join.key);
+  for (const edgeOffset of joinOffset === undefined
+    ? []
+    : (kernel.incomingEdgeOffsets[joinOffset] ?? [])) {
+    const edge = semanticEdge(edgeOffset, edges, inducedSemanticOffsets);
+    if (!edge) {
+      continue;
+    }
     const owningForkActivation =
       edge.from === join.fork && edge.role === 'activation' && edge.outcome === 'forked';
     const declaredReadiness =
@@ -1129,7 +1163,7 @@ const validateJoinIngress = (
       addFault(
         faults,
         'DEF_FORK_REGION',
-        `/nodes/${context.sourceIndexes.get(edge.from) ?? 0}`,
+        `/nodes/${sourceIndexes.get(edge.from) ?? 0}`,
         'Invalid join ingress.',
       );
     }
@@ -1138,27 +1172,73 @@ const validateJoinIngress = (
 
 const classifyForkRegions = (
   nodes: readonly PipelineNode[],
-  inputEdges: readonly CompiledEdge[],
+  preflight: RegionPreflight,
+  ownership: readonly BarrierRegionOwnership[],
+  kernel: GraphKernel,
+  edges: readonly MutableCompiledEdge[],
+  inducedSemanticOffsets: readonly number[],
   sourceIndexes: ReadonlyMap<string, number>,
-  sourceNodes: ReadonlyMap<string, PipelineNode>,
   faults: MutableFault[],
-): { readonly edges: readonly CompiledEdge[]; readonly regions: readonly CompiledForkRegion[] } => {
+): RegionInterpretation => {
   const nodeByKey = new Map(nodes.map((node) => [node.key, node]));
-  const edges: MutableCompiledEdge[] = inputEdges.map((edge) => ({ ...edge }));
-  const context: RegionContext = {
-    adjacency: buildGraphAdjacency(edges),
-    buckets: buildEdgeBuckets(edges),
-    nodeByKey,
-    sourceIndexes,
-    sourceNodes,
-  };
-  const regions = nodes
-    .filter((node) => node.kind === 'fork')
-    .map((fork) => classifyForkRegion(fork, context, faults))
-    .filter((region): region is CompiledForkRegion => region !== undefined);
-  for (const join of nodes.filter((node) => node.kind === 'join')) {
-    validateJoinReciprocity(join, context, faults);
-    validateJoinIngress(join, context, faults);
+  const regions: CompiledForkRegion[] = [];
+  for (const forkPreflight of preflight.forks) {
+    const result =
+      forkPreflight.queryIndex === undefined ? undefined : ownership[forkPreflight.queryIndex];
+    const memberOwners = new Map<string, string>();
+    const branchExits = new Map<string, string>();
+    const branches = forkPreflight.branches.map((branch, branchOffset) => {
+      const members = (result?.membersByBranch[branchOffset] ?? [])
+        .map((offset) => kernel.nodeKeys[offset] ?? '')
+        .filter((key) => key !== '');
+      branchExits.set(branch.branch.name, branch.branch.exit);
+      for (const member of members) {
+        validateRegionMember(
+          member,
+          branch.branch.name,
+          branch.branchPath,
+          memberOwners,
+          nodeByKey,
+          sourceIndexes,
+          faults,
+        );
+      }
+      normalizeBranchReadiness(
+        forkPreflight,
+        branch,
+        members,
+        kernel,
+        edges,
+        inducedSemanticOffsets,
+        nodeByKey,
+        sourceIndexes,
+        faults,
+      );
+      return { ...branch.branch, members };
+    });
+    validateRegionEdges(
+      forkPreflight.fork,
+      forkPreflight.join,
+      memberOwners,
+      branchExits,
+      kernel,
+      edges,
+      inducedSemanticOffsets,
+      sourceIndexes,
+      faults,
+    );
+    regions.push({ fork: forkPreflight.fork.key, join: forkPreflight.join.key, branches });
+  }
+  for (const join of nodes.filter((node): node is JoinNode => node.kind === 'join')) {
+    validateJoinIngress(
+      join,
+      nodeByKey,
+      kernel,
+      edges,
+      inducedSemanticOffsets,
+      sourceIndexes,
+      faults,
+    );
   }
   return { edges, regions };
 };
@@ -1166,20 +1246,24 @@ const classifyForkRegions = (
 const validateDag = (
   entry: string,
   nodes: readonly PipelineNode[],
-  edges: readonly CompiledEdge[],
+  kernel: GraphKernel,
+  order: readonly number[] | null,
   sourceIndexes: ReadonlyMap<string, number>,
   faults: MutableFault[],
 ): readonly string[] => {
-  const keys = nodes.map((node) => node.key);
-  const order = topologicalSort(keys, edges);
   if (order === null) {
     addFault(faults, 'DEF_CYCLE', '/nodes', 'Pipeline graph contains a cycle.');
   }
-  const reachable = reachableNodeKeys(entry, edges);
-  const terminalKeys = nodes.filter((node) => node.kind === 'terminal').map((node) => node.key);
-  const leading = nodesLeadingToTerminals(terminalKeys, edges);
+  const entryOffset = kernel.nodeOffset(entry);
+  const reachable = reachableNodeOffsets(kernel, entryOffset === undefined ? [] : [entryOffset]);
+  const terminalOffsets = nodes
+    .filter((node) => node.kind === 'terminal')
+    .map((node) => kernel.nodeOffset(node.key))
+    .filter((offset): offset is number => offset !== undefined);
+  const leading = reverseReachableNodeOffsets(kernel, terminalOffsets);
   for (const node of nodes) {
-    if (!reachable.has(node.key)) {
+    const offset = kernel.nodeOffset(node.key);
+    if (offset === undefined || !reachable[offset]) {
       addFault(
         faults,
         'DEF_UNREACHABLE',
@@ -1187,7 +1271,7 @@ const validateDag = (
         'Node is unreachable.',
       );
     }
-    if (!leading.has(node.key)) {
+    if (offset === undefined || !leading[offset]) {
       addFault(
         faults,
         'DEF_DEAD_END',
@@ -1196,7 +1280,7 @@ const validateDag = (
       );
     }
   }
-  return order ?? [];
+  return (order ?? []).map((offset) => kernel.nodeKeys[offset] ?? '');
 };
 
 const deepFreeze = <T>(value: T): T => {
@@ -1214,18 +1298,18 @@ const deepFreeze = <T>(value: T): T => {
 
 const buildIndexes = (
   nodes: readonly PipelineNode[],
-  edges: readonly CompiledEdge[],
+  kernel: GraphKernel,
 ): Pick<CompiledPipeline, 'incomingIndex' | 'nodeIndex' | 'outgoingIndex'> => {
-  const outgoing = new Map(nodes.map((node) => [node.key, [] as number[]]));
-  const incoming = new Map(nodes.map((node) => [node.key, [] as number[]]));
-  edges.forEach((edge, index) => {
-    outgoing.get(edge.from)?.push(index);
-    incoming.get(edge.to)?.push(index);
-  });
   return {
     nodeIndex: nodes.map((node, index) => ({ key: node.key, node: index })),
-    outgoingIndex: nodes.map((node) => ({ key: node.key, edges: outgoing.get(node.key) ?? [] })),
-    incomingIndex: nodes.map((node) => ({ key: node.key, edges: incoming.get(node.key) ?? [] })),
+    outgoingIndex: nodes.map((node, offset) => ({
+      key: node.key,
+      edges: kernel.outgoingEdgeOffsets[offset] ?? [],
+    })),
+    incomingIndex: nodes.map((node, offset) => ({
+      key: node.key,
+      edges: kernel.incomingEdgeOffsets[offset] ?? [],
+    })),
   };
 };
 
@@ -1305,20 +1389,84 @@ export const compilePipeline = (definition: PipelineDefinition): PipelineCompila
   const copiedNodes = derivableNodes
     .map(({ node }) => copyNode(node))
     .sort((left, right) => compareUnicodeCodePoints(left.key, right.key));
-  const preliminaryEdges = copiedNodes.flatMap(edgesForNode);
+  const preliminaryEdges = copiedNodes.flatMap(edgesForNode).sort(edgeComparator);
   validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);
+  const nodeKeys = copiedNodes.map((node) => node.key);
+  const preflight = preflightForkRegions(copiedNodes, nodeKeys, sourceIndexes, sourceNodes, faults);
+  const edges: MutableCompiledEdge[] = preliminaryEdges.map((edge) => ({ ...edge }));
+  const knownKeys = new Set(nodeKeys);
+  const induced = edges.flatMap((edge, semanticOffset) =>
+    knownKeys.has(edge.from) && knownKeys.has(edge.to)
+      ? [
+          {
+            semantic: Object.freeze({
+              from: edge.from,
+              outcome: edge.outcome,
+              to: edge.to,
+            }),
+            semanticOffset,
+          },
+        ]
+      : [],
+  );
+  const inducedEdges = Object.freeze(induced.map(({ semantic }) => semantic));
+  const inducedSemanticOffsets = Object.freeze(induced.map(({ semanticOffset }) => semanticOffset));
+  if (
+    nodeKeys.length > PIPELINE_LIMITS.definition.nodes ||
+    inducedEdges.length > PIPELINE_LIMITS.definition.edges
+  ) {
+    return { ok: false, faults: orderedFaults(faults) };
+  }
+  const kernelBuild = buildGraphKernel({
+    nodeKeys,
+    edges: inducedEdges,
+  });
+  if (!kernelBuild.ok) {
+    addFault(faults, 'DEF_TYPE', '/nodes', 'Invalid graph topology.');
+    return { ok: false, faults: orderedFaults(faults) };
+  }
+  const kernel = kernelBuild.kernel;
+  const graphOrder = kernelTopologicalOrder(kernel);
+  const ownership = collectBarrierRegionOwnership(kernel, graphOrder, preflight.queries);
   const classified = classifyForkRegions(
     copiedNodes,
-    preliminaryEdges,
+    preflight,
+    ownership,
+    kernel,
+    edges,
+    inducedSemanticOffsets,
     sourceIndexes,
-    sourceNodes,
     faults,
   );
-  const edges = [...classified.edges].sort(edgeComparator);
   const entry = typeof value.entry === 'string' ? value.entry : '';
-  const topologicalOrder = validateDag(entry, copiedNodes, edges, sourceIndexes, faults);
+  const topologicalOrder = validateDag(
+    entry,
+    copiedNodes,
+    kernel,
+    graphOrder,
+    sourceIndexes,
+    faults,
+  );
   if (faults.length > 0) {
     return { ok: false, faults: orderedFaults(faults) };
+  }
+  const edgeOffsetsAreIdentical =
+    edges.length === inducedEdges.length &&
+    edges.every(
+      (edge, offset) =>
+        inducedSemanticOffsets[offset] === offset &&
+        inducedEdges[offset]?.from === edge.from &&
+        inducedEdges[offset]?.outcome === edge.outcome &&
+        inducedEdges[offset]?.to === edge.to,
+    );
+  if (!edgeOffsetsAreIdentical) {
+    return {
+      ok: false,
+      faults: orderedFaults([
+        ...faults,
+        { code: 'DEF_TYPE', path: '/nodes', message: 'Invalid graph topology.' },
+      ]),
+    };
   }
   const sortedFacts = [...facts].sort((left, right) =>
     compareUnicodeCodePoints(left.key, right.key),
@@ -1338,10 +1486,10 @@ export const compilePipeline = (definition: PipelineDefinition): PipelineCompila
       entry,
       facts: sortedFacts,
       nodes: copiedNodes,
-      edges,
+      edges: classified.edges,
       topologicalOrder,
       forkRegions,
-      ...buildIndexes(copiedNodes, edges),
+      ...buildIndexes(copiedNodes, kernel),
     }),
   };
 };

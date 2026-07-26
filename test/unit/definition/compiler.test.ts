@@ -149,6 +149,136 @@ describe('pipeline definition compilation', () => {
     expect(compilePipeline(permuted)).toEqual(result);
   });
 
+  test('keeps canonical semantic and kernel edge offsets identical after readiness normalization', () => {
+    const definition: PipelineDefinition = {
+      schemaVersion: 1,
+      entry: 'fork',
+      facts: [],
+      nodes: [
+        {
+          kind: 'fork',
+          key: 'fork',
+          join: 'join',
+          branches: [
+            { name: 'zeta', entry: 'z-exit', exit: 'z-exit' },
+            { name: 'alpha', entry: 'a-exit', exit: 'a-exit' },
+          ],
+        },
+        { kind: 'task', key: 'z-exit', outcomes: taskRoutes('join') },
+        { kind: 'task', key: 'a-exit', outcomes: taskRoutes('join') },
+        {
+          kind: 'join',
+          key: 'join',
+          fork: 'fork',
+          policy: { kind: 'all' },
+          outcomes: {
+            completed: 'terminal',
+            insufficient: 'terminal',
+            rejected: 'terminal',
+          },
+        },
+        { kind: 'terminal', key: 'terminal', outcome: 'done' },
+      ],
+    };
+    const result = compilePipeline(definition);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    for (const index of result.pipeline.outgoingIndex) {
+      for (const edgeOffset of index.edges) {
+        expect(result.pipeline.edges[edgeOffset]?.from).toBe(index.key);
+      }
+    }
+    for (const index of result.pipeline.incomingIndex) {
+      for (const edgeOffset of index.edges) {
+        expect(result.pipeline.edges[edgeOffset]?.to).toBe(index.key);
+      }
+    }
+    expect(
+      result.pipeline.edges
+        .filter((edge) => edge.role === 'readiness')
+        .map(({ from, outcome, to }) => ({ from, outcome, to })),
+    ).toEqual([
+      ...Object.keys(taskRoutes('join')).map((outcome) => ({
+        from: 'a-exit',
+        outcome,
+        to: 'join',
+      })),
+      ...Object.keys(taskRoutes('join')).map((outcome) => ({
+        from: 'z-exit',
+        outcome,
+        to: 'join',
+      })),
+    ]);
+  });
+
+  test('preserves outcome-bearing identity for equal-endpoint semantic edges', () => {
+    const result = compilePipeline(linearDefinition());
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.pipeline.edges.map(({ from, outcome, to }) => ({ from, outcome, to }))).toEqual([
+      { from: 'start', outcome: 'cancelled', to: 'finish' },
+      { from: 'start', outcome: 'completed', to: 'finish' },
+      { from: 'start', outcome: 'failed', to: 'finish' },
+      { from: 'start', outcome: 'skipped', to: 'finish' },
+    ]);
+  });
+
+  test('keeps foreign endpoints diagnostic-only without corrupting induced edge offsets', () => {
+    const definition = linearDefinition();
+    const start = definition.nodes.find((node) => node.kind === 'task');
+    if (start?.kind === 'task') {
+      Reflect.set(start.outcomes, 'completed', 'missing');
+    }
+    const result = compilePipeline(definition);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.faults).toEqual([
+      {
+        code: 'DEF_TARGET',
+        path: '/nodes/1',
+        message: 'Unknown target missing.',
+      },
+    ]);
+    expect(result.faults.some(({ message }) => message === 'Invalid graph topology.')).toBe(false);
+  });
+
+  test('reports structural edge collisions through accepted node diagnostics', () => {
+    const definition = {
+      schemaVersion: 1,
+      entry: 'branch',
+      facts: [{ key: 'choice', type: 'string' }],
+      nodes: [
+        {
+          kind: 'branch',
+          key: 'branch',
+          fact: 'choice',
+          cases: [
+            { name: 'same', when: { op: 'equals', value: 'a' }, to: 'finish' },
+            { name: 'same', when: { op: 'equals', value: 'b' }, to: 'finish' },
+          ],
+          default: null,
+        },
+        { kind: 'terminal', key: 'finish', outcome: 'done' },
+      ],
+    };
+    // @ts-expect-error exercises a duplicate semantic outcome outside the static contract
+    const result = compilePipeline(definition);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.faults).toContainEqual(
+      expect.objectContaining({ code: 'DEF_DUPLICATE', path: '/nodes/0/cases/1/name' }),
+    );
+    expect(result.faults.some(({ message }) => message === 'Invalid graph topology.')).toBe(false);
+  });
+
   test.each([
     [
       'outside join ingress',
@@ -264,6 +394,47 @@ describe('pipeline definition compilation', () => {
     expect(result.ok ? [] : result.faults.map(({ code }) => code)).toContain(expected);
   });
 
+  test('derives fork members without traversing through the join barrier', () => {
+    const definition: PipelineDefinition = {
+      schemaVersion: 1,
+      entry: 'fork',
+      facts: [],
+      nodes: [
+        {
+          kind: 'fork',
+          key: 'fork',
+          join: 'join',
+          branches: [{ name: 'branch', entry: 'entry', exit: 'exit' }],
+        },
+        { kind: 'task', key: 'entry', outcomes: taskRoutes('join') },
+        {
+          kind: 'join',
+          key: 'join',
+          fork: 'fork',
+          policy: { kind: 'all' },
+          outcomes: {
+            completed: 'exit',
+            insufficient: 'exit',
+            rejected: 'exit',
+          },
+        },
+        { kind: 'task', key: 'exit', outcomes: taskRoutes('terminal') },
+        { kind: 'terminal', key: 'terminal', outcome: 'done' },
+      ],
+    };
+    const result = compilePipeline(definition);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.faults).toContainEqual({
+      code: 'DEF_FORK_REGION',
+      path: '/nodes/0/branches/0/exit',
+      message: 'Branch exit must be a member task.',
+    });
+    expect(result.faults.some(({ code }) => code === 'DEF_CYCLE')).toBe(false);
+  });
+
   test('combines exact fault phases while pruning only unsafe malformed subtrees', () => {
     const malformed = {
       schemaVersion: 2,
@@ -298,19 +469,38 @@ describe('pipeline definition compilation', () => {
     if (first.ok || second.ok) {
       return;
     }
-    expect(first.faults.map(({ code }) => code)).toEqual(
-      expect.arrayContaining([
-        'DEF_SCHEMA',
-        'DEF_UNKNOWN_FIELD',
-        'DEF_DUPLICATE',
-        'DEF_BRANCH_AMBIGUOUS',
-        'DEF_TARGET',
-        'DEF_ENTRY',
-        'DEF_CYCLE',
-        'DEF_UNREACHABLE',
-        'DEF_DEAD_END',
-      ]),
-    );
+    expect(first.faults).toEqual([
+      { code: 'DEF_UNKNOWN_FIELD', path: '/extra', message: 'Unknown field.' },
+      { code: 'DEF_UNKNOWN_FIELD', path: '/nodes/0/extra', message: 'Unknown field.' },
+      {
+        code: 'DEF_SCHEMA',
+        path: '/schemaVersion',
+        message: 'schemaVersion must be 1.',
+      },
+      { code: 'DEF_DUPLICATE', path: '/facts/1/key', message: 'Duplicate fact key.' },
+      {
+        code: 'DEF_BRANCH_AMBIGUOUS',
+        path: '/nodes/0/cases/1/when',
+        message: 'Overlapping case domain.',
+      },
+      { code: 'DEF_ENTRY', path: '/entry', message: 'Entry must reference a node.' },
+      { code: 'DEF_TARGET', path: '/nodes/0', message: 'Unknown target missing.' },
+      { code: 'DEF_TARGET', path: '/nodes/0', message: 'Unknown target missing.' },
+      { code: 'DEF_TARGET', path: '/nodes/0/fact', message: 'Unknown branch fact.' },
+      { code: 'DEF_CYCLE', path: '/nodes', message: 'Pipeline graph contains a cycle.' },
+      {
+        code: 'DEF_DEAD_END',
+        path: '/nodes/0',
+        message: 'Node cannot reach a terminal.',
+      },
+      { code: 'DEF_UNREACHABLE', path: '/nodes/0', message: 'Node is unreachable.' },
+      {
+        code: 'DEF_DEAD_END',
+        path: '/nodes/1',
+        message: 'Node cannot reach a terminal.',
+      },
+      { code: 'DEF_UNREACHABLE', path: '/nodes/1', message: 'Node is unreachable.' },
+    ]);
     expect(first.faults).toEqual(second.faults);
   });
 

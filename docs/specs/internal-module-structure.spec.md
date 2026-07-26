@@ -65,5 +65,66 @@ The architecture harness MUST validate:
    unknown areas, production escapes, and forbidden external packages;
 5. removal of every temporary probe in `finally`, including after assertion failure.
 
+The architecture harness MUST also run the fail-closed TypeScript AST graph-kernel-flow
+proof. That proof MUST establish exactly one compiler and one hostile-validator
+`buildGraphKernel` call site, required trust-gate dominance and independent inputs, the
+stripping adapter's non-exposure, same-binding flow into evaluation, and the absence of
+rebuild, cache, retained-state, dynamic lookup, or ambiguous-alias paths. Its tooling
+leaf MUST export only `validateGraphKernelFlow`; it MUST NOT add a runtime or package
+export.
+
+The proof is intentionally syntax-constraining and fail-closed. Required compiler
+prerequisites and the kernel builder MUST remain direct top-level operations; placing
+them behind a conditional, switch, loop, `try`, callback, retry, or recursive function
+MUST fail. Hostile validation MUST pass the direct independently-derived
+`expectedEdges` binding and the direct `pipeline.nodes -> key` projection; serialized
+edges, indexes, aliases, factories, and unproven expressions MUST fail. The
+`canonicalCoreGraph` promotion helper MUST have exactly one unconditional call site.
+Any source parse, binding, module-resolution, or semantic diagnostic MUST make the
+proof fail rather than weaken it.
+
+Compiler proof MUST distinguish diagnostic derivation from hostile promotion. It MUST
+accept the sole kernel only from canonical copied and sorted nodes plus a fresh,
+known-endpoint, immutable `inducedEdges` projection carrying exact
+`(from, outcome, to)` values, after one unconditional structural fork-region preflight.
+Existing definition faults MUST NOT suppress that safe induced diagnostic path. Generic
+region ownership MUST run once after the kernel. A successful compiler result MUST prove
+equal edge counts and exact semantic-offset, `from`, `outcome`, and `to` identity before
+serialization; removing or inverting any conjunct MUST fail. Legacy private adjacency,
+per-branch traversal, endpoint mutation, induced-input mutation, builder-input
+substitution, and final semantic-offset mismatch MUST fail.
+
+Region shared rows MUST be selected only after the supplied topology is proven to contain
+every safe integer node offset exactly once and every kernel edge is proven to point from
+an earlier to a later topology position. Topology validation node and edge reads MUST be
+operation-counted. Any malformed claimed order MUST use the bounded fallback and preserve
+the counts already spent rejecting the shared-row path.
+
+Hostile validation MUST prove exact failure polarity and unconditional termination for
+region and edge equality before its builder. `expectedEdges` MUST start as one fresh
+array, receive only independently projected node edges, undergo only the approved
+readiness-field normalization and one canonical sort, and have no direct or transitive
+hostile alias, unknown-helper escape, endpoint write, or post-equality mutation.
+Tracked calls embedded in `&&`, `||`, `??`, a ternary, assignment, argument, callback,
+loop, `switch`, `try`, or nested function MUST fail closed.
+
+The complete transitive proof is bound to reviewed AST-body digests for
+`compilePipeline`, `preflightForkRegions`, `classifyForkRegions`,
+`validateCompiledInternally`, `canonicalCoreGraph`, `canonicalRegions`, and
+`independentlyDerivedRegionMembers`. These owners collectively contain every A4 tracked
+compiler and hostile collection, writer, traversal, alias, helper boundary, equality
+gate, and builder input. A body change not recognized by the narrower semantic checks
+MUST still fail its owner digest. Updating a digest without reviewing the full owner
+body, its transitive collection table, fixtures, and this specification is forbidden.
+
+The transitive boundary additionally pins the complete source text of
+`src/definition/compile-pipeline.ts` and
+`src/transition/validate-compiled-internally.ts`. This full-file digest includes every
+outer precheck, node/edge projection, branch policy, readiness normalization,
+collection writer, and helper reachable from the seven primary owners. Any change
+anywhere in either file MUST fail architecture verification until the complete file
+boundary is reviewed and the file digest, owner digests, specification, and adversarial
+fixtures are reconciled together. Updating only a digest is not an accepted fix.
+
 A DAG rule change MUST update this specification, structural validator, unit partition,
 and positive/negative executable harness in the same change.

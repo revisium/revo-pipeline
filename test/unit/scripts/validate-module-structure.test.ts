@@ -123,6 +123,14 @@ test('accepts supported syntax variants without weakening the matrix', () => {
 test.each([
   [
     {
+      path: 'scripts/architecture/validate-graph-kernel-flow.ts',
+      source:
+        'export const validateGraphKernelFlow = () => [];\nexport const leakedHelper = true;\n',
+    },
+    'architecture-one-export-per-leaf',
+  ],
+  [
+    {
       path: 'src/graph/reverse.ts',
       source:
         "import type { Compiled } from '../definition/index.js';\nexport type Reverse = Compiled;\n",

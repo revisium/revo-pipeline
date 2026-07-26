@@ -1,5 +1,12 @@
-export { collectRegionMembers } from './collect-region-members.js';
-export { nodesLeadingToTerminals } from './nodes-leading-to-terminals.js';
-export { reachableNodeKeys } from './reachable-node-keys.js';
-export { topologicalSort } from './topological-sort.js';
-export { buildGraphAdjacency } from './build-graph-adjacency.js';
+export { buildGraphKernel } from './build-graph-kernel.js';
+export { collectBarrierRegionOwnership } from './collect-barrier-region-ownership.js';
+export { reachableNodeOffsets } from './reachable-node-offsets.js';
+export { reverseReachableNodeOffsets } from './reverse-reachable-node-offsets.js';
+export { topologicalOrder } from './topological-order.js';
+export type { BarrierRegionOwnership } from './barrier-region-ownership.js';
+export type { BarrierRegionQuery } from './barrier-region-query.js';
+export type { GraphKernelBuild } from './graph-kernel-build.js';
+export type { GraphKernelInput } from './graph-kernel-input.js';
+export type { GraphKernel } from './graph-kernel.js';
+export type { GraphOperationKind } from './graph-operation-kind.js';
+export type { GraphOperationSink } from './graph-operation-sink.js';

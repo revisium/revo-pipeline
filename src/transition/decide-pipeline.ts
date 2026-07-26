@@ -1,4 +1,5 @@
 import type { DecisionFault, DecisionFaultCode, PipelineDecision } from '../errors/index.js';
+import type { GraphKernel } from '../graph/index.js';
 import {
   compareUnicodeCodePoints,
   DECISION_FAULT_PHASES,
@@ -20,7 +21,7 @@ import type {
   PipelineNode,
   PipelineValueFact,
 } from '../spec/index.js';
-import { validateCompiledPipeline } from './validate-compiled-pipeline.js';
+import { validateCompiledInternally } from './validate-compiled-internally.js';
 
 type MutableFault = { code: DecisionFaultCode; path: string; message: string };
 type IndexedFact<T> = { readonly fact: T; readonly sourceIndex: number };
@@ -505,7 +506,11 @@ type EvaluationIndex = {
   readonly topologicalPosition: ReadonlyMap<string, number>;
 };
 
-const evaluationIndex = (pipeline: CompiledPipeline): EvaluationIndex => {
+const evaluationIndex = (
+  pipeline: CompiledPipeline,
+  kernel: GraphKernel,
+  topologicalOffsets: readonly number[],
+): EvaluationIndex => {
   const regionOwnerByNode = new Map<string, string>();
   pipeline.forkRegions.forEach((region) => {
     region.branches.forEach((branch) => {
@@ -520,8 +525,12 @@ const evaluationIndex = (pipeline: CompiledPipeline): EvaluationIndex => {
         node.kind === 'consensus' ? [[node.key, new Set(node.candidates)] as const] : [],
       ),
     ),
-    incomingByKey: new Map(pipeline.incomingIndex.map((entry) => [entry.key, entry.edges])),
-    outgoingByKey: new Map(pipeline.outgoingIndex.map((entry) => [entry.key, entry.edges])),
+    incomingByKey: new Map(
+      pipeline.nodes.map((node, offset) => [node.key, kernel.incomingEdgeOffsets[offset] ?? []]),
+    ),
+    outgoingByKey: new Map(
+      pipeline.nodes.map((node, offset) => [node.key, kernel.outgoingEdgeOffsets[offset] ?? []]),
+    ),
     regionByFork: new Map(pipeline.forkRegions.map((region) => [region.fork, region])),
     regionByJoin: new Map(pipeline.forkRegions.map((region) => [region.join, region])),
     regionOwnerByNode,
@@ -532,7 +541,12 @@ const evaluationIndex = (pipeline: CompiledPipeline): EvaluationIndex => {
           : [],
       ),
     ),
-    topologicalPosition: new Map(pipeline.topologicalOrder.map((key, position) => [key, position])),
+    topologicalPosition: new Map(
+      topologicalOffsets.flatMap((offset, position) => {
+        const key = kernel.nodeKeys[offset];
+        return key === undefined ? [] : [[key, position] as const];
+      }),
+    ),
   };
 };
 
@@ -926,13 +940,13 @@ export const decidePipeline = (
   pipelineInput: CompiledPipeline,
   factsInput: PipelineFacts,
 ): PipelineDecision => {
-  const compiled = validateCompiledPipeline(pipelineInput);
+  const compiled = validateCompiledInternally(pipelineInput);
   if (!compiled.ok) {
     return reject([
       { code: 'PIPELINE_INVALID', path: '', message: 'Compiled pipeline is invalid.' },
     ]);
   }
-  const index = evaluationIndex(compiled.pipeline);
+  const index = evaluationIndex(compiled.pipeline, compiled.kernel, compiled.topologicalOffsets);
   const faults: MutableFault[] = [];
   const facts = validateFactShape(factsInput, compiled.pipeline, index, faults);
   if (facts) {

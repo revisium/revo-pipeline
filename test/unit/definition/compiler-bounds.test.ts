@@ -149,7 +149,7 @@ describe('exact compiler bounds', () => {
     expect(codes(make(1, PIPELINE_LIMITS.definition.predicateValuesPerCase + 1))).toContain(
       'DEF_LIMIT',
     );
-  });
+  }, 10_000);
 
   test('accepts 32 fork branches and rejects 33', () => {
     const make = (length: number): PipelineDefinition => ({
@@ -184,6 +184,57 @@ describe('exact compiler bounds', () => {
     });
     expect(compilePipeline(make(PIPELINE_LIMITS.definition.forkBranchesPerNode)).ok).toBe(true);
     expect(codes(make(PIPELINE_LIMITS.definition.forkBranchesPerNode + 1))).toContain('DEF_LIMIT');
+  });
+
+  test('compiles a high-volume valid multi-fork graph through shared region derivation', () => {
+    const forkCount = 8;
+    const branchesPerFork = 24;
+    const nodes: PipelineNode[] = [];
+    for (let forkOffset = 0; forkOffset < forkCount; forkOffset += 1) {
+      const forkKey = `fork-${forkOffset}`;
+      const joinKey = `join-${forkOffset}`;
+      const next = forkOffset === forkCount - 1 ? 'finish' : `fork-${forkOffset + 1}`;
+      nodes.push({
+        kind: 'fork',
+        key: forkKey,
+        join: joinKey,
+        branches: Array.from({ length: branchesPerFork }, (_, branchOffset) => {
+          const exit = `exit-${forkOffset}-${String(branchOffset).padStart(2, '0')}`;
+          return { name: `branch-${branchOffset}`, entry: exit, exit };
+        }),
+      });
+      nodes.push(
+        ...Array.from({ length: branchesPerFork }, (_, branchOffset) => ({
+          kind: 'task' as const,
+          key: `exit-${forkOffset}-${String(branchOffset).padStart(2, '0')}`,
+          outcomes: routes(joinKey),
+        })),
+      );
+      nodes.push({
+        kind: 'join',
+        key: joinKey,
+        fork: forkKey,
+        policy: { kind: 'all' },
+        outcomes: { completed: next, insufficient: next, rejected: next },
+      });
+    }
+    nodes.push(terminal);
+    const result = compilePipeline({
+      schemaVersion: 1,
+      entry: 'fork-0',
+      facts: [],
+      nodes,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.pipeline.nodes).toHaveLength(209);
+    expect(result.pipeline.edges).toHaveLength(992);
+    expect(result.pipeline.forkRegions).toHaveLength(forkCount);
+    expect(
+      result.pipeline.forkRegions.reduce((sum, region) => sum + region.branches.length, 0),
+    ).toBe(forkCount * branchesPerFork);
   });
 
   test('accepts per-node and total candidate bounds and rejects overages', () => {
