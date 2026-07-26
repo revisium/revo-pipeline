@@ -73,9 +73,9 @@ test('limits Sonar exceptions to reviewed semantic and implementation cases', as
       ruleKey: properties.get(`sonar.issue.ignore.multicriteria.${criterion}.ruleKey`),
     })),
   ).toEqual([...acceptedCriteria.values()]);
-  expect(properties.get('sonar.exclusions')).toBe(undefined);
-  expect(properties.get('sonar.coverage.exclusions')).toBe(undefined);
-  expect(properties.get('sonar.cpd.exclusions')).toBe(undefined);
+  expect(properties.get('sonar.exclusions')).toBeUndefined();
+  expect(properties.get('sonar.coverage.exclusions')).toBeUndefined();
+  expect(properties.get('sonar.cpd.exclusions')).toBeUndefined();
   expect(properties.get('sonar.sources')).toBe('src');
   expect(properties.get('sonar.tests')).toBe('test');
   expect(properties.get('sonar.test.inclusions')).toBe('test/**/*.ts');

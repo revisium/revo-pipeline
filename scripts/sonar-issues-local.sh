@@ -36,12 +36,14 @@ elif [[ "${GITHUB_EVENT_NAME:-}" == pull_request* && -f "${GITHUB_EVENT_PATH:-}"
   pr_number="$(node -e "const fs = require('node:fs'); console.log(JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')).pull_request.number)")"
   scope_kind="pullRequest"
   scope_value="${pr_number}"
+elif [[ -n "${SONAR_BRANCH_NAME:-}" ]]; then
+  scope_value="${SONAR_BRANCH_NAME}"
 elif command -v gh >/dev/null 2>&1 && pr_json="$(gh pr view --json number 2>/dev/null)"; then
   pr_number="$(node -e "console.log(JSON.parse(process.argv[1]).number)" "$pr_json")"
   scope_kind="pullRequest"
   scope_value="${pr_number}"
 else
-  scope_value="${SONAR_BRANCH_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
+  scope_value="$(git rev-parse --abbrev-ref HEAD)"
 fi
 scope_args+=(--data-urlencode "${scope_kind}=${scope_value}")
 

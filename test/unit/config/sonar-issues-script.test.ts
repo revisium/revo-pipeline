@@ -22,6 +22,15 @@ else
 fi
 `;
 
+const GH_STUB = `#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "\${SONAR_STUB_GH_PR_NUMBER:-}" ]]; then
+  printf '{"number":%s}' "$SONAR_STUB_GH_PR_NUMBER"
+  exit 0
+fi
+exit 1
+`;
+
 let stubDirectory = '';
 let stubLog = '';
 
@@ -29,8 +38,11 @@ beforeEach(async () => {
   stubDirectory = await mkdtemp(join(tmpdir(), 'revo-pipeline-sonar-'));
   stubLog = join(stubDirectory, 'curl.log');
   const curlPath = join(stubDirectory, 'curl');
+  const ghPath = join(stubDirectory, 'gh');
   await writeFile(curlPath, CURL_STUB, 'utf8');
+  await writeFile(ghPath, GH_STUB, 'utf8');
   await chmod(curlPath, 0o755);
+  await chmod(ghPath, 0o755);
 });
 
 afterEach(async () => {
@@ -91,6 +103,7 @@ test('selects the exact PR key and accepts its commit revision', async () => {
 test('selects the exact branch and accepts its latest analysis revision', async () => {
   const result = runIssueCheck({
     SONAR_BRANCH_NAME: 'release/next',
+    SONAR_STUB_GH_PR_NUMBER: '8',
     SONAR_TOKEN: 'test-token',
   });
 
