@@ -69,7 +69,7 @@
     },
     "propertyEvaluator": {
       "path": "test/characterization/evaluate-properties.ts",
-      "sha256": "0b255f62769acedb3621d636c47f05620aabb672b575a628ad2e37656fed7438"
+      "sha256": "1fd0d2ad9b7308e6c5854a3cf4f9eca07ee6c8d427ea16267220d4d3a5c65c8b"
     }
   },
   "rootDigest": "29186644fb2b3b9bf1ccd1fc7ccb7805815b12232e5225886222ccf2e13bb08e"

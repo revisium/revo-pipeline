@@ -29,7 +29,7 @@ const isDefinitionLeaf = (path: string): boolean =>
 
 const isCompiledIntegrityLeaf = (path: string): boolean =>
   (path.startsWith('src/transition/compiled/') && path.endsWith('.ts')) ||
-  path === 'src/transition/validate-compiled-pipeline.ts';
+  path === 'src/transition/decode-compiled-pipeline.ts';
 const isTransitionLeaf = (path: string): boolean =>
   path.startsWith('src/transition/') && path.endsWith('.ts') && path !== 'src/transition/index.ts';
 

@@ -15,6 +15,7 @@ test('ships exactly the accepted explicit source and runtime root manifest', asy
   expect(Object.keys(packageRoot).sort()).toEqual([
     'compilePipeline',
     'decidePipeline',
+    'decodeCompiledPipeline',
     'definePipeline',
   ]);
 });

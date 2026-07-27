@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 
-import { compilePipeline, decidePipeline } from '../../src/index.js';
+import { compilePipeline, decidePipeline, decodeCompiledPipeline } from '../../src/index.js';
 import type { PipelineDefinition, PipelineFacts } from '../../src/index.js';
-import { validateCompiledPipeline } from '../../src/transition/index.js';
+const validateCompiledPipeline = (input: unknown) => {
+  const decoded = decodeCompiledPipeline(input);
+  return decoded.ok ? decoded : { ok: false as const };
+};
 
 type PropertyResult = { readonly id: string; readonly output: unknown };
 

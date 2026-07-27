@@ -11,7 +11,12 @@ import type {
   PipelineDefinition,
   PipelineFacts,
 } from '../../../src/spec/index.js';
-import { decidePipeline, validateCompiledPipeline } from '../../../src/transition/index.js';
+import { decidePipeline, decodeCompiledPipeline } from '../../../src/transition/index.js';
+
+const validateCompiledPipeline = (input: unknown) => {
+  const decoded = decodeCompiledPipeline(input);
+  return decoded.ok ? decoded : { ok: false as const };
+};
 
 const taskRoutes = (to: string) => ({
   cancelled: to,

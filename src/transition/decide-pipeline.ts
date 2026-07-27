@@ -1,6 +1,5 @@
 import type { PipelineDecision } from '../errors/index.js';
 import type { CompiledPipeline, PipelineFacts } from '../spec/index.js';
-import { validateCompiledInternally } from './compiled/validate-compiled-internally.js';
 import { buildDecisionContext } from './context/build-decision-context.js';
 import { findFirstAction } from './evaluation/find-first-action.js';
 import { findFirstWait } from './evaluation/find-first-wait.js';
@@ -8,12 +7,13 @@ import { findReachedTerminals } from './evaluation/find-reached-terminals.js';
 import { validateFactCausality } from './evaluation/validate-fact-causality.js';
 import { DecisionFaultCollector } from './facts/decision-fault-collector.js';
 import { validatePipelineFacts } from './facts/validate-pipeline-facts.js';
+import { inspectCompiledPipeline } from './inspect-compiled-pipeline.js';
 
 export const decidePipeline = (
   pipelineInput: CompiledPipeline,
   factsInput: PipelineFacts,
 ): PipelineDecision => {
-  const compiled = validateCompiledInternally(pipelineInput);
+  const compiled = inspectCompiledPipeline(pipelineInput);
   if (!compiled.ok) {
     const invalid = new DecisionFaultCollector();
     invalid.add('PIPELINE_INVALID', '', 'Compiled pipeline is invalid.');

@@ -6,9 +6,12 @@ import { resolve } from 'node:path';
 
 import { describe, expect, test, vi } from 'vitest';
 
-import { compilePipeline, decidePipeline } from '../../src/index.js';
+import { compilePipeline, decidePipeline, decodeCompiledPipeline } from '../../src/index.js';
 import type { PipelineDefinition, PipelineFacts } from '../../src/index.js';
-import { validateCompiledPipeline } from '../../src/transition/index.js';
+const validateCompiledPipeline = (input: unknown) => {
+  const decoded = decodeCompiledPipeline(input);
+  return decoded.ok ? decoded : { ok: false as const };
+};
 
 const linear = (): PipelineDefinition => ({
   schemaVersion: 1,

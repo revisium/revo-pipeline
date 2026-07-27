@@ -1,6 +1,7 @@
 import {
   compilePipeline,
   decidePipeline,
+  decodeCompiledPipeline,
   definePipeline,
   type ActivateDecision,
   type ActivationCause,
@@ -21,12 +22,15 @@ import {
   type CompiledNode,
   type CompiledNodeIndexEntry,
   type CompiledPipeline,
+  type CompiledPipelineDecoding,
   type ConsensusNode,
   type ConsensusOutcome,
   type ConsensusPolicy,
   type ConsensusRoutes,
   type DecisionFault,
   type DecisionFaultCode,
+  type DecodeFault,
+  type DecodeFaultCode,
   type DefinitionFault,
   type DefinitionFaultCode,
   type FactDefinition,
@@ -112,6 +116,9 @@ export type PublicTypeManifest = readonly [
   CompiledNodeIndexEntry,
   CompiledEdgeIndexEntry,
   CompiledPipeline,
+  CompiledPipelineDecoding,
+  DecodeFaultCode,
+  DecodeFault,
   DefinitionFaultCode,
   DefinitionFault,
   PipelineCompilation,
@@ -154,9 +161,12 @@ const definition = definePipeline({
 
 const literalEntry: 'approval' = definition.entry;
 const literalKind: 'humanGate' = definition.nodes[0].kind;
-const publicTypeCount: PublicTypeManifest['length'] = 63;
-const acceptedPublicTypeCount: 63 = publicTypeCount;
+const publicTypeCount: PublicTypeManifest['length'] = 66;
+const acceptedPublicTypeCount: 66 = publicTypeCount;
 const compilation: PipelineCompilation = compilePipeline(definition);
+const decoding: CompiledPipelineDecoding = decodeCompiledPipeline(
+  compilation.ok ? compilation.pipeline : undefined,
+);
 
 if (compilation.ok) {
   const facts: PipelineFacts = {
@@ -173,3 +183,4 @@ void literalEntry;
 void literalKind;
 void publicTypeCount;
 void acceptedPublicTypeCount;
+void decoding;

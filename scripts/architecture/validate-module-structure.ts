@@ -65,7 +65,7 @@ const rootExports = (
 
 const ROOT_EXPORTS: readonly RootExport[] = [
   ...rootExports('./definition/index.js', false, ['compilePipeline', 'definePipeline']),
-  ...rootExports('./transition/index.js', false, ['decidePipeline']),
+  ...rootExports('./transition/index.js', false, ['decidePipeline', 'decodeCompiledPipeline']),
   ...rootExports('./spec/index.js', true, [
     'ActivateDecision',
     'ActivationCause',
@@ -125,6 +125,9 @@ const ROOT_EXPORTS: readonly RootExport[] = [
     'WaitReason',
   ]),
   ...rootExports('./errors/index.js', true, [
+    'CompiledPipelineDecoding',
+    'DecodeFault',
+    'DecodeFaultCode',
     'DecisionFault',
     'DecisionFaultCode',
     'DefinitionFault',

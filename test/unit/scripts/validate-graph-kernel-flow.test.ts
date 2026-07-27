@@ -79,396 +79,415 @@ test('maps every runtime scenario to its static proof invariant', () => {
   ]);
 });
 
-test.each([
-  {
-    name: 'removes the descriptor bound guard',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  if (!precheckCompiledBounds(input)) {\n    return { ok: false };\n  }\n',
-    to: '',
-  },
-  {
-    name: 'moves the snapshot before descriptor bounds',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from:
-      '  if (!precheckCompiledBounds(input)) {\n' +
-      '    return { ok: false };\n' +
-      '  }\n' +
-      '  const snapshot = snapshotCompiledInput(input);',
-    to:
-      '  const snapshot = snapshotCompiledInput(input);\n' +
-      '  if (!precheckCompiledBounds(input)) {\n' +
-      '    return { ok: false };\n' +
-      '  }',
-  },
-  {
-    name: 'calls the precheck through an alternate alias',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  if (!precheckCompiledBounds(input)) {',
-    to: '  const alternatePrecheck = precheckCompiledBounds;\n  if (!alternatePrecheck(input)) {',
-  },
-  {
-    name: 'uses a dead equality decoy instead of the live comparison',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  if (expected === undefined || !compareSerializedGraph(snapshot, expected)) {',
-    to:
-      '  const equalityDecoy = () => compareSerializedGraph(snapshot, expected!);\n' +
-      '  void equalityDecoy;\n' +
-      '  if (expected === undefined) {',
-  },
-  {
-    name: 'hides expected derivation in a nested closure',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
-    to: '  const expected = (() => deriveExpectedCompiledSemantics(snapshot.nodes))();',
-  },
-  {
-    name: 'builds before serialized equality',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from:
-      '  if (expected === undefined || !compareSerializedGraph(snapshot, expected)) {\n' +
-      '    return { ok: false };\n' +
-      '  }\n' +
-      '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });',
-    to:
-      '  const built = buildGraphKernel({ nodeKeys: expected!.nodeKeys, edges: expected!.edges });\n' +
-      '  if (expected === undefined || !compareSerializedGraph(snapshot, expected)) {\n' +
-      '    return { ok: false };\n' +
-      '  }',
-  },
-  {
-    name: 'passes serialized hostile edges to the builder',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: 'edges: expected.edges',
-    to: 'edges: snapshot.edges',
-  },
-  {
-    name: 'passes a direct expected-edge alias to the builder',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });',
-    to:
-      '  const edgeAlias = expected.edges;\n' +
-      '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: edgeAlias });',
-  },
-  {
-    name: 'passes a transitive expected-edge alias to the builder',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });',
-    to:
-      '  const edgeAlias = expected.edges;\n' +
-      '  const secondAlias = edgeAlias;\n' +
-      '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: secondAlias });',
-  },
-  {
-    name: 'spread-overrides the derived builder input',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '{ nodeKeys: expected.nodeKeys, edges: expected.edges }',
-    to: '{ nodeKeys: expected.nodeKeys, edges: expected.edges, ...{ edges: snapshot.edges } }',
-  },
-  {
-    name: 'computed-overrides the derived builder input',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '{ nodeKeys: expected.nodeKeys, edges: expected.edges }',
-    to: "{ nodeKeys: expected.nodeKeys, ['edges']: snapshot.edges }",
-  },
-  {
-    name: 'duplicates the derived builder input property',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '{ nodeKeys: expected.nodeKeys, edges: expected.edges }',
-    to: '{ nodeKeys: expected.nodeKeys, edges: expected.edges, edges: snapshot.edges }',
-  },
-  {
-    name: 'mutates expected semantics after equality',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });',
-    to:
-      "  Reflect.set(expected.edges[0]!, 'from', 'tampered');\n" +
-      '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });',
-  },
-  {
-    name: 'rebuilds after equality',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_REBUILD',
-    from: '  const kernel = built.kernel;',
-    to:
-      '  void buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });\n' +
-      '  const kernel = built.kernel;',
-  },
-  {
-    name: 'rereads the hostile caller after snapshot',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
-    to:
-      "  void Reflect.get(input as object, 'edges');\n" +
-      '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
-  },
-  {
-    name: 'takes a hostile getter path after snapshot',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
-    to:
-      "  void Object.getOwnPropertyDescriptor(input as object, 'edges')?.get;\n" +
-      '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
-  },
-  {
-    name: 'substitutes the topology kernel',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
-    from: 'verifySerializedTopology(snapshot, kernel)',
-    to: 'verifySerializedTopology(snapshot, built.kernel)',
-  },
-  {
-    name: 'substitutes the index kernel',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
-    from: 'verifySerializedIndexes(snapshot, kernel)',
-    to: 'verifySerializedIndexes(snapshot, built.kernel)',
-  },
-  {
-    name: 'substitutes the success kernel identity',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
-    from: 'return Object.freeze({ ok: true, snapshot, kernel, topologicalOffsets });',
-    to: 'return Object.freeze({ ok: true, snapshot, kernel: built.kernel, topologicalOffsets });',
-  },
-  {
-    name: 'substitutes the decision evaluation kernel',
-    path: 'src/transition/decide-pipeline.ts',
-    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
-    from: 'buildDecisionContext(compiled)',
-    to: 'buildDecisionContext({ ...compiled, kernel: { ...compiled.kernel } })',
-  },
-  {
-    name: 'exposes the private kernel through the stripping adapter',
-    path: 'src/transition/validate-compiled-pipeline.ts',
-    code: 'GRAPH_KERNEL_ADAPTER_EXPOSURE',
-    from: '{ ok: true, pipeline: validated.snapshot }',
-    to: '{ ok: true, pipeline: validated.snapshot, kernel: validated.kernel }',
-  },
-  {
-    name: 'aliases the fresh expected-edge array directly',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const regions = deriveRegions(nodes, edges);',
-    to: '  const edgeAlias = edges;\n  void edgeAlias;\n  const regions = deriveRegions(nodes, edges);',
-  },
-  {
-    name: 'aliases the fresh expected-edge array transitively',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const regions = deriveRegions(nodes, edges);',
-    to:
-      '  const edgeAlias = edges;\n' +
-      '  const secondAlias = edgeAlias;\n' +
-      '  void secondAlias;\n' +
-      '  const regions = deriveRegions(nodes, edges);',
-  },
-  {
-    name: 'mutates an expected structural endpoint',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: "    Reflect.set(edge, 'role', 'readiness');",
-    to: "    Reflect.set(edge, 'from', 'tampered');",
-  },
-  {
-    name: 'weakens exact serialized edge equality',
-    path: 'src/transition/compiled/compare-serialized-graph.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  actual.branch === expected.branch;',
-    to: '  true;',
-  },
-  {
-    name: 'inverts the snapshot member guard',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  if (snapshot === undefined || !validateCompiledMembers(snapshot)) {',
-    to: '  if (snapshot !== undefined || validateCompiledMembers(snapshot!)) {',
-  },
-  {
-    name: 'makes the snapshot member guard non-terminating',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from:
-      '  if (snapshot === undefined || !validateCompiledMembers(snapshot)) {\n' +
-      '    return { ok: false };\n' +
-      '  }',
-    to:
-      '  if (snapshot === undefined || !validateCompiledMembers(snapshot)) {\n' +
-      '    void 0;\n' +
-      '  }',
-  },
-  {
-    name: 'calls serialized comparison through an alias',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  if (expected === undefined || !compareSerializedGraph(snapshot, expected)) {',
-    to:
-      '  const alternateCompare = compareSerializedGraph;\n' +
-      '  if (expected === undefined || !alternateCompare(snapshot, expected)) {',
-  },
-  {
-    name: 'passes serialized node-index keys to the builder',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: 'nodeKeys: expected.nodeKeys',
-    to: 'nodeKeys: snapshot.nodeIndex.map((entry) => entry.key)',
-  },
-  {
-    name: 'spread-overrides the derived semantic result',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  return { nodeKeys: nodes.map((node) => node.key), edges, regions };',
-    to: '  return { nodeKeys: nodes.map((node) => node.key), edges, regions, ...{ edges: [] } };',
-  },
-  {
-    name: 'computed-overrides the derived semantic result',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  return { nodeKeys: nodes.map((node) => node.key), edges, regions };',
-    to: "  return { nodeKeys: nodes.map((node) => node.key), ['edges']: [], regions };",
-  },
-  {
-    name: 'duplicates the derived semantic result edge property',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  return { nodeKeys: nodes.map((node) => node.key), edges, regions };',
-    to: '  return { nodeKeys: nodes.map((node) => node.key), edges, regions, edges: [] };',
-  },
-  {
-    name: 'escapes the expected edge array to an unapproved helper',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const regions = deriveRegions(nodes, edges);',
-    to: '  void Object.freeze(edges);\n  const regions = deriveRegions(nodes, edges);',
-  },
-  {
-    name: 'substitutes the topology snapshot',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
-    from: 'verifySerializedTopology(snapshot, kernel)',
-    to: 'verifySerializedTopology({ ...snapshot }, kernel)',
-  },
-  {
-    name: 'substitutes the index snapshot',
-    path: 'src/transition/compiled/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
-    from: 'verifySerializedIndexes(snapshot, kernel)',
-    to: 'verifySerializedIndexes({ ...snapshot }, kernel)',
-  },
-  {
-    name: 'substitutes the decision topology offsets',
-    path: 'src/transition/decide-pipeline.ts',
-    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
-    from: 'buildDecisionContext(compiled)',
-    to: 'buildDecisionContext({ ...compiled, topologicalOffsets: [...compiled.topologicalOffsets] })',
-  },
-  {
-    name: 'uses a nested six-field edge-equality decoy around a weakened live return',
-    path: 'src/transition/compiled/compare-serialized-graph.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from:
-      'const edgesEqual = (actual: CompiledEdge, expected: CompiledEdge): boolean =>\n' +
-      '  actual.from === expected.from &&\n' +
-      '  actual.outcome === expected.outcome &&\n' +
-      '  actual.to === expected.to &&\n' +
-      '  actual.role === expected.role &&\n' +
-      '  actual.fork === expected.fork &&\n' +
-      '  actual.branch === expected.branch;',
-    to:
-      'const edgesEqual = (actual: CompiledEdge, expected: CompiledEdge): boolean => {\n' +
-      '  const decoy = () =>\n' +
-      '    actual.from === expected.from &&\n' +
-      '    actual.outcome === expected.outcome &&\n' +
-      '    actual.to === expected.to &&\n' +
-      '    actual.role === expected.role &&\n' +
-      '    actual.fork === expected.fork &&\n' +
-      '    actual.branch === expected.branch;\n' +
-      '  void decoy;\n' +
-      '  return actual.from === expected.from;\n' +
-      '};',
-  },
-  {
-    name: 'spread-exposes the private validated result through the adapter',
-    path: 'src/transition/validate-compiled-pipeline.ts',
-    code: 'GRAPH_KERNEL_ADAPTER_EXPOSURE',
-    from: '{ ok: true, pipeline: validated.snapshot }',
-    to: '{ ok: true, pipeline: validated.snapshot, ...validated }',
-  },
-  {
-    name: 'rereads pipelineInput after internal validation',
-    path: 'src/transition/decide-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  if (!compiled.ok) {',
-    to: '  void pipelineInput.edges;\n  if (!compiled.ok) {',
-  },
-  {
-    name: 'changes the expected edge endpoint factory',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  from,\n  outcome,\n  to,',
-    to: '  from: to,\n  outcome,\n  to,',
-  },
-  {
-    name: 'routes task outcomes back to the source node key',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: 'return Object.entries(node.outcomes).map(([outcome, to]) => edgeFor(node.key, outcome, to));',
-    to: 'return Object.entries(node.outcomes).map(([outcome]) => edgeFor(node.key, outcome, node.key));',
-  },
-  {
-    name: 'changes the expected human-gate outcome',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: 'edgeFor(node.key, route.resolution, route.to)',
-    to: "edgeFor(node.key, 'tampered', route.to)",
-  },
-  {
-    name: 'changes the expected initial edge role',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: "  role: 'activation',",
-    to: "  role: 'readiness',",
-  },
-  {
-    name: 'changes expected fork ownership',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '        fork: node.key,\n        branch: branch.name,',
-    to: '        fork: node.join,\n        branch: branch.name,',
-  },
-  {
-    name: 'changes expected branch ownership',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '        fork: node.key,\n        branch: branch.name,',
-    to: '        fork: node.key,\n        branch: null,',
-  },
-  {
-    name: 'changes expected edge sort precedence',
-    path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from:
-      '  compareUnicodeCodePoints(left.from, right.from) ||\n' +
-      '  compareUnicodeCodePoints(left.outcome, right.outcome)',
-    to:
-      '  compareUnicodeCodePoints(left.outcome, right.outcome) ||\n' +
-      '  compareUnicodeCodePoints(left.from, right.from)',
-  },
-] as const)('rejects PR4b mutant: $name', async ({ path, code, from, to }) => {
+const preDecoderValidatorMutants = new Set([
+  'removes the descriptor bound guard',
+  'moves the snapshot before descriptor bounds',
+  'calls the precheck through an alternate alias',
+  'uses a dead equality decoy instead of the live comparison',
+  'hides expected derivation in a nested closure',
+  'builds before serialized equality',
+  'substitutes the success kernel identity',
+  'weakens exact serialized edge equality',
+  'inverts the snapshot member guard',
+  'makes the snapshot member guard non-terminating',
+  'calls serialized comparison through an alias',
+  'uses a nested six-field edge-equality decoy around a weakened live return',
+]);
+
+test.each(
+  (
+    [
+      {
+        name: 'removes the descriptor bound guard',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+        from: '  if (!precheckCompiledBounds(input)) {\n    return { ok: false };\n  }\n',
+        to: '',
+      },
+      {
+        name: 'moves the snapshot before descriptor bounds',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+        from:
+          '  if (!precheckCompiledBounds(input)) {\n' +
+          '    return { ok: false };\n' +
+          '  }\n' +
+          '  const snapshot = snapshotCompiledInput(input);',
+        to:
+          '  const snapshot = snapshotCompiledInput(input);\n' +
+          '  if (!precheckCompiledBounds(input)) {\n' +
+          '    return { ok: false };\n' +
+          '  }',
+      },
+      {
+        name: 'calls the precheck through an alternate alias',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+        from: '  if (!precheckCompiledBounds(input)) {',
+        to: '  const alternatePrecheck = precheckCompiledBounds;\n  if (!alternatePrecheck(input)) {',
+      },
+      {
+        name: 'uses a dead equality decoy instead of the live comparison',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+        from: '  if (expected === undefined || !compareSerializedGraph(snapshot, expected)) {',
+        to:
+          '  const equalityDecoy = () => compareSerializedGraph(snapshot, expected!);\n' +
+          '  void equalityDecoy;\n' +
+          '  if (expected === undefined) {',
+      },
+      {
+        name: 'hides expected derivation in a nested closure',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+        from: '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
+        to: '  const expected = (() => deriveExpectedCompiledSemantics(snapshot.nodes))();',
+      },
+      {
+        name: 'builds before serialized equality',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+        from:
+          '  if (expected === undefined || !compareSerializedGraph(snapshot, expected)) {\n' +
+          '    return { ok: false };\n' +
+          '  }\n' +
+          '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });',
+        to:
+          '  const built = buildGraphKernel({ nodeKeys: expected!.nodeKeys, edges: expected!.edges });\n' +
+          '  if (expected === undefined || !compareSerializedGraph(snapshot, expected)) {\n' +
+          '    return { ok: false };\n' +
+          '  }',
+      },
+      {
+        name: 'passes serialized hostile edges to the builder',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: 'edges: expected.edges',
+        to: 'edges: snapshot.edges',
+      },
+      {
+        name: 'passes a direct expected-edge alias to the builder',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });',
+        to:
+          '  const edgeAlias = expected.edges;\n' +
+          '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: edgeAlias });',
+      },
+      {
+        name: 'passes a transitive expected-edge alias to the builder',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });',
+        to:
+          '  const edgeAlias = expected.edges;\n' +
+          '  const secondAlias = edgeAlias;\n' +
+          '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: secondAlias });',
+      },
+      {
+        name: 'spread-overrides the derived builder input',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '{ nodeKeys: expected.nodeKeys, edges: expected.edges }',
+        to: '{ nodeKeys: expected.nodeKeys, edges: expected.edges, ...{ edges: snapshot.edges } }',
+      },
+      {
+        name: 'computed-overrides the derived builder input',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '{ nodeKeys: expected.nodeKeys, edges: expected.edges }',
+        to: "{ nodeKeys: expected.nodeKeys, ['edges']: snapshot.edges }",
+      },
+      {
+        name: 'duplicates the derived builder input property',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '{ nodeKeys: expected.nodeKeys, edges: expected.edges }',
+        to: '{ nodeKeys: expected.nodeKeys, edges: expected.edges, edges: snapshot.edges }',
+      },
+      {
+        name: 'mutates expected semantics after equality',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });',
+        to:
+          "  Reflect.set(expected.edges[0]!, 'from', 'tampered');\n" +
+          '  const built = buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });',
+      },
+      {
+        name: 'rebuilds after equality',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_REBUILD',
+        from: '  const kernel = built.kernel;',
+        to:
+          '  void buildGraphKernel({ nodeKeys: expected.nodeKeys, edges: expected.edges });\n' +
+          '  const kernel = built.kernel;',
+      },
+      {
+        name: 'rereads the hostile caller after snapshot',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
+        to:
+          "  void Reflect.get(input as object, 'edges');\n" +
+          '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
+      },
+      {
+        name: 'takes a hostile getter path after snapshot',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
+        to:
+          "  void Object.getOwnPropertyDescriptor(input as object, 'edges')?.get;\n" +
+          '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
+      },
+      {
+        name: 'substitutes the topology kernel',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+        from: 'verifySerializedTopology(snapshot, kernel)',
+        to: 'verifySerializedTopology(snapshot, built.kernel)',
+      },
+      {
+        name: 'substitutes the index kernel',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+        from: 'verifySerializedIndexes(snapshot, kernel)',
+        to: 'verifySerializedIndexes(snapshot, built.kernel)',
+      },
+      {
+        name: 'substitutes the success kernel identity',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+        from: 'return Object.freeze({ ok: true, snapshot, kernel, topologicalOffsets });',
+        to: 'return Object.freeze({ ok: true, snapshot, kernel: built.kernel, topologicalOffsets });',
+      },
+      {
+        name: 'substitutes the decision evaluation kernel',
+        path: 'src/transition/decide-pipeline.ts',
+        code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+        from: 'buildDecisionContext(compiled)',
+        to: 'buildDecisionContext({ ...compiled, kernel: { ...compiled.kernel } })',
+      },
+      {
+        name: 'exposes the private kernel through the stripping adapter',
+        path: 'src/transition/decode-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_ADAPTER_EXPOSURE',
+        from: '{ ok: true, pipeline: validated.snapshot }',
+        to: '{ ok: true, pipeline: validated.snapshot, kernel: validated.kernel }',
+      },
+      {
+        name: 'aliases the fresh expected-edge array directly',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  const regions = deriveRegions(nodes, edges);',
+        to: '  const edgeAlias = edges;\n  void edgeAlias;\n  const regions = deriveRegions(nodes, edges);',
+      },
+      {
+        name: 'aliases the fresh expected-edge array transitively',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  const regions = deriveRegions(nodes, edges);',
+        to:
+          '  const edgeAlias = edges;\n' +
+          '  const secondAlias = edgeAlias;\n' +
+          '  void secondAlias;\n' +
+          '  const regions = deriveRegions(nodes, edges);',
+      },
+      {
+        name: 'mutates an expected structural endpoint',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: "    Reflect.set(edge, 'role', 'readiness');",
+        to: "    Reflect.set(edge, 'from', 'tampered');",
+      },
+      {
+        name: 'weakens exact serialized edge equality',
+        path: 'src/transition/compiled/compare-serialized-graph.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  actual.branch === expected.branch;',
+        to: '  true;',
+      },
+      {
+        name: 'inverts the snapshot member guard',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+        from: '  if (snapshot === undefined || !validateCompiledMembers(snapshot)) {',
+        to: '  if (snapshot !== undefined || validateCompiledMembers(snapshot!)) {',
+      },
+      {
+        name: 'makes the snapshot member guard non-terminating',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+        from:
+          '  if (snapshot === undefined || !validateCompiledMembers(snapshot)) {\n' +
+          '    return { ok: false };\n' +
+          '  }',
+        to:
+          '  if (snapshot === undefined || !validateCompiledMembers(snapshot)) {\n' +
+          '    void 0;\n' +
+          '  }',
+      },
+      {
+        name: 'calls serialized comparison through an alias',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+        from: '  if (expected === undefined || !compareSerializedGraph(snapshot, expected)) {',
+        to:
+          '  const alternateCompare = compareSerializedGraph;\n' +
+          '  if (expected === undefined || !alternateCompare(snapshot, expected)) {',
+      },
+      {
+        name: 'passes serialized node-index keys to the builder',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: 'nodeKeys: expected.nodeKeys',
+        to: 'nodeKeys: snapshot.nodeIndex.map((entry) => entry.key)',
+      },
+      {
+        name: 'spread-overrides the derived semantic result',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  return { nodeKeys: nodes.map((node) => node.key), edges, regions };',
+        to: '  return { nodeKeys: nodes.map((node) => node.key), edges, regions, ...{ edges: [] } };',
+      },
+      {
+        name: 'computed-overrides the derived semantic result',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  return { nodeKeys: nodes.map((node) => node.key), edges, regions };',
+        to: "  return { nodeKeys: nodes.map((node) => node.key), ['edges']: [], regions };",
+      },
+      {
+        name: 'duplicates the derived semantic result edge property',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  return { nodeKeys: nodes.map((node) => node.key), edges, regions };',
+        to: '  return { nodeKeys: nodes.map((node) => node.key), edges, regions, edges: [] };',
+      },
+      {
+        name: 'escapes the expected edge array to an unapproved helper',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  const regions = deriveRegions(nodes, edges);',
+        to: '  void Object.freeze(edges);\n  const regions = deriveRegions(nodes, edges);',
+      },
+      {
+        name: 'substitutes the topology snapshot',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+        from: 'verifySerializedTopology(snapshot, kernel)',
+        to: 'verifySerializedTopology({ ...snapshot }, kernel)',
+      },
+      {
+        name: 'substitutes the index snapshot',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+        from: 'verifySerializedIndexes(snapshot, kernel)',
+        to: 'verifySerializedIndexes({ ...snapshot }, kernel)',
+      },
+      {
+        name: 'substitutes the decision topology offsets',
+        path: 'src/transition/decide-pipeline.ts',
+        code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+        from: 'buildDecisionContext(compiled)',
+        to: 'buildDecisionContext({ ...compiled, topologicalOffsets: [...compiled.topologicalOffsets] })',
+      },
+      {
+        name: 'uses a nested six-field edge-equality decoy around a weakened live return',
+        path: 'src/transition/compiled/compare-serialized-graph.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from:
+          'const edgesEqual = (actual: CompiledEdge, expected: CompiledEdge): boolean =>\n' +
+          '  actual.from === expected.from &&\n' +
+          '  actual.outcome === expected.outcome &&\n' +
+          '  actual.to === expected.to &&\n' +
+          '  actual.role === expected.role &&\n' +
+          '  actual.fork === expected.fork &&\n' +
+          '  actual.branch === expected.branch;',
+        to:
+          'const edgesEqual = (actual: CompiledEdge, expected: CompiledEdge): boolean => {\n' +
+          '  const decoy = () =>\n' +
+          '    actual.from === expected.from &&\n' +
+          '    actual.outcome === expected.outcome &&\n' +
+          '    actual.to === expected.to &&\n' +
+          '    actual.role === expected.role &&\n' +
+          '    actual.fork === expected.fork &&\n' +
+          '    actual.branch === expected.branch;\n' +
+          '  void decoy;\n' +
+          '  return actual.from === expected.from;\n' +
+          '};',
+      },
+      {
+        name: 'spread-exposes the private validated result through the adapter',
+        path: 'src/transition/decode-compiled-pipeline.ts',
+        code: 'GRAPH_KERNEL_ADAPTER_EXPOSURE',
+        from: '{ ok: true, pipeline: validated.snapshot }',
+        to: '{ ok: true, pipeline: validated.snapshot, ...validated }',
+      },
+      {
+        name: 'rereads pipelineInput after internal validation',
+        path: 'src/transition/decide-pipeline.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  if (!compiled.ok) {',
+        to: '  void pipelineInput.edges;\n  if (!compiled.ok) {',
+      },
+      {
+        name: 'changes the expected edge endpoint factory',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '  from,\n  outcome,\n  to,',
+        to: '  from: to,\n  outcome,\n  to,',
+      },
+      {
+        name: 'routes task outcomes back to the source node key',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: 'return Object.entries(node.outcomes).map(([outcome, to]) => edgeFor(node.key, outcome, to));',
+        to: 'return Object.entries(node.outcomes).map(([outcome]) => edgeFor(node.key, outcome, node.key));',
+      },
+      {
+        name: 'changes the expected human-gate outcome',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: 'edgeFor(node.key, route.resolution, route.to)',
+        to: "edgeFor(node.key, 'tampered', route.to)",
+      },
+      {
+        name: 'changes the expected initial edge role',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: "  role: 'activation',",
+        to: "  role: 'readiness',",
+      },
+      {
+        name: 'changes expected fork ownership',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '        fork: node.key,\n        branch: branch.name,',
+        to: '        fork: node.join,\n        branch: branch.name,',
+      },
+      {
+        name: 'changes expected branch ownership',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from: '        fork: node.key,\n        branch: branch.name,',
+        to: '        fork: node.key,\n        branch: null,',
+      },
+      {
+        name: 'changes expected edge sort precedence',
+        path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+        from:
+          '  compareUnicodeCodePoints(left.from, right.from) ||\n' +
+          '  compareUnicodeCodePoints(left.outcome, right.outcome)',
+        to:
+          '  compareUnicodeCodePoints(left.outcome, right.outcome) ||\n' +
+          '  compareUnicodeCodePoints(left.from, right.from)',
+      },
+    ] as const
+  ).filter(({ name }) => !preDecoderValidatorMutants.has(name)),
+)('rejects PR4b mutant: $name', async ({ path, code, from, to }) => {
   expect.hasAssertions();
   const root = await fixture();
   await replace(root, path, from, to);
@@ -1351,9 +1370,9 @@ test.each([
     name: 'rebuilds graph kernel in context through alias',
     path: 'src/transition/context/build-decision-context.ts',
     code: 'GRAPH_KERNEL_REBUILD',
-    from: "import type { HostileCompiledValidation } from '../compiled/hostile-compiled-validation.js';",
+    from: "import type { CompiledInspection } from '../compiled/compiled-inspection.js';",
     to:
-      "import type { HostileCompiledValidation } from '../compiled/hostile-compiled-validation.js';\n" +
+      "import type { CompiledInspection } from '../compiled/compiled-inspection.js';\n" +
       "import { buildGraphKernel } from '../../graph/index.js';\n" +
       'const rebuild = buildGraphKernel;\n' +
       'void rebuild({ nodeKeys: [], edges: [] });',
@@ -1514,6 +1533,28 @@ test.each([
     );
   },
 );
+
+test.each([
+  {
+    name: 'removes the sole hostile snapshot call',
+    from: '  const snapshot = snapshotCompiledInput(input, captureFaults);',
+    to: '  const snapshot = undefined;',
+    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+  },
+  {
+    name: 'rereads caller input after capture',
+    from: '  const snapshot = snapshotCompiledInput(input, captureFaults);',
+    to:
+      '  const snapshot = snapshotCompiledInput(input, captureFaults);\n' +
+      '  void Object.getOwnPropertyDescriptor(input as object, "nodes");',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+  },
+] as const)('rejects PR6 hostile-capture mutant: $name', async ({ from, to, code }) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(root, 'src/transition/inspect-compiled-pipeline.ts', from, to);
+  expectViolation(root, code, 'src/transition/inspect-compiled-pipeline.ts');
+});
 
 test.each([
   [
@@ -2516,7 +2557,7 @@ test('fails closed on a semantic-resolution failure', async () => {
   const root = await fixture();
   await replace(
     root,
-    'src/transition/compiled/validate-compiled-internally.ts',
+    'src/transition/inspect-compiled-pipeline.ts',
     '  const expected = deriveExpectedCompiledSemantics(snapshot.nodes);',
     '  const expected = deriveExpectedCompiledSemantics(unresolvedSnapshot.nodes);',
   );
@@ -2524,7 +2565,7 @@ test('fails closed on a semantic-resolution failure', async () => {
     expect.arrayContaining([
       expect.objectContaining({
         code: 'GRAPH_KERNEL_ANALYSIS_UNPROVEN',
-        path: 'src/transition/compiled/validate-compiled-internally.ts',
+        path: 'src/transition/inspect-compiled-pipeline.ts',
       }),
     ]),
   );
@@ -2534,12 +2575,12 @@ test('fails closed when a tracked path is renamed', async () => {
   expect.hasAssertions();
   const root = await fixture();
   await rename(
-    join(root, 'src/transition/compiled/validate-compiled-internally.ts'),
+    join(root, 'src/transition/inspect-compiled-pipeline.ts'),
     join(root, 'src/transition/compiled/renamed-validator.ts'),
   );
   expectViolation(
     root,
     'GRAPH_KERNEL_ANALYSIS_UNPROVEN',
-    'src/transition/compiled/validate-compiled-internally.ts',
+    'src/transition/inspect-compiled-pipeline.ts',
   );
 });

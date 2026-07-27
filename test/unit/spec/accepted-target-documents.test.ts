@@ -68,7 +68,7 @@ describe('Accepted decoder and reducer target', () => {
   test('indexes accepted, explicitly unimplemented contracts and their ADR', () => {
     expect(index).toContain('[Pipeline decoding v1](./pipeline-decoding-v1.spec.md)');
     expect(index).toContain('[Pipeline reducer v1](./pipeline-reducer-v1.spec.md)');
-    expect(index).toContain('Accepted targets for\nPR6 and PR7');
+    expect(index).toContain('Reduction remains the Accepted target for PR7');
     for (const document of [decoder, reducer, adr]) {
       expect(document).toContain('- Status: Accepted');
     }

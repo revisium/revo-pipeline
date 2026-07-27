@@ -1,7 +1,7 @@
-import type { HostileCompiledValidation } from '../compiled/hostile-compiled-validation.js';
+import type { CompiledInspection } from '../compiled/compiled-inspection.js';
 import type { DecisionContext } from './decision-context.js';
 
-type SuccessfulCompiledValidation = Extract<HostileCompiledValidation, { readonly ok: true }>;
+type SuccessfulCompiledValidation = Extract<CompiledInspection, { readonly ok: true }>;
 
 export const buildDecisionContext = (compiled: SuccessfulCompiledValidation): DecisionContext => {
   const { snapshot, kernel, topologicalOffsets } = compiled;

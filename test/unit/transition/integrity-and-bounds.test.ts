@@ -13,7 +13,12 @@ import type {
   PipelineDefinition,
   PipelineFacts,
 } from '../../../src/spec/index.js';
-import { decidePipeline, validateCompiledPipeline } from '../../../src/transition/index.js';
+import { decidePipeline, decodeCompiledPipeline } from '../../../src/transition/index.js';
+
+const validateCompiledPipeline = (input: unknown) => {
+  const decoded = decodeCompiledPipeline(input);
+  return decoded.ok ? decoded : { ok: false as const };
+};
 
 const compile = (definition: PipelineDefinition): CompiledPipeline => {
   const result = compilePipeline(definition);
@@ -530,7 +535,7 @@ describe('compiled integrity', () => {
     Reflect.set(pipeline.nodes, branchIndex, statefulBranch);
 
     expect(validateCompiledPipeline(pipeline)).toEqual({ ok: false });
-    expect(descriptorOrder).toEqual(['cases', 'branches', 'candidates', 'resolutions']);
+    expect(descriptorOrder).toEqual(['cases', 'default', 'fact', 'key', 'kind']);
     expect(descendantReads).toBe(0);
   });
 });

@@ -55,7 +55,7 @@ test('derives the complete PR4b integrity scope without decide or a grandfather 
   const modules: readonly MetricSource[] = [
     { path: 'src/transition/compiled/a.ts', source: 'export {};\n' },
     { path: 'src/transition/compiled/nested/b.ts', source: 'export {};\n' },
-    { path: 'src/transition/validate-compiled-pipeline.ts', source: 'export {};\n' },
+    { path: 'src/transition/decode-compiled-pipeline.ts', source: 'export {};\n' },
     { path: 'src/transition/decide-pipeline.ts', source: 'export {};\n' },
     { path: 'src/transition/index.ts', source: 'export {};\n' },
     sourceWithLines(['void 0;']),
@@ -64,7 +64,7 @@ test('derives the complete PR4b integrity scope without decide or a grandfather 
   expect(sourceMetricScope(modules, 'PR4b')).toEqual([
     'src/transition/compiled/a.ts',
     'src/transition/compiled/nested/b.ts',
-    'src/transition/validate-compiled-pipeline.ts',
+    'src/transition/decode-compiled-pipeline.ts',
   ]);
   expect(
     sourceMetricScope(
@@ -81,7 +81,7 @@ test('derives the complete PR4c scope from every transition production leaf', ()
     { path: 'src/transition/evaluation/nested/a.ts', source: 'export {};\n' },
     { path: 'src/transition/facts/a.ts', source: 'export {};\n' },
     { path: 'src/transition/decide-pipeline.ts', source: 'export {};\n' },
-    { path: 'src/transition/validate-compiled-pipeline.ts', source: 'export {};\n' },
+    { path: 'src/transition/decode-compiled-pipeline.ts', source: 'export {};\n' },
     { path: 'src/transition/index.ts', source: 'export {};\n' },
     sourceWithLines(['void 0;']),
   ];
@@ -89,9 +89,9 @@ test('derives the complete PR4c scope from every transition production leaf', ()
     'src/transition/compiled/a.ts',
     'src/transition/context/a.ts',
     'src/transition/decide-pipeline.ts',
+    'src/transition/decode-compiled-pipeline.ts',
     'src/transition/evaluation/nested/a.ts',
     'src/transition/facts/a.ts',
-    'src/transition/validate-compiled-pipeline.ts',
   ]);
   expect(
     sourceMetricScope(

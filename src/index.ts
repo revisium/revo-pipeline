@@ -1,5 +1,5 @@
 export { compilePipeline, definePipeline } from './definition/index.js';
-export { decidePipeline } from './transition/index.js';
+export { decidePipeline, decodeCompiledPipeline } from './transition/index.js';
 export type {
   ActivateDecision,
   ActivationCause,
@@ -59,6 +59,9 @@ export type {
   WaitReason,
 } from './spec/index.js';
 export type {
+  CompiledPipelineDecoding,
+  DecodeFault,
+  DecodeFaultCode,
   DecisionFault,
   DecisionFaultCode,
   DefinitionFault,
