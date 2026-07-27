@@ -4,6 +4,35 @@ import type { ValidatedFacts } from '../facts/validated-facts.js';
 import type { Selection } from './selection.js';
 
 type JoinOutcome = 'completed' | 'insufficient' | 'rejected';
+
+const allOutcome = (
+  accepted: number,
+  pending: number,
+  rejected: boolean,
+): JoinOutcome | undefined => {
+  if (rejected) {
+    return 'rejected';
+  }
+  if (pending > 0) {
+    return undefined;
+  }
+  return accepted > 0 ? 'completed' : 'insufficient';
+};
+
+const anyOutcome = (
+  accepted: number,
+  pending: number,
+  rejected: boolean,
+): JoinOutcome | undefined => {
+  if (accepted > 0) {
+    return 'completed';
+  }
+  if (pending > 0) {
+    return undefined;
+  }
+  return rejected ? 'rejected' : 'insufficient';
+};
+
 const outcomeFor = (
   policy: Extract<PipelineNode, { readonly kind: 'join' }>['policy'],
   accepted: number,
@@ -11,22 +40,10 @@ const outcomeFor = (
   rejected: boolean,
 ): JoinOutcome | undefined => {
   if (policy.kind === 'all') {
-    if (rejected) {
-      return 'rejected';
-    }
-    if (pending > 0) {
-      return undefined;
-    }
-    return accepted > 0 ? 'completed' : 'insufficient';
+    return allOutcome(accepted, pending, rejected);
   }
   if (policy.kind === 'any') {
-    if (accepted > 0) {
-      return 'completed';
-    }
-    if (pending > 0) {
-      return undefined;
-    }
-    return rejected ? 'rejected' : 'insufficient';
+    return anyOutcome(accepted, pending, rejected);
   }
   if (accepted >= policy.count) {
     return 'completed';
@@ -60,7 +77,7 @@ export const selectJoin = (
     node.policy,
     statuses.filter((status) => status === 'accepted').length,
     statuses.filter((status) => status === 'pending').length,
-    statuses.some((status) => status === 'rejected'),
+    statuses.includes('rejected'),
   );
   return outcome ? { outcome, targets: [node.outcomes[outcome]] } : undefined;
 };

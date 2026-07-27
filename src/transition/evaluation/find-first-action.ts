@@ -27,12 +27,13 @@ export const findFirstAction = (
         };
       }
     }
-    if (node && node.kind !== 'task' && node.kind !== 'terminal' && fact?.state === 'enabled') {
-      const selection = selectNode(node, facts, context);
-      const activate = selection?.targets.filter((target) => !byNode.has(target)) ?? [];
-      if (selection && activate.length > 0) {
-        return { kind: 'select', nodeKey: key, outcome: selection.outcome, activate };
-      }
+    if (!node || node.kind === 'task' || node.kind === 'terminal' || fact?.state !== 'enabled') {
+      continue;
+    }
+    const selection = selectNode(node, facts, context);
+    const activate = selection?.targets.filter((target) => !byNode.has(target)) ?? [];
+    if (selection && activate.length > 0) {
+      return { kind: 'select', nodeKey: key, outcome: selection.outcome, activate };
     }
   }
   return undefined;

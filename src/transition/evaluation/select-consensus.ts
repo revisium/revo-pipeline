@@ -4,6 +4,40 @@ import type { ValidatedFacts } from '../facts/validated-facts.js';
 import type { Selection } from './selection.js';
 
 type ConsensusOutcome = 'approved' | 'insufficient' | 'rejected' | 'tied';
+
+const unanimousOutcome = (
+  candidateCount: number,
+  approvals: number,
+  rejections: number,
+  remaining: number,
+): ConsensusOutcome | undefined => {
+  if (rejections > 0) {
+    return 'rejected';
+  }
+  if (remaining > 0) {
+    return undefined;
+  }
+  return approvals === candidateCount ? 'approved' : 'insufficient';
+};
+
+const quorumOutcome = (
+  quorum: number,
+  approvals: number,
+  rejections: number,
+  remaining: number,
+): ConsensusOutcome | undefined => {
+  if (remaining > 0) {
+    return undefined;
+  }
+  if (approvals + rejections < quorum) {
+    return 'insufficient';
+  }
+  if (approvals > rejections) {
+    return 'approved';
+  }
+  return rejections > approvals ? 'rejected' : 'tied';
+};
+
 const outcomeFor = (
   node: Extract<PipelineNode, { readonly kind: 'consensus' }>,
   approvals: number,
@@ -11,26 +45,10 @@ const outcomeFor = (
   remaining: number,
 ): ConsensusOutcome | undefined => {
   if (node.policy.kind === 'unanimous') {
-    if (rejections > 0) {
-      return 'rejected';
-    }
-    if (remaining > 0) {
-      return undefined;
-    }
-    return approvals === node.candidates.length ? 'approved' : 'insufficient';
+    return unanimousOutcome(node.candidates.length, approvals, rejections, remaining);
   }
   if (node.policy.kind === 'quorum') {
-    if (remaining > 0) {
-      return undefined;
-    }
-    const votes = approvals + rejections;
-    if (votes < node.policy.quorum) {
-      return 'insufficient';
-    }
-    if (approvals > rejections) {
-      return 'approved';
-    }
-    return rejections > approvals ? 'rejected' : 'tied';
+    return quorumOutcome(node.policy.quorum, approvals, rejections, remaining);
   }
   if (approvals >= node.policy.approve) {
     return 'approved';

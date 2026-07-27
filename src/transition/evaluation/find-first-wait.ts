@@ -3,6 +3,8 @@ import type { DecisionContext } from '../context/decision-context.js';
 import type { ValidatedFacts } from '../facts/validated-facts.js';
 import { selectNode } from './select-node.js';
 
+type WaitReason = Extract<PipelineDecision, { readonly kind: 'wait' }>['reason'];
+
 export const findFirstWait = (
   facts: ValidatedFacts,
   context: DecisionContext,
@@ -13,20 +15,35 @@ export const findFirstWait = (
     if (fact?.state !== 'enabled') {
       continue;
     }
-    if (node?.kind === 'task') {
-      return { kind: 'wait', nodeKey: key, reason: 'task-incomplete' };
+    let reason: WaitReason | undefined;
+    let selection: ReturnType<typeof selectNode> = undefined;
+    switch (node?.kind) {
+      case 'task':
+        return { kind: 'wait', nodeKey: key, reason: 'task-incomplete' };
+      case 'branch':
+        if (!facts.valueByKey.has(node.fact)) {
+          return { kind: 'wait', nodeKey: key, reason: 'branch-fact-missing' };
+        }
+        break;
+      case 'join':
+        selection = selectNode(node, facts, context);
+        reason = 'join-incomplete';
+        break;
+      case 'consensus':
+        selection = selectNode(node, facts, context);
+        reason = 'consensus-incomplete';
+        break;
+      case 'humanGate':
+        selection = selectNode(node, facts, context);
+        reason = 'gate-unresolved';
+        break;
+      case 'fork':
+      case 'terminal':
+      case undefined:
+        break;
     }
-    if (node?.kind === 'branch' && !facts.valueByKey.has(node.fact)) {
-      return { kind: 'wait', nodeKey: key, reason: 'branch-fact-missing' };
-    }
-    if (node?.kind === 'join' && !selectNode(node, facts, context)) {
-      return { kind: 'wait', nodeKey: key, reason: 'join-incomplete' };
-    }
-    if (node?.kind === 'consensus' && !selectNode(node, facts, context)) {
-      return { kind: 'wait', nodeKey: key, reason: 'consensus-incomplete' };
-    }
-    if (node?.kind === 'humanGate' && !selectNode(node, facts, context)) {
-      return { kind: 'wait', nodeKey: key, reason: 'gate-unresolved' };
+    if (reason && !selection) {
+      return { kind: 'wait', nodeKey: key, reason };
     }
   }
   return undefined;

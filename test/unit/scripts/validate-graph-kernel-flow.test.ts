@@ -1075,10 +1075,8 @@ test.each([
     name: 'calls selectNode through a direct alias',
     path: 'src/transition/evaluation/find-first-action.ts',
     code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '      const selection = selectNode(node, facts, context);',
-    to:
-      '      const choose = selectNode;\n' +
-      '      const selection = choose(node, facts, context);',
+    from: '    const selection = selectNode(node, facts, context);',
+    to: '    const choose = selectNode;\n    const selection = choose(node, facts, context);',
   },
   {
     name: 'hides a second context build in a dead nested decoy',
@@ -1571,17 +1569,68 @@ test.each([
   );
 });
 
-test('rejects PR4c per-iteration destructured reconstruction', async () => {
+test.each([
+  {
+    name: 'per-iteration destructured reconstruction',
+    replacement:
+      '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const { compiled: { snapshot: { nodes } } } = context;\n' +
+      '    const rebuilt = nodes.reduce((index, node) => index.set(node.key, node), new Map());\n' +
+      '    void rebuilt;',
+  },
+  {
+    name: 'per-iteration callback-return provenance',
+    replacement:
+      '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const snapshotFactory = () => context.compiled.snapshot;\n' +
+      '    const snapshotAlias = snapshotFactory();\n' +
+      '    void snapshotAlias;',
+  },
+  {
+    name: 'per-iteration container laundering',
+    replacement:
+      '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const identity = <T>(value: T): T => value;\n' +
+      '    const leaked = new Map([["snapshot", identity(context.compiled.snapshot)]]);\n' +
+      '    void leaked;',
+  },
+  {
+    name: 'per-iteration nested logical provenance',
+    replacement:
+      '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const leaked = true ? (false || context.compiled.snapshot) : facts.nodeByKey;\n' +
+      '    void leaked;',
+  },
+  {
+    name: 'per-iteration class carrier',
+    replacement:
+      '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    class Carrier { readonly payload = { snapshot: context.compiled.snapshot }; }\n' +
+      '    void new Carrier();',
+  },
+  {
+    name: 'per-iteration map reconstruction',
+    replacement:
+      '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const mapAlias = facts.nodeByKey;\n' +
+      '    const rebuilt = new Map(mapAlias.entries());\n' +
+      '    void rebuilt;',
+  },
+  {
+    name: 'per-iteration class map-value accumulator',
+    replacement:
+      '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    class Carrier { readonly value = context.nodeByKey.get(key); }\n' +
+      '    void new Carrier();',
+  },
+] as const)('rejects PR4c $name', async ({ replacement }) => {
   expect.hasAssertions();
   const root = await fixture();
   await replace(
     root,
     'src/transition/evaluation/find-first-action.ts',
     '  for (const key of pipeline.topologicalOrder) {',
-    '  for (const key of pipeline.topologicalOrder) {\n' +
-      '    const { compiled: { snapshot: { nodes } } } = context;\n' +
-      '    const rebuilt = nodes.reduce((index, node) => index.set(node.key, node), new Map());\n' +
-      '    void rebuilt;',
+    replacement,
   );
   expectViolation(
     root,
@@ -1645,25 +1694,6 @@ test.each([
     'src/transition/evaluation/find-first-action.ts',
     '  const pipeline = context.compiled.snapshot;',
     to,
-  );
-  expectViolation(
-    root,
-    'GRAPH_KERNEL_INPUT_PROVENANCE',
-    'src/transition/evaluation/find-first-action.ts',
-  );
-});
-
-test('rejects PR4c per-iteration callback-return provenance', async () => {
-  expect.hasAssertions();
-  const root = await fixture();
-  await replace(
-    root,
-    'src/transition/evaluation/find-first-action.ts',
-    '  for (const key of pipeline.topologicalOrder) {',
-    '  for (const key of pipeline.topologicalOrder) {\n' +
-      '    const snapshotFactory = () => context.compiled.snapshot;\n' +
-      '    const snapshotAlias = snapshotFactory();\n' +
-      '    void snapshotAlias;',
   );
   expectViolation(
     root,
@@ -1742,25 +1772,6 @@ test.each([
   );
 });
 
-test('rejects PR4c per-iteration container laundering', async () => {
-  expect.hasAssertions();
-  const root = await fixture();
-  await replace(
-    root,
-    'src/transition/evaluation/find-first-action.ts',
-    '  for (const key of pipeline.topologicalOrder) {',
-    '  for (const key of pipeline.topologicalOrder) {\n' +
-      '    const identity = <T>(value: T): T => value;\n' +
-      '    const leaked = new Map([["snapshot", identity(context.compiled.snapshot)]]);\n' +
-      '    void leaked;',
-  );
-  expectViolation(
-    root,
-    'GRAPH_KERNEL_INPUT_PROVENANCE',
-    'src/transition/evaluation/find-first-action.ts',
-  );
-});
-
 test.each([
   {
     name: 'swapped selectNode context and facts',
@@ -1828,24 +1839,6 @@ test.each([
     'src/transition/evaluation/find-first-action.ts',
     '  const pipeline = context.compiled.snapshot;',
     to,
-  );
-  expectViolation(
-    root,
-    'GRAPH_KERNEL_INPUT_PROVENANCE',
-    'src/transition/evaluation/find-first-action.ts',
-  );
-});
-
-test('rejects PR4c per-iteration nested logical provenance', async () => {
-  expect.hasAssertions();
-  const root = await fixture();
-  await replace(
-    root,
-    'src/transition/evaluation/find-first-action.ts',
-    '  for (const key of pipeline.topologicalOrder) {',
-    '  for (const key of pipeline.topologicalOrder) {\n' +
-      '    const leaked = true ? (false || context.compiled.snapshot) : facts.nodeByKey;\n' +
-      '    void leaked;',
   );
   expectViolation(
     root,
@@ -1931,24 +1924,6 @@ test.each([
   );
 });
 
-test('rejects PR4c per-iteration class carrier', async () => {
-  expect.hasAssertions();
-  const root = await fixture();
-  await replace(
-    root,
-    'src/transition/evaluation/find-first-action.ts',
-    '  for (const key of pipeline.topologicalOrder) {',
-    '  for (const key of pipeline.topologicalOrder) {\n' +
-      '    class Carrier { readonly payload = { snapshot: context.compiled.snapshot }; }\n' +
-      '    void new Carrier();',
-  );
-  expectViolation(
-    root,
-    'GRAPH_KERNEL_INPUT_PROVENANCE',
-    'src/transition/evaluation/find-first-action.ts',
-  );
-});
-
 test.each([
   [
     'direct entries call',
@@ -2002,25 +1977,6 @@ test.each([
     'src/transition/evaluation/find-first-action.ts',
     '  const pipeline = context.compiled.snapshot;',
     to,
-  );
-  expectViolation(
-    root,
-    'GRAPH_KERNEL_INPUT_PROVENANCE',
-    'src/transition/evaluation/find-first-action.ts',
-  );
-});
-
-test('rejects PR4c per-iteration map reconstruction', async () => {
-  expect.hasAssertions();
-  const root = await fixture();
-  await replace(
-    root,
-    'src/transition/evaluation/find-first-action.ts',
-    '  for (const key of pipeline.topologicalOrder) {',
-    '  for (const key of pipeline.topologicalOrder) {\n' +
-      '    const mapAlias = facts.nodeByKey;\n' +
-      '    const rebuilt = new Map(mapAlias.entries());\n' +
-      '    void rebuilt;',
   );
   expectViolation(
     root,
@@ -2245,24 +2201,6 @@ test.each([
     'src/transition/evaluation/find-first-action.ts',
     '  const pipeline = context.compiled.snapshot;',
     to,
-  );
-  expectViolation(
-    root,
-    'GRAPH_KERNEL_INPUT_PROVENANCE',
-    'src/transition/evaluation/find-first-action.ts',
-  );
-});
-
-test('rejects PR4c per-iteration class map-value accumulator', async () => {
-  expect.hasAssertions();
-  const root = await fixture();
-  await replace(
-    root,
-    'src/transition/evaluation/find-first-action.ts',
-    '  for (const key of pipeline.topologicalOrder) {',
-    '  for (const key of pipeline.topologicalOrder) {\n' +
-      '    class Carrier { readonly value = context.nodeByKey.get(key); }\n' +
-      '    void new Carrier();',
   );
   expectViolation(
     root,
