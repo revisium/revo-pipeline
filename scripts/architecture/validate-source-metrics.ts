@@ -12,7 +12,7 @@ export interface MetricSource {
 }
 
 export type SourceMetricRule = 'production-callable-span' | 'production-leaf-span';
-export type SourceMetricPhase = 'PR4a';
+export type SourceMetricPhase = 'PR4a' | 'PR4b';
 
 const MAX_FILE_LINES = 250;
 const MAX_CALLABLE_LINES = 80;
@@ -27,13 +27,17 @@ const formattedSource = (module: MetricSource): string =>
 const isDefinitionLeaf = (path: string): boolean =>
   path.startsWith('src/definition/') && path.endsWith('.ts') && path !== 'src/definition/index.ts';
 
+const isCompiledIntegrityLeaf = (path: string): boolean =>
+  (path.startsWith('src/transition/compiled/') && path.endsWith('.ts')) ||
+  path === 'src/transition/validate-compiled-pipeline.ts';
+
 export const sourceMetricScope = (
   modules: readonly MetricSource[],
-  _phase: SourceMetricPhase,
+  phase: SourceMetricPhase,
 ): readonly string[] =>
   modules
     .map((module) => module.path)
-    .filter(isDefinitionLeaf)
+    .filter(phase === 'PR4a' ? isDefinitionLeaf : isCompiledIntegrityLeaf)
     .sort();
 
 const lineCount = (source: string): number => {

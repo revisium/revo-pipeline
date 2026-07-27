@@ -52,6 +52,47 @@ helpers. During bootstrap it MUST remain exactly `export {};`.
   `@revisium/revo-run`, agent/script packages, Prisma, DBOS, queues, NestJS, GraphQL,
   MCP, CLI, or another host framework.
 
+The hostile compiled-integrity boundary MUST have exactly this private module map:
+
+```text
+transition/validate-compiled-pipeline.ts
+transition/compiled/
+  hostile-compiled-validation.ts
+  validate-compiled-internally.ts
+  precheck-compiled-bounds.ts
+  snapshot-compiled-input.ts
+  validate-compiled-members.ts
+  validate-compiled-node.ts
+  validate-compiled-branch.ts
+  expected-compiled-semantics.ts
+  derive-expected-compiled-semantics.ts
+  compare-serialized-graph.ts
+  verify-serialized-topology.ts
+  verify-serialized-indexes.ts
+```
+
+The `compiled` directory MUST NOT contain a barrel. Every compiled leaf MUST own exactly
+one export, remain absent from the transition and package-root barrels, and follow this
+direct-import DAG:
+
+```text
+validate-compiled-pipeline / decide-pipeline
+  -> compiled/validate-compiled-internally
+validate-compiled-internally
+  -> precheck-compiled-bounds
+  -> snapshot-compiled-input
+  -> validate-compiled-members -> validate-compiled-node -> validate-compiled-branch
+  -> derive-expected-compiled-semantics -> expected-compiled-semantics
+  -> compare-serialized-graph -> expected-compiled-semantics
+  -> graph barrel
+  -> verify-serialized-topology
+  -> verify-serialized-indexes
+  -> hostile-compiled-validation
+```
+
+No compiled leaf may import definition, the transition barrel, the public adapter,
+decision facts/selectors, or decision evaluation.
+
 ## Required executable proof
 
 The architecture harness MUST validate:
@@ -115,21 +156,21 @@ edges MUST be the input to preflight, preflight success MUST dominate the sole
 flow unchanged through classification into assembly. A conditional, aliased, repeated,
 unresolved, or out-of-order call fails closed.
 
-The hostile-validation transitive proof remains bound to reviewed AST-body digests for
-`validateCompiledInternally`, `canonicalCoreGraph`, `canonicalRegions`, and
-`independentlyDerivedRegionMembers`, plus the complete source text of
-`src/transition/validate-compiled-internally.ts`. Updating a digest without reviewing
-the full hostile owner body, its transitive collection table, fixtures, and this
-specification is forbidden.
+The hostile-validation proof MUST resolve imported symbols across the compiled leaves and
+construct a conservative inter-leaf control/data-flow proof. It MUST establish the exact
+terminating guard order, a descriptor precheck before one snapshot, no caller reread,
+independent expected derivation, exact comparison dominance, one exact builder input,
+zero builds before equality, at most one afterward, and the same kernel in topology,
+indexes, success, and decision evaluation. It MUST enumerate aliases, writes, escapes,
+mutations, spread/computed/duplicate overrides, and fail closed when any provenance or
+control-flow edge is unresolved. Dead or nested decoys MUST NOT satisfy the live proof.
 
 Sonar issue exceptions MUST equal the reviewed criterion-name, rule-key, and exact
 production-file allowlist in `sonar-project.properties`. Globs, directories, global or
 rule-wide ignores, coverage exclusions, and duplication exclusions are forbidden.
-`boundedCompiledInspection` (`typescript:S3776` on
-`src/transition/validate-compiled-internally.ts`) expires in PR4b.
-The temporary expiry registry MUST equal only that exact criterion, rule, resource, and
-removal-owner record. Additional criteria, globs, directory scopes, and owner changes MUST
-fail verification.
+The PR4b decomposition removes `boundedCompiledInspection`; it MUST NOT be replaced by a
+leaf, directory, or wildcard suppression. The temporary expiry registry MUST be empty.
+Additional criteria, globs, directory scopes, and owner records MUST fail verification.
 
 Formatted physical source metrics are independently checked for explicitly enabled
 production leaves. A leaf spans its first line through its final non-terminal-newline line;
@@ -146,9 +187,13 @@ from every `src/definition/**` TypeScript production leaf, excluding only the la
 it MUST NOT use a manually enumerated subset or grandfather list. Adding a definition leaf
 therefore adds it to the derived PR4a scope without a registry update.
 
-The hostile graph-flow proof remains bound to the reviewed owner-body and complete-file
-SHA-256 digests above. Compiler graph-flow uses symbol-resolved structural and dataflow
-proof. Blind digest refresh, weaker scanning, or temporary analyzer disablement is
+PR4b MUST additionally derive its integrity scope from every TypeScript leaf under
+`src/transition/compiled/**` plus `src/transition/validate-compiled-pipeline.ts`. It MUST
+exclude `decide-pipeline.ts`, use no grandfather list, and retain the PR4a scope. Adding a
+compiled leaf therefore adds it to the enforced 250/80 limits without a registry update.
+
+Compiler and hostile graph-flow both use symbol-resolved structural and dataflow proof.
+Digest pinning, weaker scanning, path-only allowlists, or temporary analyzer disablement is
 forbidden.
 
 A DAG rule change MUST update this specification, structural validator, unit partition,

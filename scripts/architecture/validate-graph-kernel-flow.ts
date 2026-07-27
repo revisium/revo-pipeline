@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, posix, relative } from 'node:path';
 
@@ -59,13 +58,20 @@ const TRACKED_NAMES = new Set([
   'projectPipelineEdges',
   'validateDefinition',
   'validateDefinitionGraph',
+  'compareSerializedGraph',
+  'deriveExpectedCompiledSemantics',
+  'precheckCompiledBounds',
+  'snapshotCompiledInput',
   'validateCompiledInternally',
+  'validateCompiledMembers',
   'validateCompiledPipeline',
+  'verifySerializedIndexes',
+  'verifySerializedTopology',
 ]);
 
 const ALLOWED_BUILDERS = new Map([
   ['src/definition/compilation/validate-definition-graph.ts', 'validateDefinitionGraph'],
-  ['src/transition/validate-compiled-internally.ts', 'canonicalCoreGraph'],
+  ['src/transition/compiled/validate-compiled-internally.ts', 'validateCompiledInternally'],
 ]);
 
 const REQUIRED_PATHS = [
@@ -80,55 +86,21 @@ const REQUIRED_PATHS = [
   'src/graph/build-graph-kernel.ts',
   'src/graph/graph-kernel.ts',
   'src/graph/index.ts',
+  'src/transition/compiled/compare-serialized-graph.ts',
+  'src/transition/compiled/derive-expected-compiled-semantics.ts',
+  'src/transition/compiled/expected-compiled-semantics.ts',
+  'src/transition/compiled/hostile-compiled-validation.ts',
+  'src/transition/compiled/precheck-compiled-bounds.ts',
+  'src/transition/compiled/snapshot-compiled-input.ts',
+  'src/transition/compiled/validate-compiled-branch.ts',
+  'src/transition/compiled/validate-compiled-internally.ts',
+  'src/transition/compiled/validate-compiled-members.ts',
+  'src/transition/compiled/validate-compiled-node.ts',
+  'src/transition/compiled/verify-serialized-indexes.ts',
+  'src/transition/compiled/verify-serialized-topology.ts',
   'src/transition/decide-pipeline.ts',
-  'src/transition/validate-compiled-internally.ts',
   'src/transition/validate-compiled-pipeline.ts',
-  'src/transition/validated-compiled-pipeline.ts',
 ] as const;
-
-const ACCEPTED_OWNER_DIGESTS = [
-  {
-    path: 'src/transition/validate-compiled-internally.ts',
-    name: 'validateCompiledInternally',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    digest: 'a67ae89bf1609012ca61ddb8af71d4d1977fb706a7fd5b5c716374677630aed6',
-  },
-  {
-    path: 'src/transition/validate-compiled-internally.ts',
-    name: 'canonicalCoreGraph',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    digest: '14bd423f973be6e501259781a512d0c217154189f53bd4e8561e914a9cc25267',
-  },
-  {
-    path: 'src/transition/validate-compiled-internally.ts',
-    name: 'canonicalRegions',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    digest: '7ed0e7ad7eccc190c19b6fefb899144d300c095d1fa0c55b221a5cfbbcdc3b9a',
-  },
-  {
-    path: 'src/transition/validate-compiled-internally.ts',
-    name: 'independentlyDerivedRegionMembers',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    digest: 'e34e5e22da2f182384cbffd75ade50e4aa25f194e8c9805033e9e9d9dd9cd084',
-  },
-] as const satisfies readonly {
-  readonly path: string;
-  readonly name: string;
-  readonly code: GraphKernelRule;
-  readonly digest: string;
-}[];
-
-const ACCEPTED_FILE_DIGESTS = [
-  {
-    path: 'src/transition/validate-compiled-internally.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    digest: 'dff379567b2b2fac80d733e248f806182788127c13f7dece9959ed76f7a8958d',
-  },
-] as const satisfies readonly {
-  readonly path: string;
-  readonly code: GraphKernelRule;
-  readonly digest: string;
-}[];
 
 const normalizedPath = (path: string): string => path.replaceAll('\\', '/');
 
@@ -275,65 +247,6 @@ const isTerminatingGuard = (statement: Node | undefined): statement is IfStateme
     statement.thenStatement.statements.length === 1 &&
     terminatingStatement !== undefined &&
     (ts.isReturnStatement(terminatingStatement) || ts.isThrowStatement(terminatingStatement))
-  );
-};
-
-const isNegatedCallGuard = (
-  owner: FunctionLikeDeclaration,
-  call: CallExpression | undefined,
-): boolean => {
-  if (!call) {
-    return false;
-  }
-  const statement = topLevelStatement(owner, call);
-  return (
-    isTerminatingGuard(statement) &&
-    ts.isPrefixUnaryExpression(call.parent) &&
-    call.parent.operator === SyntaxKind.ExclamationToken &&
-    descendants(statement.expression).includes(call)
-  );
-};
-
-const isExactNegatedCallGuard = (
-  owner: FunctionLikeDeclaration,
-  call: CallExpression | undefined,
-): boolean => {
-  if (!isNegatedCallGuard(owner, call) || !call) {
-    return false;
-  }
-  const statement = topLevelStatement(owner, call);
-  return isTerminatingGuard(statement) && statement.expression === call.parent;
-};
-
-const isExactEdgeEqualityGuard = (
-  owner: FunctionLikeDeclaration,
-  call: CallExpression | undefined,
-): boolean => {
-  if (!call || !ts.isPropertyAccessExpression(call.expression)) {
-    return false;
-  }
-  const statement = topLevelStatement(owner, call);
-  if (
-    !isTerminatingGuard(statement) ||
-    !ts.isBinaryExpression(statement.expression) ||
-    statement.expression.operatorToken.kind !== SyntaxKind.BarBarToken ||
-    !ts.isPrefixUnaryExpression(call.parent) ||
-    call.parent.operator !== SyntaxKind.ExclamationToken ||
-    statement.expression.right !== call.parent
-  ) {
-    return false;
-  }
-  const countMismatch = statement.expression.left;
-  return (
-    ts.isBinaryExpression(countMismatch) &&
-    countMismatch.operatorToken.kind === SyntaxKind.ExclamationEqualsEqualsToken &&
-    JSON.stringify(propertyPath(countMismatch.left)) ===
-      JSON.stringify(['pipeline', 'edges', 'length']) &&
-    JSON.stringify(propertyPath(countMismatch.right)) ===
-      JSON.stringify(['expectedEdges', 'length']) &&
-    JSON.stringify(propertyPath(call.expression.expression)) ===
-      JSON.stringify(['pipeline', 'edges']) &&
-    call.expression.name.text === 'every'
   );
 };
 
@@ -524,47 +437,6 @@ const localConst = (
       isConstDeclaration(node) &&
       topLevelStatement(owner, node) !== undefined,
   );
-
-const isPipelineNodeKeyMap = (node: Node | undefined): boolean => {
-  if (
-    !node ||
-    !ts.isCallExpression(node) ||
-    !ts.isPropertyAccessExpression(node.expression) ||
-    node.expression.name.text !== 'map'
-  ) {
-    return false;
-  }
-  const nodes = node.expression.expression;
-  if (
-    !ts.isPropertyAccessExpression(nodes) ||
-    !ts.isIdentifier(nodes.expression) ||
-    nodes.expression.text !== 'pipeline' ||
-    nodes.name.text !== 'nodes'
-  ) {
-    return false;
-  }
-  const mapper = node.arguments[0];
-  const parameter = mapper && ts.isArrowFunction(mapper) ? mapper.parameters[0] : undefined;
-  return (
-    mapper !== undefined &&
-    ts.isArrowFunction(mapper) &&
-    mapper.parameters.length === 1 &&
-    parameter !== undefined &&
-    ts.isIdentifier(parameter.name) &&
-    ((ts.isPropertyAccessExpression(mapper.body) &&
-      ts.isIdentifier(mapper.body.expression) &&
-      mapper.body.expression.text === parameter.name.text &&
-      mapper.body.name.text === 'key') ||
-      (ts.isBlock(mapper.body) &&
-        descendants(mapper.body).some(
-          (candidate) =>
-            ts.isReturnStatement(candidate) &&
-            candidate.expression !== undefined &&
-            ts.isPropertyAccessExpression(candidate.expression) &&
-            candidate.expression.name.text === 'key',
-        )))
-  );
-};
 
 const validatesHumanGateNormalization = (owner: FunctionLikeDeclaration): boolean => {
   const returned = directClauseReturn(switchClause(owner, 'humanGate'))?.expression;
@@ -833,181 +705,6 @@ const validatesAssemblyIndexes = (owner: FunctionLikeDeclaration): boolean => {
   );
 };
 
-const callReceiverNamed = (node: Node, receiver: string, method: string): node is CallExpression =>
-  ts.isCallExpression(node) &&
-  ts.isPropertyAccessExpression(node.expression) &&
-  ts.isIdentifier(node.expression.expression) &&
-  node.expression.expression.text === receiver &&
-  node.expression.name.text === method;
-
-const isExpectedEdgesBuilderDeclaration = (node: VariableDeclaration): boolean => {
-  if (
-    !ts.isIdentifier(node.name) ||
-    node.name.text !== 'built' ||
-    !node.initializer ||
-    !ts.isCallExpression(node.initializer) ||
-    !callNamed(node.initializer, 'buildGraphKernel')
-  ) {
-    return false;
-  }
-  const edges = objectProperty(node.initializer.arguments[0], 'edges');
-  return edges !== undefined && ts.isIdentifier(edges) && edges.text === 'expectedEdges';
-};
-
-const validateHostileExpectedEdgeWrites = (
-  modules: readonly ParsedModule[],
-  violations: ArchitectureViolation[],
-): void => {
-  const module = modules.find(
-    (entry) => entry.path === 'src/transition/validate-compiled-internally.ts',
-  );
-  const graphOwner = findFunction(
-    modules,
-    'src/transition/validate-compiled-internally.ts',
-    'canonicalCoreGraph',
-  );
-  const regionOwner = findFunction(
-    modules,
-    'src/transition/validate-compiled-internally.ts',
-    'canonicalRegions',
-  );
-  if (!module || !graphOwner || !regionOwner) {
-    add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
-    return;
-  }
-
-  const declaration = localConst(graphOwner, 'expectedEdges');
-  const pushes = descendants(graphOwner).filter((node) =>
-    callReceiverNamed(node, 'expectedEdges', 'push'),
-  );
-  const sorts = descendants(graphOwner).filter((node) =>
-    callReceiverNamed(node, 'expectedEdges', 'sort'),
-  );
-  const push = pushes[0];
-  const pushed = push?.arguments[0];
-  const sort = sorts[0];
-  const sortArgument = sort?.arguments[0];
-  if (
-    !declaration?.initializer ||
-    !ts.isArrayLiteralExpression(declaration.initializer) ||
-    declaration.initializer.elements.length !== 0 ||
-    pushes.length !== 1 ||
-    !pushed ||
-    !ts.isSpreadElement(pushed) ||
-    !ts.isIdentifier(pushed.expression) ||
-    pushed.expression.text !== 'nodeEdges' ||
-    sorts.length !== 1 ||
-    sort?.arguments.length !== 1 ||
-    !sortArgument ||
-    !ts.isIdentifier(sortArgument) ||
-    sortArgument.text !== 'edgeComparator'
-  ) {
-    add(
-      violations,
-      'GRAPH_KERNEL_INPUT_PROVENANCE',
-      module,
-      push ?? sort ?? declaration ?? graphOwner,
-    );
-  }
-
-  const equalityCall = directCalls(graphOwner, 'every').find(
-    (candidate) =>
-      ts.isPropertyAccessExpression(candidate.expression) &&
-      JSON.stringify(propertyPath(candidate.expression.expression)) ===
-        JSON.stringify(['pipeline', 'edges']),
-  );
-  const equalityStatement = equalityCall ? topLevelStatement(graphOwner, equalityCall) : undefined;
-  const equalityEnd = equalityStatement?.end ?? -1;
-  for (const node of descendants(graphOwner)) {
-    if (
-      ts.isVariableDeclaration(node) &&
-      node !== declaration &&
-      node.initializer &&
-      identifierReferences(node.initializer, 'expectedEdges').length > 0 &&
-      !(
-        ts.isIdentifier(node.name) &&
-        node.name.text === 'expected' &&
-        ts.isElementAccessExpression(node.initializer) &&
-        ts.isIdentifier(node.initializer.expression) &&
-        node.initializer.expression.text === 'expectedEdges'
-      ) &&
-      !isExpectedEdgesBuilderDeclaration(node)
-    ) {
-      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
-    }
-    if (
-      ts.isCallExpression(node) &&
-      node.arguments.some(
-        (argument) => ts.isIdentifier(argument) && argument.text === 'expectedEdges',
-      ) &&
-      !callNamed(node, 'canonicalRegions')
-    ) {
-      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
-    }
-    if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      ts.isIdentifier(node.expression.expression) &&
-      node.expression.expression.text === 'expectedEdges' &&
-      node.expression.name.text !== 'push' &&
-      node.expression.name.text !== 'sort'
-    ) {
-      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
-    }
-    if (
-      equalityEnd >= 0 &&
-      node.getStart() > equalityEnd &&
-      callReceiverNamed(node, 'expectedEdges', 'push')
-    ) {
-      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
-    }
-  }
-
-  const reflectWrites = directCalls(regionOwner, 'set').filter(
-    (call) =>
-      ts.isPropertyAccessExpression(call.expression) &&
-      ts.isIdentifier(call.expression.expression) &&
-      call.expression.expression.text === 'Reflect',
-  );
-  const allowedFields = new Set(['branch', 'fork', 'role']);
-  if (
-    reflectWrites.length !== 3 ||
-    reflectWrites.some((call) => {
-      const target = call.arguments[0];
-      const field = call.arguments[1];
-      return (
-        !target ||
-        !ts.isIdentifier(target) ||
-        target.text !== 'edge' ||
-        !field ||
-        !ts.isStringLiteral(field) ||
-        !allowedFields.has(field.text)
-      );
-    })
-  ) {
-    add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, reflectWrites[0] ?? regionOwner);
-  }
-  for (const node of descendants(regionOwner)) {
-    if (
-      ts.isVariableDeclaration(node) &&
-      node.initializer &&
-      ts.isIdentifier(node.initializer) &&
-      node.initializer.text === 'expectedEdges'
-    ) {
-      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
-    }
-    if (
-      ts.isBinaryExpression(node) &&
-      node.operatorToken.kind === SyntaxKind.EqualsToken &&
-      ts.isPropertyAccessExpression(node.left) &&
-      ts.isIdentifier(node.left.expression) &&
-      node.left.expression.text === 'edge'
-    ) {
-      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
-    }
-  }
-};
-
 const add = (
   violations: ArchitectureViolation[],
   code: GraphKernelRule,
@@ -1021,41 +718,6 @@ const add = (
     !violations.some((entry) => entry.code === code && entry.path === path && entry.line === line)
   ) {
     violations.push({ code, path, line });
-  }
-};
-
-const validateAcceptedOwnerShapes = (
-  modules: readonly ParsedModule[],
-  violations: ArchitectureViolation[],
-): void => {
-  for (const accepted of ACCEPTED_OWNER_DIGESTS) {
-    const module = modules.find((candidate) => candidate.path === accepted.path);
-    const owner = findFunction(modules, accepted.path, accepted.name);
-    if (!module || !owner) {
-      add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
-      continue;
-    }
-    const digest = createHash('sha256').update(owner.getText()).digest('hex');
-    if (digest !== accepted.digest) {
-      add(violations, accepted.code, module, owner);
-    }
-  }
-};
-
-const validateAcceptedFileShapes = (
-  modules: readonly ParsedModule[],
-  violations: ArchitectureViolation[],
-): void => {
-  for (const accepted of ACCEPTED_FILE_DIGESTS) {
-    const module = modules.find((candidate) => candidate.path === accepted.path);
-    if (!module) {
-      add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
-      continue;
-    }
-    const digest = createHash('sha256').update(module.sourceFile.text).digest('hex');
-    if (digest !== accepted.digest) {
-      add(violations, accepted.code, module, module.sourceFile);
-    }
   }
 };
 
@@ -1632,40 +1294,47 @@ const validateInternalValidator = (
   violations: ArchitectureViolation[],
 ): void => {
   const module = modules.find(
-    (entry) => entry.path === 'src/transition/validate-compiled-internally.ts',
+    (entry) => entry.path === 'src/transition/compiled/validate-compiled-internally.ts',
   );
   const owner = call?.owner;
   if (!module || !call || !owner) {
     add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
     return;
   }
-  const regionsGuard = directCalls(owner, 'canonicalRegions').find(
-    (candidate) => candidate.getStart() < call.call.getStart(),
-  );
-  const equalityGuard = directCalls(owner, 'every').find(
-    (candidate) => candidate.getStart() < call.call.getStart(),
-  );
+  const statements =
+    owner.body && ts.isBlock(owner.body) ? ([...owner.body.statements] as readonly Node[]) : [];
+  const compactStatements = statements.map((statement) => compactSource(statement.getText()));
+  const exactFlow = [
+    'if(!precheckCompiledBounds(input)){return{ok:false};}',
+    'constsnapshot=snapshotCompiledInput(input);',
+    'if(snapshot===undefined||!validateCompiledMembers(snapshot)){return{ok:false};}',
+    'constexpected=deriveExpectedCompiledSemantics(snapshot.nodes);',
+    'if(expected===undefined||!compareSerializedGraph(snapshot,expected)){return{ok:false};}',
+    'constbuilt=buildGraphKernel({nodeKeys:expected.nodeKeys,edges:expected.edges});',
+    'if(!built.ok){return{ok:false};}',
+    'constkernel=built.kernel;',
+    'consttopologicalOffsets=verifySerializedTopology(snapshot,kernel);',
+    'if(topologicalOffsets===undefined||!verifySerializedIndexes(snapshot,kernel)){return{ok:false};}',
+    'returnObject.freeze({ok:true,snapshot,kernel,topologicalOffsets});',
+  ];
   if (
+    functionName(owner) !== 'validateCompiledInternally' ||
     !isDirectTopLevelCall(owner, call.call) ||
-    !isExactNegatedCallGuard(owner, regionsGuard) ||
-    !isExactEdgeEqualityGuard(owner, equalityGuard)
+    compactStatements.length !== exactFlow.length ||
+    compactStatements.some((statement, index) => statement !== exactFlow[index])
   ) {
     add(violations, 'GRAPH_KERNEL_TRUST_DOMINANCE', module, call.call);
   }
   const input = call.call.arguments[0];
   const nodeKeys = objectProperty(input, 'nodeKeys');
   const edges = objectProperty(input, 'edges');
-  const expectedEdges = localConst(owner, 'expectedEdges');
   if (
     !input ||
     !ts.isObjectLiteralExpression(input) ||
-    !isPipelineNodeKeyMap(nodeKeys) ||
+    !exactPropertyPath(nodeKeys, ['expected', 'nodeKeys']) ||
     !edges ||
-    !ts.isIdentifier(edges) ||
-    edges.text !== 'expectedEdges' ||
-    !expectedEdges ||
-    !expectedEdges.initializer ||
-    !ts.isArrayLiteralExpression(expectedEdges.initializer)
+    !exactPropertyPath(edges, ['expected', 'edges']) ||
+    !hasExactObjectProperties(input, ['nodeKeys', 'edges'])
   ) {
     add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, call.call);
   }
@@ -1680,7 +1349,8 @@ const validateInternalValidator = (
   const returnWithKernel = descendants(owner).some(
     (node) =>
       ts.isReturnStatement(node) &&
-      node.expression?.getText().includes('{ kernel, topologicalOffsets: expectedOrder }'),
+      compactSource(node.expression?.getText() ?? '') ===
+        'Object.freeze({ok:true,snapshot,kernel,topologicalOffsets})',
   );
   if (
     !buildName ||
@@ -1690,43 +1360,350 @@ const validateInternalValidator = (
   ) {
     add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, call.call);
   }
+  const topologyCall = directCalls(owner, 'verifySerializedTopology')[0];
+  const indexesCall = directCalls(owner, 'verifySerializedIndexes')[0];
+  if (
+    topologyCall?.arguments[0]?.getText() !== 'snapshot' ||
+    topologyCall.arguments[1]?.getText() !== 'kernel' ||
+    indexesCall?.arguments[0]?.getText() !== 'snapshot' ||
+    indexesCall.arguments[1]?.getText() !== 'kernel'
+  ) {
+    add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, topologyCall ?? indexesCall ?? call.call);
+  }
+  const equalityGuardEnd = statements[4]?.end ?? -1;
+  for (const node of descendants(owner)) {
+    if (
+      node.getStart() > equalityGuardEnd &&
+      ts.isCallExpression(node) &&
+      ((ts.isPropertyAccessExpression(node.expression) &&
+        exactPropertyPath(node.expression.expression, ['Reflect']) &&
+        node.expression.name.text === 'set' &&
+        node.arguments[0]?.getText().startsWith('expected.')) ||
+        (ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.expression.getText().startsWith('expected.') &&
+          [
+            'copyWithin',
+            'fill',
+            'pop',
+            'push',
+            'reverse',
+            'shift',
+            'sort',
+            'splice',
+            'unshift',
+          ].includes(node.expression.name.text)))
+    ) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+    }
+  }
 };
 
-const validateInternalPromotion = (
+const validateHostileDerivation = (
   modules: readonly ParsedModule[],
   violations: ArchitectureViolation[],
 ): void => {
   const module = modules.find(
-    (entry) => entry.path === 'src/transition/validate-compiled-internally.ts',
+    (entry) => entry.path === 'src/transition/compiled/derive-expected-compiled-semantics.ts',
   );
   const owner = findFunction(
     modules,
-    'src/transition/validate-compiled-internally.ts',
-    'validateCompiledInternally',
+    'src/transition/compiled/derive-expected-compiled-semantics.ts',
+    'deriveExpectedCompiledSemantics',
   );
   if (!module || !owner) {
     add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
     return;
   }
-  const allCalls = modules.flatMap((entry) =>
-    directCalls(entry.sourceFile, 'canonicalCoreGraph').map((call) => ({ entry, call })),
-  );
-  const ownedCalls = directCalls(owner, 'canonicalCoreGraph');
-  const soleOwnedCall = ownedCalls[0];
-  if (
-    allCalls.length !== 1 ||
-    ownedCalls.length !== 1 ||
-    soleOwnedCall === undefined ||
-    !isDirectTopLevelCall(owner, soleOwnedCall)
-  ) {
-    add(
-      violations,
-      allCalls.length > 1 || ownedCalls.length > 1
-        ? 'GRAPH_KERNEL_BUILD_REPEAT'
-        : 'GRAPH_KERNEL_TRUST_DOMINANCE',
-      module,
-      ownedCalls[1] ?? ownedCalls[0] ?? owner,
+  const owners = (name: string): readonly FunctionLikeDeclaration[] =>
+    descendants(module.sourceFile).filter(
+      (node): node is FunctionLikeDeclaration =>
+        isFunctionLikeDeclaration(node) && functionName(node) === name,
     );
+  const edgeFactories = owners('edgeFor');
+  const comparators = owners('edgeComparator');
+  const projectors = owners('expectedEdgesForNode');
+  if (
+    edgeFactories.length !== 1 ||
+    comparators.length !== 1 ||
+    projectors.length !== 1 ||
+    !edgeFactories[0] ||
+    !comparators[0] ||
+    !projectors[0]
+  ) {
+    add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module, owner);
+    return;
+  }
+  const semanticBodies = [
+    [
+      edgeFactories[0],
+      `({
+        from,
+        outcome,
+        to,
+        role: 'activation',
+        fork: null,
+        branch: null,
+      })`,
+    ],
+    [
+      comparators[0],
+      `compareUnicodeCodePoints(left.from, right.from) ||
+       compareUnicodeCodePoints(left.outcome, right.outcome) ||
+       compareUnicodeCodePoints(left.to, right.to) ||
+       compareUnicodeCodePoints(left.role, right.role) ||
+       compareUnicodeCodePoints(left.fork ?? '', right.fork ?? '') ||
+       compareUnicodeCodePoints(left.branch ?? '', right.branch ?? '')`,
+    ],
+    [
+      projectors[0],
+      `{
+        if (node.kind === 'task' || node.kind === 'join' || node.kind === 'consensus') {
+          return Object.entries(node.outcomes).map(([outcome, to]) =>
+            edgeFor(node.key, outcome, to)
+          );
+        }
+        if (node.kind === 'fork') {
+          return [
+            ...node.branches.map((branch) => ({
+              ...edgeFor(node.key, 'forked', branch.entry),
+              fork: node.key,
+              branch: branch.name,
+            })),
+            { ...edgeFor(node.key, 'forked', node.join), fork: node.key },
+          ];
+        }
+        if (node.kind === 'humanGate') {
+          return node.resolutions.map((route) =>
+            edgeFor(node.key, route.resolution, route.to)
+          );
+        }
+        if (node.kind === 'branch') {
+          return [
+            ...node.cases.map((entry) => edgeFor(node.key, entry.name, entry.to)),
+            ...(node.default
+              ? [edgeFor(node.key, node.default.name, node.default.to)]
+              : []),
+          ];
+        }
+        return node.kind === 'terminal' ? [] : undefined;
+      }`,
+    ],
+  ] as const;
+  for (const [semanticOwner, expectedBody] of semanticBodies) {
+    if (
+      !semanticOwner.body ||
+      compactSource(semanticOwner.body.getText()) !== compactSource(expectedBody)
+    ) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, semanticOwner);
+    }
+  }
+  const edges = localConst(owner, 'edges');
+  const regions = localConst(owner, 'regions');
+  const pushes = descendants(owner).filter(
+    (node): node is CallExpression =>
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      exactPropertyPath(node.expression.expression, ['edges']) &&
+      node.expression.name.text === 'push',
+  );
+  const sorts = descendants(owner).filter(
+    (node): node is CallExpression =>
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      exactPropertyPath(node.expression.expression, ['edges']) &&
+      node.expression.name.text === 'sort',
+  );
+  const returns = descendants(owner).filter(ts.isReturnStatement);
+  const success = returns.find(
+    (statement) =>
+      statement.expression !== undefined && ts.isObjectLiteralExpression(statement.expression),
+  )?.expression;
+  const hostileNames =
+    /\b(?:pipeline|input)\.(?:edges|forkRegions|incomingIndex|nodeIndex|outgoingIndex|topologicalOrder)\b/u;
+  if (
+    !edges?.initializer ||
+    !ts.isArrayLiteralExpression(edges.initializer) ||
+    edges.initializer.elements.length !== 0 ||
+    pushes.length !== 1 ||
+    compactSource(pushes[0]?.getText() ?? '') !== 'edges.push(...nodeEdges)' ||
+    sorts.length !== 1 ||
+    compactSource(sorts[0]?.getText() ?? '') !== 'edges.sort(edgeComparator)' ||
+    !regions ||
+    !success ||
+    !hasExactObjectProperties(success, ['nodeKeys', 'edges', 'regions']) ||
+    !exactPropertyPath(objectProperty(success, 'edges'), ['edges']) ||
+    !exactPropertyPath(objectProperty(success, 'regions'), ['regions']) ||
+    compactSource(objectProperty(success, 'nodeKeys')?.getText() ?? '') !==
+      'nodes.map((node)=>node.key)' ||
+    hostileNames.test(module.sourceFile.getText())
+  ) {
+    add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, owner);
+  }
+  const edgeAliases = new Set(['edges']);
+  let aliasAdded = true;
+  while (aliasAdded) {
+    aliasAdded = false;
+    for (const node of descendants(owner)) {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        ts.isIdentifier(node.initializer) &&
+        edgeAliases.has(node.initializer.text) &&
+        !edgeAliases.has(node.name.text)
+      ) {
+        edgeAliases.add(node.name.text);
+        aliasAdded = true;
+      }
+    }
+  }
+  if (edgeAliases.size > 1) {
+    const alias = descendants(owner).find(
+      (node): node is VariableDeclaration =>
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        edgeAliases.has(node.name.text) &&
+        node.name.text !== 'edges',
+    );
+    add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, alias ?? owner);
+  }
+  for (const node of descendants(owner)) {
+    if (
+      ts.isCallExpression(node) &&
+      node.arguments.some(
+        (argument) => ts.isIdentifier(argument) && edgeAliases.has(argument.text),
+      ) &&
+      !callNamed(node, 'deriveRegions')
+    ) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+    }
+  }
+  const allowedReflectFields = new Set(['branch', 'fork', 'role']);
+  const reflectWrites = descendants(module.sourceFile).filter(
+    (node): node is CallExpression =>
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      exactPropertyPath(node.expression.expression, ['Reflect']) &&
+      node.expression.name.text === 'set',
+  );
+  if (
+    reflectWrites.length !== 3 ||
+    reflectWrites.some((write) => {
+      const field = write.arguments[1];
+      return (
+        !exactPropertyPath(write.arguments[0], ['edge']) ||
+        !field ||
+        !ts.isStringLiteral(field) ||
+        !allowedReflectFields.has(field.text)
+      );
+    })
+  ) {
+    add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, reflectWrites[0] ?? owner);
+  }
+  for (const node of descendants(module.sourceFile)) {
+    if (
+      ts.isVariableDeclaration(node) &&
+      node !== edges &&
+      node.initializer &&
+      ts.isIdentifier(node.initializer) &&
+      node.initializer.text === 'edges'
+    ) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === SyntaxKind.EqualsToken &&
+      ts.isPropertyAccessExpression(node.left) &&
+      (node.left.name.text === 'from' ||
+        node.left.name.text === 'outcome' ||
+        node.left.name.text === 'to')
+    ) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+    }
+  }
+};
+
+const validateHostileComparison = (
+  modules: readonly ParsedModule[],
+  violations: ArchitectureViolation[],
+): void => {
+  const path = 'src/transition/compiled/compare-serialized-graph.ts';
+  const module = modules.find((entry) => entry.path === path);
+  const owners = (name: string): readonly FunctionLikeDeclaration[] =>
+    module
+      ? descendants(module.sourceFile).filter(
+          (node): node is FunctionLikeDeclaration =>
+            isFunctionLikeDeclaration(node) && functionName(node) === name,
+        )
+      : [];
+  const edges = owners('edgesEqual');
+  const regions = owners('regionsEqual');
+  const compare = owners('compareSerializedGraph');
+  if (
+    !module ||
+    edges.length !== 1 ||
+    regions.length !== 1 ||
+    compare.length !== 1 ||
+    !edges[0] ||
+    !regions[0] ||
+    !compare[0]
+  ) {
+    add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
+    return;
+  }
+  const exactBodies = [
+    [
+      edges[0],
+      `actual.from === expected.from &&
+       actual.outcome === expected.outcome &&
+       actual.to === expected.to &&
+       actual.role === expected.role &&
+       actual.fork === expected.fork &&
+       actual.branch === expected.branch`,
+    ],
+    [
+      regions[0],
+      `actual.fork === expected.fork &&
+       actual.join === expected.join &&
+       actual.branches.length === expected.branches.length &&
+       actual.branches.every((branch, branchIndex) => {
+         const expectedBranch = expected.branches[branchIndex];
+         return (
+           expectedBranch !== undefined &&
+           branch.name === expectedBranch.name &&
+           branch.entry === expectedBranch.entry &&
+           branch.exit === expectedBranch.exit &&
+           branch.members.length === expectedBranch.members.length &&
+           branch.members.every(
+             (member, memberIndex) => member === expectedBranch.members[memberIndex]
+           )
+         );
+       })`,
+    ],
+    [
+      compare[0],
+      `snapshot.nodes.length === expected.nodeKeys.length &&
+       snapshot.nodes.every((node, nodeIndex) => node.key === expected.nodeKeys[nodeIndex]) &&
+       snapshot.edges.length === expected.edges.length &&
+       snapshot.edges.every((edge, edgeIndex) => {
+         const expectedEdge = expected.edges[edgeIndex];
+         return expectedEdge !== undefined && edgesEqual(edge, expectedEdge);
+       }) &&
+       snapshot.forkRegions.length === expected.regions.length &&
+       snapshot.forkRegions.every((region, regionIndex) => {
+         const expectedRegion = expected.regions[regionIndex];
+         return expectedRegion !== undefined && regionsEqual(region, expectedRegion);
+       })`,
+    ],
+  ] as const;
+  for (const [owner, expectedBody] of exactBodies) {
+    if (
+      !owner.body ||
+      ts.isBlock(owner.body) ||
+      compactSource(owner.body.getText()) !== compactSource(expectedBody)
+    ) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, owner);
+    }
   }
 };
 
@@ -1746,7 +1723,13 @@ const validateAdapter = (
     add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
     return;
   }
-  if (directCalls(owner, 'validateCompiledInternally').length !== 1) {
+  const validationCalls = directCalls(owner, 'validateCompiledInternally');
+  const validationCall = validationCalls[0];
+  if (
+    validationCalls.length !== 1 ||
+    !validationCall ||
+    !isDirectTopLevelCall(owner, validationCall)
+  ) {
     add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, owner);
   }
   if (
@@ -1755,13 +1738,26 @@ const validateAdapter = (
   ) {
     add(violations, 'GRAPH_KERNEL_ADAPTER_EXPOSURE', module, owner);
   }
-  const returns = descendants(owner).filter(ts.isReturnStatement);
+  const statements =
+    owner.body && ts.isBlock(owner.body) ? ([...owner.body.statements] as readonly Node[]) : [];
+  const returned = statements[1];
+  const expression = returned && ts.isReturnStatement(returned) ? returned.expression : undefined;
+  const success =
+    expression && ts.isConditionalExpression(expression) ? expression.whenTrue : undefined;
+  const failure =
+    expression && ts.isConditionalExpression(expression) ? expression.whenFalse : undefined;
   if (
-    returns.length !== 1 ||
-    !returns[0]?.expression?.getText().includes('{ ok: true, pipeline: validated.pipeline }') ||
-    !returns[0]?.expression?.getText().includes('{ ok: false }')
+    statements.length !== 2 ||
+    !expression ||
+    !ts.isConditionalExpression(expression) ||
+    !exactPropertyPath(expression.condition, ['validated', 'ok']) ||
+    !hasExactObjectProperties(success, ['ok', 'pipeline']) ||
+    !hasExactObjectProperties(failure, ['ok']) ||
+    objectProperty(success, 'ok')?.kind !== SyntaxKind.TrueKeyword ||
+    !exactPropertyPath(objectProperty(success, 'pipeline'), ['validated', 'snapshot']) ||
+    objectProperty(failure, 'ok')?.kind !== SyntaxKind.FalseKeyword
   ) {
-    add(violations, 'GRAPH_KERNEL_ADAPTER_EXPOSURE', module, returns[0] ?? owner);
+    add(violations, 'GRAPH_KERNEL_ADAPTER_EXPOSURE', module, returned ?? owner);
   }
 };
 
@@ -1776,9 +1772,14 @@ const validateDecisionFlow = (
     add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
     return;
   }
+  const validationCall = directCalls(decide, 'validateCompiledInternally')[0];
   if (
     directCalls(decide, 'validateCompiledInternally').length !== 1 ||
-    directCalls(decide, 'evaluationIndex').length !== 1
+    directCalls(decide, 'evaluationIndex').length !== 1 ||
+    !validationCall ||
+    !isDirectTopLevelCall(decide, validationCall) ||
+    validationCall.arguments.length !== 1 ||
+    validationCall.arguments[0]?.getText() !== 'pipelineInput'
   ) {
     add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, decide);
   }
@@ -1786,9 +1787,35 @@ const validateDecisionFlow = (
   if (
     !evaluationCall ||
     evaluationCall.arguments[1]?.getText() !== 'compiled.kernel' ||
-    evaluationCall.arguments[0]?.getText() !== 'compiled.pipeline'
+    evaluationCall.arguments[0]?.getText() !== 'compiled.snapshot' ||
+    evaluationCall.arguments[2]?.getText() !== 'compiled.topologicalOffsets'
   ) {
     add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, evaluationCall ?? decide);
+  }
+  for (const [consumer, pipelineArgument] of [
+    ['validateFactShape', 1],
+    ['validateCausality', 0],
+    ['reachedTerminals', 0],
+    ['firstAction', 0],
+    ['firstWait', 0],
+  ] as const) {
+    const calls = directCalls(decide, consumer);
+    if (
+      calls.length !== 1 ||
+      calls[0]?.arguments[pipelineArgument]?.getText() !== 'compiled.snapshot'
+    ) {
+      add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, calls[0] ?? decide);
+    }
+  }
+  const pipelineInputReferences = identifierReferences(decide, 'pipelineInput');
+  if (
+    pipelineInputReferences.length !== 2 ||
+    pipelineInputReferences.some(
+      (reference) =>
+        reference !== decide.parameters[0]?.name && reference !== validationCall?.arguments[0],
+    )
+  ) {
+    add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, pipelineInputReferences[2] ?? decide);
   }
   const parameters = evaluator.parameters;
   if (
@@ -2028,6 +2055,101 @@ const validateSemanticResolution = (
         referenceCalls[0] ?? graphOwner ?? graphModule?.sourceFile,
       );
     }
+
+    const hostilePath = 'src/transition/compiled/validate-compiled-internally.ts';
+    const hostileModule = modules.find((module) => module.path === hostilePath);
+    const hostileOwner = findFunction(modules, hostilePath, 'validateCompiledInternally');
+    const hostileTargets = [
+      ['src/transition/compiled/precheck-compiled-bounds.ts', 'precheckCompiledBounds'],
+      ['src/transition/compiled/snapshot-compiled-input.ts', 'snapshotCompiledInput'],
+      ['src/transition/compiled/validate-compiled-members.ts', 'validateCompiledMembers'],
+      [
+        'src/transition/compiled/derive-expected-compiled-semantics.ts',
+        'deriveExpectedCompiledSemantics',
+      ],
+      ['src/transition/compiled/compare-serialized-graph.ts', 'compareSerializedGraph'],
+      ['src/graph/build-graph-kernel.ts', 'buildGraphKernel'],
+      ['src/transition/compiled/verify-serialized-topology.ts', 'verifySerializedTopology'],
+      ['src/transition/compiled/verify-serialized-indexes.ts', 'verifySerializedIndexes'],
+    ] as const;
+    if (!hostileModule || !hostileOwner) {
+      add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', hostileModule);
+      return;
+    }
+    const hostileCalls = hostileTargets.map(([path, name]) => {
+      const target = findFunction(modules, path, name);
+      return target ? resolvedCalls(project.checker, hostileOwner, target) : [];
+    });
+    const hostilePositions = hostileCalls.map((ownedCalls) => ownedCalls[0]?.getStart() ?? -1);
+    if (
+      hostileCalls.some((ownedCalls) => ownedCalls.length !== 1) ||
+      hostilePositions.some(
+        (position, index) => index > 0 && position <= hostilePositions[index - 1]!,
+      )
+    ) {
+      add(violations, 'GRAPH_KERNEL_TRUST_DOMINANCE', hostileModule, hostileOwner);
+    }
+    const inputParameter = hostileOwner.parameters[0]?.name;
+    const inputSymbol =
+      inputParameter && ts.isIdentifier(inputParameter)
+        ? resolvedSymbolId(project.checker, inputParameter)
+        : undefined;
+    const inputReferences =
+      inputSymbol === undefined
+        ? []
+        : descendants(hostileOwner).filter(
+            (node): node is Identifier =>
+              ts.isIdentifier(node) && resolvedSymbolId(project.checker, node) === inputSymbol,
+          );
+    if (inputReferences.length !== 3) {
+      add(
+        violations,
+        'GRAPH_KERNEL_INPUT_PROVENANCE',
+        hostileModule,
+        inputReferences[3] ?? hostileOwner,
+      );
+    }
+
+    const decisionModule = modules.find(
+      (module) => module.path === 'src/transition/decide-pipeline.ts',
+    );
+    const decisionOwner = findFunction(
+      modules,
+      'src/transition/decide-pipeline.ts',
+      'decidePipeline',
+    );
+    const validatorTarget = findFunction(modules, hostilePath, 'validateCompiledInternally');
+    const decisionValidationCalls =
+      decisionOwner && validatorTarget
+        ? resolvedCalls(project.checker, decisionOwner, validatorTarget)
+        : [];
+    const pipelineParameter = decisionOwner?.parameters[0]?.name;
+    const pipelineSymbol =
+      pipelineParameter && ts.isIdentifier(pipelineParameter)
+        ? resolvedSymbolId(project.checker, pipelineParameter)
+        : undefined;
+    const laterPipelineReads =
+      decisionOwner && pipelineSymbol !== undefined && decisionValidationCalls[0]
+        ? descendants(decisionOwner).filter(
+            (node): node is Identifier =>
+              ts.isIdentifier(node) &&
+              node.getStart() > decisionValidationCalls[0]!.end &&
+              resolvedSymbolId(project.checker, node) === pipelineSymbol,
+          )
+        : [];
+    if (
+      !decisionModule ||
+      !decisionOwner ||
+      decisionValidationCalls.length !== 1 ||
+      laterPipelineReads.length !== 0
+    ) {
+      add(
+        violations,
+        'GRAPH_KERNEL_INPUT_PROVENANCE',
+        decisionModule,
+        laterPipelineReads[0] ?? decisionOwner ?? decisionModule?.sourceFile,
+      );
+    }
   } catch {
     violations.push({ code: 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', path: 'src', line: 1 });
   } finally {
@@ -2092,8 +2214,6 @@ export const validateGraphKernelFlow = (
         violations.push({ code: 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', path, line: 1 });
       }
     }
-    validateAcceptedFileShapes(modules, violations);
-    validateAcceptedOwnerShapes(modules, violations);
     validateTrackedImports(modules, violations);
     validateCompilerLeafSemantics(modules, violations);
     const calls = validateBuilderReferences(modules, violations);
@@ -2107,11 +2227,13 @@ export const validateGraphKernelFlow = (
     );
     validateInternalValidator(
       modules,
-      calls.find((call) => call.module.path === 'src/transition/validate-compiled-internally.ts'),
+      calls.find(
+        (call) => call.module.path === 'src/transition/compiled/validate-compiled-internally.ts',
+      ),
       violations,
     );
-    validateInternalPromotion(modules, violations);
-    validateHostileExpectedEdgeWrites(modules, violations);
+    validateHostileDerivation(modules, violations);
+    validateHostileComparison(modules, violations);
     validateAdapter(modules, violations);
     validateDecisionFlow(modules, violations);
     validateRetainedState(modules, violations);
