@@ -55,15 +55,26 @@ helpers. During bootstrap it MUST remain exactly `export {};`.
 The hostile compiled-integrity boundary MUST have exactly this private module map:
 
 ```text
-transition/validate-compiled-pipeline.ts
+transition/decode-compiled-pipeline.ts
+transition/inspect-compiled-pipeline.ts
 transition/compiled/
-  hostile-compiled-validation.ts
-  validate-compiled-internally.ts
-  precheck-compiled-bounds.ts
+  compiled-inspection-fault.ts
+  compiled-inspection-fault-collector.ts
+  compiled-inspection.ts
+  compiled-capture-limit.ts
   snapshot-compiled-input.ts
-  validate-compiled-members.ts
-  validate-compiled-node.ts
-  validate-compiled-branch.ts
+  inspect-compiled-members.ts
+  inspect-compiled-root-members.ts
+  inspect-compiled-node-members.ts
+  inspect-compiled-node-policy.ts
+  inspect-compiled-node-routes.ts
+  inspect-compiled-branch-schema.ts
+  inspect-compiled-branch-fallback.ts
+  inspect-compiled-edges.ts
+  inspect-compiled-facts.ts
+  inspect-compiled-indexes.ts
+  inspect-compiled-outcomes.ts
+  inspect-compiled-regions.ts
   expected-compiled-semantics.ts
   derive-expected-compiled-semantics.ts
   compare-serialized-graph.ts
@@ -76,18 +87,30 @@ one export, remain absent from the transition and package-root barrels, and foll
 direct-import DAG:
 
 ```text
-validate-compiled-pipeline / decide-pipeline
-  -> compiled/validate-compiled-internally
-validate-compiled-internally
-  -> precheck-compiled-bounds
+decode-compiled-pipeline / decide-pipeline
+  -> inspect-compiled-pipeline
+inspect-compiled-pipeline
   -> snapshot-compiled-input
-  -> validate-compiled-members -> validate-compiled-node -> validate-compiled-branch
+     -> compiled-capture-limit
+  -> compiled-inspection-fault-collector -> compiled-inspection-fault
+  -> inspect-compiled-members
+     -> inspect-compiled-root-members
+     -> inspect-compiled-node-members
+        -> inspect-compiled-node-policy
+        -> inspect-compiled-node-routes
+           -> inspect-compiled-branch-schema
+              -> inspect-compiled-branch-fallback
+        -> inspect-compiled-outcomes
+     -> inspect-compiled-edges
+     -> inspect-compiled-facts
+     -> inspect-compiled-indexes
+     -> inspect-compiled-regions
   -> derive-expected-compiled-semantics -> expected-compiled-semantics
   -> compare-serialized-graph -> expected-compiled-semantics
   -> graph barrel
   -> verify-serialized-topology
   -> verify-serialized-indexes
-  -> hostile-compiled-validation
+  -> compiled-inspection
 ```
 
 No compiled leaf may import definition, the transition barrel, the public adapter,
@@ -158,7 +181,7 @@ unresolved, or out-of-order call fails closed.
 
 The hostile-validation proof MUST resolve imported symbols across the compiled leaves and
 construct a conservative inter-leaf control/data-flow proof. It MUST establish the exact
-terminating guard order, a descriptor precheck before one snapshot, no caller reread,
+terminating guard order, one descriptor-safe snapshot, no caller reread,
 independent expected derivation, exact comparison dominance, one exact builder input,
 zero builds before equality, at most one afterward, and the same kernel in topology,
 indexes, success, and decision evaluation. It MUST enumerate aliases, writes, escapes,
@@ -192,7 +215,7 @@ it MUST NOT use a manually enumerated subset or grandfather list. Adding a defin
 therefore adds it to the derived PR4a scope without a registry update.
 
 PR4b MUST additionally derive its integrity scope from every TypeScript leaf under
-`src/transition/compiled/**` plus `src/transition/validate-compiled-pipeline.ts`. It MUST
+`src/transition/compiled/**` plus `src/transition/decode-compiled-pipeline.ts`. It MUST
 exclude `decide-pipeline.ts`, use no grandfather list, and retain the PR4a scope. Adding a
 compiled leaf therefore adds it to the enforced 250/80 limits without a registry update.
 

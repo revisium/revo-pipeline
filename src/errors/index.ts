@@ -5,3 +5,6 @@ export type { DefinitionFaultCode } from './definition-fault-code.js';
 export type { PipelineCompilation } from './pipeline-compilation.js';
 export type { PipelineDecision } from './pipeline-decision.js';
 export type { RejectDecision } from './reject-decision.js';
+export type { CompiledPipelineDecoding } from './compiled-pipeline-decoding.js';
+export type { DecodeFault } from './decode-fault.js';
+export type { DecodeFaultCode } from './decode-fault-code.js';

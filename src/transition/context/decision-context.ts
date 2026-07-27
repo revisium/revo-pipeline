@@ -1,7 +1,7 @@
 import type { PipelineNode } from '../../spec/index.js';
-import type { HostileCompiledValidation } from '../compiled/hostile-compiled-validation.js';
+import type { CompiledInspection } from '../compiled/compiled-inspection.js';
 
-type SuccessfulCompiledValidation = Extract<HostileCompiledValidation, { readonly ok: true }>;
+type SuccessfulCompiledValidation = Extract<CompiledInspection, { readonly ok: true }>;
 
 export interface DecisionContext {
   readonly compiled: SuccessfulCompiledValidation;

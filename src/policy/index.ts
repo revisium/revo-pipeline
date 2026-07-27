@@ -11,3 +11,4 @@ export { normalizeJsonScalar } from './normalize-json-scalar.js';
 export { orderFaults } from './order-faults.js';
 export { PIPELINE_LIMITS } from './pipeline-limits.js';
 export { renderPortableValue } from './render-portable-value.js';
+export { DECODE_FAULT_PHASES } from './decode-fault-phases.js';

@@ -91,6 +91,7 @@ import assert from 'node:assert/strict';
 import {
   compilePipeline,
   decidePipeline,
+  decodeCompiledPipeline,
   definePipeline,
 } from '@revisium/revo-pipeline';
 import * as packageEntry from '@revisium/revo-pipeline';
@@ -98,6 +99,7 @@ import * as packageEntry from '@revisium/revo-pipeline';
 assert.deepEqual(Object.keys(packageEntry).sort(), [
   'compilePipeline',
   'decidePipeline',
+  'decodeCompiledPipeline',
   'definePipeline',
 ]);
 
@@ -123,6 +125,7 @@ const compilation = compilePipeline(definition);
 assert.equal(compilation.ok, true);
 if (!compilation.ok) throw new Error('The packed example must compile.');
 const pipeline = JSON.parse(JSON.stringify(compilation.pipeline));
+assert.deepEqual(decodeCompiledPipeline(pipeline), { ok: true, pipeline });
 const emptyFacts = { values: [], nodes: [], candidateVerdicts: [], gateResolutions: [] };
 assert.deepEqual(decidePipeline(pipeline, emptyFacts), {
   kind: 'activate',
@@ -161,6 +164,7 @@ const typeConsumer = `
 import {
   compilePipeline,
   decidePipeline,
+  decodeCompiledPipeline,
   definePipeline,
   type ActivateDecision,
   type ActivationCause,
@@ -181,12 +185,15 @@ import {
   type CompiledNode,
   type CompiledNodeIndexEntry,
   type CompiledPipeline,
+  type CompiledPipelineDecoding,
   type ConsensusNode,
   type ConsensusOutcome,
   type ConsensusPolicy,
   type ConsensusRoutes,
   type DecisionFault,
   type DecisionFaultCode,
+  type DecodeFault,
+  type DecodeFaultCode,
   type DefinitionFault,
   type DefinitionFaultCode,
   type FactDefinition,
@@ -236,12 +243,13 @@ type PublicTypes = readonly [
   ForkNode, JoinNode, ConsensusNode, HumanGateNode, TerminalNode, PipelineNode,
   PipelineDefinition, CompiledNode, CompiledEdgeRole, CompiledEdge, CompiledForkBranch,
   CompiledForkRegion, CompiledNodeIndexEntry, CompiledEdgeIndexEntry, CompiledPipeline,
+  CompiledPipelineDecoding, DecodeFaultCode, DecodeFault,
   DefinitionFaultCode, DefinitionFault, PipelineCompilation, NodeFact, PipelineValueFact,
   CandidateVerdict, GateResolution, PipelineFacts, ActivationCause, WaitReason,
   DecisionFaultCode, DecisionFault, ActivateDecision, SelectDecision, WaitDecision,
   TerminalDecision, NoopDecision, RejectDecision, PipelineDecision,
 ];
-const publicTypeCount: 63 = null as unknown as PublicTypes['length'];
+const publicTypeCount: 66 = null as unknown as PublicTypes['length'];
 
 const definition = definePipeline({
   schemaVersion: 1,
@@ -386,7 +394,7 @@ try {
   });
 
   console.log(
-    `Exact tarball validation passed (${manifest.files.length} files; publint, ATTW, exact contents, ESM, all 63 types, runtime/type deep-import denial).`,
+    `Exact tarball validation passed (${manifest.files.length} files; publint, ATTW, exact contents, ESM, all 66 types, runtime/type deep-import denial).`,
   );
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });

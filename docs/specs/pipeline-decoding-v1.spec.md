@@ -1,7 +1,7 @@
 # Pipeline Decoding v1
 
 - Status: Accepted
-- Implementation: Target for PR6; not currently exported
+- Implementation: Shipped by PR6
 - Target package: `@revisium/revo-pipeline`
 
 ## Public contract

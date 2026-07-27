@@ -4,12 +4,14 @@ Portable pipeline definitions, deterministic compilation, and pure semantic deci
 for Revo.
 
 The MVP root API is implemented and package-ready, but this `0.0.0` package is not
-published. It exports exactly `definePipeline`, `compilePipeline`, `decidePipeline`, and
-the 63 Accepted readonly contract types. No decoder, default export, alias, subpath,
+published. It exports exactly `definePipeline`, `compilePipeline`, `decidePipeline`,
+`decodeCompiledPipeline`, and
+the 66 Accepted readonly contract types, including safe unknown-JSON decoding. No default export, alias, subpath,
 policy helper, graph helper, or runtime dependency is public.
 
 ```text
 PipelineDefinition --compilePipeline--> CompiledPipeline
+unknown JSON --decodeCompiledPipeline--> CompiledPipelineDecoding
 CompiledPipeline + PipelineFacts --decidePipeline--> PipelineDecision
 ```
 
@@ -20,7 +22,12 @@ pure over the compiled graph and complete supplied fact snapshot.
 ## Working root example
 
 ```ts
-import { compilePipeline, decidePipeline, definePipeline } from '@revisium/revo-pipeline';
+import {
+  compilePipeline,
+  decidePipeline,
+  decodeCompiledPipeline,
+  definePipeline,
+} from '@revisium/revo-pipeline';
 
 const definition = definePipeline({
   schemaVersion: 1,
@@ -46,7 +53,11 @@ if (!compilation.ok) {
   throw new Error(compilation.faults.map((fault) => fault.message).join('\n'));
 }
 
-const pipeline = JSON.parse(JSON.stringify(compilation.pipeline));
+const decoding = decodeCompiledPipeline(JSON.parse(JSON.stringify(compilation.pipeline)));
+if (!decoding.ok) {
+  throw new Error(decoding.faults.map((fault) => fault.message).join('\n'));
+}
+const pipeline = decoding.pipeline;
 const emptyFacts = { values: [], nodes: [], candidateVerdicts: [], gateResolutions: [] };
 
 decidePipeline(pipeline, emptyFacts);
@@ -81,10 +92,8 @@ retries, resume, authorization, queues, agents, scripts, and atomic application 
 returned decision. `@revisium/revo-run` can consume the public `CompiledPipeline`,
 `PipelineFacts`, and `PipelineDecision` types through a one-way dependency.
 
-Accepted contracts now define future diagnostic decoding and pure snapshot reduction.
-They are not yet exported: PR6 owns decoder implementation and PR7 owns reducer
-implementation. A host may use already trusted typed compiled data today; this package
-does not yet claim safe unknown-JSON ingestion or reduction.
+The diagnostic decoder is shipped and is the safe boundary for unknown JSON. The
+Accepted pure snapshot reducer remains unimplemented for PR7.
 
 See the Accepted [definition contract](./docs/specs/pipeline-definition-v1.spec.md),
 [transition contract](./docs/specs/pipeline-transition-v1.spec.md),
@@ -104,6 +113,6 @@ corepack pnpm verify
 
 `verify` covers formatting, strict TypeScript, type-aware linting, unit/coverage and
 architecture proof, declarations/build, and one exact packed tarball reused for
-contents, publint, ATTW, isolated ESM/strict TypeScript consumers, all 63 public types,
+contents, publint, ATTW, isolated ESM/strict TypeScript consumers, all 66 public types,
 and runtime/type deep-import denial. Publishing, tagging, releasing, or merging requires
 separate approval.

@@ -6,11 +6,12 @@ facts.
 
 ```text
 PipelineDefinition --compilePipeline--> CompiledPipeline
+unknown JSON --decodeCompiledPipeline--> CompiledPipelineDecoding
 CompiledPipeline + PipelineFacts --decidePipeline--> PipelineDecision
 ```
 
 The Accepted MVP API is shipped from the single curated root: `definePipeline`,
-`compilePipeline`, `decidePipeline`, and exactly 63 readonly contract types. Internal
+`compilePipeline`, `decidePipeline`, `decodeCompiledPipeline`, and exactly 66 readonly contract types. Internal
 policy, graph, compiled-data validation, and decoder helpers are not exported.
 Fork/join readiness, consensus, and human-gate decisions are calculated exclusively
 from compiled topology and the supplied portable fact snapshot.
@@ -28,10 +29,10 @@ model/profile/prompt/workspace/provider binding, or host lifecycle. It never acc
 reads durable state, maps it to portable facts, atomically applies a decision, and reloads
 after conflicts. That host work is deliberately outside this package.
 
-Accepted, unimplemented contracts now define a diagnostic decoder and a pure reducer.
-PR6 may add `decodeCompiledPipeline` and its three types. PR7 may add `reducePipeline`
+The diagnostic decoder and its sole private inspector are shipped. The Accepted pure
+reducer remains unimplemented. PR7 may add `reducePipeline`
 and twenty reducer types, reaching exactly five root values and 86 types. Acceptance is
-not shipment: the current root remains exactly three values and 63 types.
+not shipment: the current root remains exactly four values and 66 types.
 
 One reducer occurrence is one complete finite DAG traversal. Occurrence keys isolate
 independent executions; bounded interior rework is compile-time, forward-only unrolling

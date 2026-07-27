@@ -11,7 +11,7 @@ src/policy/                        immutable limits and pure bounded utilities
 src/errors/                        type-only fault and result contracts
 src/graph/                         bounded topology, reachability and region algorithms
 src/definition/                    identity helper, validation and deterministic compilation
-src/transition/                    internal pure seven-node transition evaluation
+src/transition/                    decoding inspector and pure seven-node transition evaluation
 scripts/architecture/              structural source validation
 scripts/verify-architecture.ts     positive graph and exact negative probes
 scripts/verify-package.ts          one-tarball package/consumer proof

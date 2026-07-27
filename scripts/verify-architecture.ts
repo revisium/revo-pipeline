@@ -77,9 +77,9 @@ const expectStructureFailure = (module: SourceModule, rule: ArchitectureRule): v
 
 const positiveRootSource =
   "export { compilePipeline, definePipeline } from './definition/index.js';\n" +
-  "export { decidePipeline } from './transition/index.js';\n" +
+  "export { decidePipeline, decodeCompiledPipeline } from './transition/index.js';\n" +
   "export type { ActivateDecision, ActivationCause, AllJoinPolicy, AnyJoinPolicy, BranchCase, BranchDefault, BranchName, BranchNode, BranchPredicate, CandidateKey, CandidateVerdict, CompiledEdge, CompiledEdgeIndexEntry, CompiledEdgeRole, CompiledForkBranch, CompiledForkRegion, CompiledNode, CompiledNodeIndexEntry, CompiledPipeline, ConsensusNode, ConsensusOutcome, ConsensusPolicy, ConsensusRoutes, FactDefinition, FactKey, FactType, ForkBranch, ForkNode, GateResolution, HumanGateNode, HumanGateRoute, JoinNode, JoinOutcome, JoinPolicy, JoinRoutes, JsonScalar, NodeFact, NodeKey, NoopDecision, PipelineDefinition, PipelineFacts, PipelineNode, PipelineValueFact, QuorumConsensusPolicy, ResolutionName, SelectDecision, TaskNode, TaskOutcome, TaskRoutes, TerminalDecision, TerminalNode, ThresholdConsensusPolicy, ThresholdJoinPolicy, UnanimousConsensusPolicy, WaitDecision, WaitReason } from './spec/index.js';\n" +
-  "export type { DecisionFault, DecisionFaultCode, DefinitionFault, DefinitionFaultCode, PipelineCompilation, PipelineDecision, RejectDecision } from './errors/index.js';\n";
+  "export type { CompiledPipelineDecoding, DecodeFault, DecodeFaultCode, DecisionFault, DecisionFaultCode, DefinitionFault, DefinitionFaultCode, PipelineCompilation, PipelineDecision, RejectDecision } from './errors/index.js';\n";
 
 const positiveGraph: readonly SourceModule[] = [
   {
@@ -311,25 +311,37 @@ const compiledIntegrityPaths = sourceModules
   .filter(
     (path) =>
       path.startsWith('src/transition/compiled/') ||
-      path === 'src/transition/validate-compiled-pipeline.ts',
+      path === 'src/transition/decode-compiled-pipeline.ts' ||
+      path === 'src/transition/inspect-compiled-pipeline.ts',
   )
   .sort();
 assert.deepEqual(
   compiledIntegrityPaths,
   [
     'src/transition/compiled/compare-serialized-graph.ts',
+    'src/transition/compiled/compiled-capture-limit.ts',
+    'src/transition/compiled/compiled-inspection-fault-collector.ts',
+    'src/transition/compiled/compiled-inspection-fault.ts',
+    'src/transition/compiled/compiled-inspection.ts',
     'src/transition/compiled/derive-expected-compiled-semantics.ts',
     'src/transition/compiled/expected-compiled-semantics.ts',
-    'src/transition/compiled/hostile-compiled-validation.ts',
-    'src/transition/compiled/precheck-compiled-bounds.ts',
+    'src/transition/compiled/inspect-compiled-branch-fallback.ts',
+    'src/transition/compiled/inspect-compiled-branch-schema.ts',
+    'src/transition/compiled/inspect-compiled-edges.ts',
+    'src/transition/compiled/inspect-compiled-facts.ts',
+    'src/transition/compiled/inspect-compiled-indexes.ts',
+    'src/transition/compiled/inspect-compiled-members.ts',
+    'src/transition/compiled/inspect-compiled-node-members.ts',
+    'src/transition/compiled/inspect-compiled-node-policy.ts',
+    'src/transition/compiled/inspect-compiled-node-routes.ts',
+    'src/transition/compiled/inspect-compiled-outcomes.ts',
+    'src/transition/compiled/inspect-compiled-regions.ts',
+    'src/transition/compiled/inspect-compiled-root-members.ts',
     'src/transition/compiled/snapshot-compiled-input.ts',
-    'src/transition/compiled/validate-compiled-branch.ts',
-    'src/transition/compiled/validate-compiled-internally.ts',
-    'src/transition/compiled/validate-compiled-members.ts',
-    'src/transition/compiled/validate-compiled-node.ts',
     'src/transition/compiled/verify-serialized-indexes.ts',
     'src/transition/compiled/verify-serialized-topology.ts',
-    'src/transition/validate-compiled-pipeline.ts',
+    'src/transition/decode-compiled-pipeline.ts',
+    'src/transition/inspect-compiled-pipeline.ts',
   ],
   'Compiled integrity must retain the exact approved private leaf map.',
 );
@@ -341,28 +353,94 @@ const compiledIntegrityDependencies = new Map<string, readonly string[]>([
     ['./expected-compiled-semantics.js'],
   ],
   ['src/transition/compiled/expected-compiled-semantics.ts', []],
-  ['src/transition/compiled/hostile-compiled-validation.ts', []],
-  ['src/transition/compiled/precheck-compiled-bounds.ts', []],
-  ['src/transition/compiled/snapshot-compiled-input.ts', []],
-  ['src/transition/compiled/validate-compiled-branch.ts', []],
   [
-    'src/transition/compiled/validate-compiled-internally.ts',
+    'src/transition/compiled/inspect-compiled-members.ts',
     [
-      './compare-serialized-graph.js',
-      './derive-expected-compiled-semantics.js',
-      './hostile-compiled-validation.js',
-      './precheck-compiled-bounds.js',
-      './snapshot-compiled-input.js',
-      './validate-compiled-members.js',
-      './verify-serialized-indexes.js',
-      './verify-serialized-topology.js',
+      './compiled-inspection-fault-collector.js',
+      './inspect-compiled-edges.js',
+      './inspect-compiled-facts.js',
+      './inspect-compiled-indexes.js',
+      './inspect-compiled-node-members.js',
+      './inspect-compiled-regions.js',
+      './inspect-compiled-root-members.js',
     ],
   ],
-  ['src/transition/compiled/validate-compiled-members.ts', ['./validate-compiled-node.js']],
-  ['src/transition/compiled/validate-compiled-node.ts', ['./validate-compiled-branch.js']],
+  [
+    'src/transition/compiled/inspect-compiled-branch-fallback.ts',
+    ['./compiled-inspection-fault-collector.js'],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-indexes.ts',
+    ['./compiled-inspection-fault-collector.js'],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-node-members.ts',
+    [
+      './compiled-inspection-fault-collector.js',
+      './inspect-compiled-node-policy.js',
+      './inspect-compiled-node-routes.js',
+      './inspect-compiled-outcomes.js',
+    ],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-branch-schema.ts',
+    ['./compiled-inspection-fault-collector.js', './inspect-compiled-branch-fallback.js'],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-edges.ts',
+    ['./compiled-inspection-fault-collector.js'],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-facts.ts',
+    ['./compiled-inspection-fault-collector.js'],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-node-policy.ts',
+    ['./compiled-inspection-fault-collector.js'],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-node-routes.ts',
+    ['./compiled-inspection-fault-collector.js', './inspect-compiled-branch-schema.js'],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-outcomes.ts',
+    ['./compiled-inspection-fault-collector.js'],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-regions.ts',
+    ['./compiled-inspection-fault-collector.js'],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-root-members.ts',
+    ['./compiled-inspection-fault-collector.js'],
+  ],
+  [
+    'src/transition/compiled/compiled-inspection-fault-collector.ts',
+    ['./compiled-inspection-fault.js'],
+  ],
+  ['src/transition/compiled/compiled-inspection-fault.ts', []],
+  ['src/transition/compiled/compiled-inspection.ts', ['./compiled-inspection-fault.js']],
+  ['src/transition/compiled/compiled-capture-limit.ts', []],
+  [
+    'src/transition/compiled/snapshot-compiled-input.ts',
+    ['./compiled-capture-limit.js', './compiled-inspection-fault-collector.js'],
+  ],
+  [
+    'src/transition/inspect-compiled-pipeline.ts',
+    [
+      './compiled/compiled-inspection-fault-collector.js',
+      './compiled/compiled-inspection.js',
+      './compiled/compare-serialized-graph.js',
+      './compiled/derive-expected-compiled-semantics.js',
+      './compiled/inspect-compiled-members.js',
+      './compiled/snapshot-compiled-input.js',
+      './compiled/verify-serialized-indexes.js',
+      './compiled/verify-serialized-topology.js',
+    ],
+  ],
   ['src/transition/compiled/verify-serialized-indexes.ts', []],
   ['src/transition/compiled/verify-serialized-topology.ts', []],
-  ['src/transition/validate-compiled-pipeline.ts', ['./compiled/validate-compiled-internally.js']],
+  ['src/transition/decode-compiled-pipeline.ts', ['./inspect-compiled-pipeline.js']],
 ]);
 for (const [path, expected] of compiledIntegrityDependencies) {
   const dependencies = [...sourceOf(path).matchAll(/\bfrom\s+['"](\.[^'"]+)['"]/gu)]
@@ -426,7 +504,7 @@ const decisionDependencies = new Map<string, readonly string[]>([
   [
     'src/transition/decide-pipeline.ts',
     [
-      './compiled/validate-compiled-internally.js',
+      './inspect-compiled-pipeline.js',
       './context/build-decision-context.js',
       './evaluation/find-first-action.js',
       './evaluation/find-first-wait.js',
@@ -438,9 +516,9 @@ const decisionDependencies = new Map<string, readonly string[]>([
   ],
   [
     'src/transition/context/build-decision-context.ts',
-    ['../compiled/hostile-compiled-validation.js', './decision-context.js'],
+    ['../compiled/compiled-inspection.js', './decision-context.js'],
   ],
-  ['src/transition/context/decision-context.ts', ['../compiled/hostile-compiled-validation.js']],
+  ['src/transition/context/decision-context.ts', ['../compiled/compiled-inspection.js']],
   [
     'src/transition/evaluation/find-first-action.ts',
     ['../context/decision-context.js', '../facts/validated-facts.js', './select-node.js'],
@@ -552,7 +630,7 @@ assert.equal(
   sourceTokens(sourceOf('src/transition/index.ts')),
   sourceTokens(
     "export { decidePipeline } from './decide-pipeline.js';\n" +
-      "export { validateCompiledPipeline } from './validate-compiled-pipeline.js';\n",
+      "export { decodeCompiledPipeline } from './decode-compiled-pipeline.js';\n",
   ),
   'Transition barrel must not leak private compiled-integrity leaves.',
 );
@@ -600,11 +678,8 @@ assert.equal(
   'Compiler must build one canonical graph kernel.',
 );
 assert.equal(
-  (
-    sourceOf('src/transition/compiled/validate-compiled-internally.ts').match(
-      /\bbuildGraphKernel\s*\(/gu,
-    ) ?? []
-  ).length,
+  (sourceOf('src/transition/inspect-compiled-pipeline.ts').match(/\bbuildGraphKernel\s*\(/gu) ?? [])
+    .length,
   1,
   'Hostile validation must build one post-equality graph kernel.',
 );
