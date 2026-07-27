@@ -1669,13 +1669,12 @@ const validateHostileComparison = (
        actual.branches.every((branch, branchIndex) => {
          const expectedBranch = expected.branches?.[branchIndex];
          return (
-           expectedBranch !== undefined &&
-           branch.name === expectedBranch.name &&
-           branch.entry === expectedBranch.entry &&
-           branch.exit === expectedBranch.exit &&
-           branch.members.length === expectedBranch.members.length &&
+           branch.name === expectedBranch?.name &&
+           branch.entry === expectedBranch?.entry &&
+           branch.exit === expectedBranch?.exit &&
+           branch.members.length === expectedBranch?.members.length &&
            branch.members.every(
-             (member, memberIndex) => member === expectedBranch.members[memberIndex]
+             (member, memberIndex) => member === expectedBranch?.members[memberIndex]
            )
          );
        })`,

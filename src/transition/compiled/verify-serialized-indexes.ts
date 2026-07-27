@@ -15,9 +15,10 @@ const edgeIndexMatches = (
       const expectedOffsets = expected?.[nodeOffset];
       return (
         entry.key === kernel.nodeKeys[nodeOffset] &&
-        expectedOffsets !== undefined &&
-        entry.edges.length === expectedOffsets.length &&
-        entry.edges.every((edgeOffset, indexOffset) => edgeOffset === expectedOffsets[indexOffset])
+        entry.edges.length === expectedOffsets?.length &&
+        entry.edges.every(
+          (edgeOffset, indexOffset) => edgeOffset === expectedOffsets?.[indexOffset],
+        )
       );
     })
   );
