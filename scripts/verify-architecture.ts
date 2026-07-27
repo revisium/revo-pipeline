@@ -147,7 +147,7 @@ const architectureModules = await collectModules(join(root, 'scripts/architectur
 validateModuleStructure([...sourceModules, ...testModules, ...architectureModules]);
 validateSourceMetrics(sourceModules, [
   ...sourceMetricScope(sourceModules, 'PR4a'),
-  ...sourceMetricScope(sourceModules, 'PR4b'),
+  ...sourceMetricScope(sourceModules, 'PR4c'),
 ]);
 assert.deepEqual(validateGraphKernelFlow(root), []);
 execFileSync(oxlint, ['--config', config, '--deny-warnings', 'src', 'test'], {
@@ -380,6 +380,166 @@ assert.equal(
   false,
   'Compiled integrity must not add a nested barrel.',
 );
+const decisionLeafPaths = sourceModules
+  .map((module) => module.path)
+  .filter(
+    (path) =>
+      path === 'src/transition/decide-pipeline.ts' ||
+      /^src\/transition\/(?:context|facts|evaluation)\/.+\.ts$/u.test(path),
+  )
+  .sort();
+assert.deepEqual(decisionLeafPaths, [
+  'src/transition/context/build-decision-context.ts',
+  'src/transition/context/decision-context.ts',
+  'src/transition/decide-pipeline.ts',
+  'src/transition/evaluation/find-first-action.ts',
+  'src/transition/evaluation/find-first-wait.ts',
+  'src/transition/evaluation/find-reached-terminals.ts',
+  'src/transition/evaluation/select-branch.ts',
+  'src/transition/evaluation/select-consensus.ts',
+  'src/transition/evaluation/select-fork.ts',
+  'src/transition/evaluation/select-human-gate.ts',
+  'src/transition/evaluation/select-join.ts',
+  'src/transition/evaluation/select-node.ts',
+  'src/transition/evaluation/selection.ts',
+  'src/transition/evaluation/validate-fact-causality.ts',
+  'src/transition/facts/decision-fault-collector.ts',
+  'src/transition/facts/validate-candidate-verdicts.ts',
+  'src/transition/facts/validate-gate-resolutions.ts',
+  'src/transition/facts/validate-node-facts.ts',
+  'src/transition/facts/validate-pipeline-facts.ts',
+  'src/transition/facts/validate-value-facts.ts',
+  'src/transition/facts/validated-facts.ts',
+]);
+for (const nestedBarrel of [
+  'src/transition/context/index.ts',
+  'src/transition/facts/index.ts',
+  'src/transition/evaluation/index.ts',
+]) {
+  assert.equal(
+    sourceModules.some((module) => module.path === nestedBarrel),
+    false,
+    `Decision decomposition must not add nested barrel: ${nestedBarrel}`,
+  );
+}
+const decisionDependencies = new Map<string, readonly string[]>([
+  [
+    'src/transition/decide-pipeline.ts',
+    [
+      './compiled/validate-compiled-internally.js',
+      './context/build-decision-context.js',
+      './evaluation/find-first-action.js',
+      './evaluation/find-first-wait.js',
+      './evaluation/find-reached-terminals.js',
+      './evaluation/validate-fact-causality.js',
+      './facts/decision-fault-collector.js',
+      './facts/validate-pipeline-facts.js',
+    ],
+  ],
+  [
+    'src/transition/context/build-decision-context.ts',
+    ['../compiled/hostile-compiled-validation.js', './decision-context.js'],
+  ],
+  ['src/transition/context/decision-context.ts', ['../compiled/hostile-compiled-validation.js']],
+  [
+    'src/transition/evaluation/find-first-action.ts',
+    ['../context/decision-context.js', '../facts/validated-facts.js', './select-node.js'],
+  ],
+  [
+    'src/transition/evaluation/find-first-wait.ts',
+    ['../context/decision-context.js', '../facts/validated-facts.js', './select-node.js'],
+  ],
+  [
+    'src/transition/evaluation/find-reached-terminals.ts',
+    ['../context/decision-context.js', '../facts/validated-facts.js'],
+  ],
+  ['src/transition/evaluation/select-branch.ts', ['../facts/validated-facts.js', './selection.js']],
+  [
+    'src/transition/evaluation/select-consensus.ts',
+    ['../context/decision-context.js', '../facts/validated-facts.js', './selection.js'],
+  ],
+  [
+    'src/transition/evaluation/select-fork.ts',
+    ['../context/decision-context.js', '../facts/validated-facts.js', './selection.js'],
+  ],
+  [
+    'src/transition/evaluation/select-human-gate.ts',
+    ['../context/decision-context.js', '../facts/validated-facts.js', './selection.js'],
+  ],
+  [
+    'src/transition/evaluation/select-join.ts',
+    ['../context/decision-context.js', '../facts/validated-facts.js', './selection.js'],
+  ],
+  [
+    'src/transition/evaluation/select-node.ts',
+    [
+      '../context/decision-context.js',
+      '../facts/validated-facts.js',
+      './select-branch.js',
+      './select-consensus.js',
+      './select-fork.js',
+      './select-human-gate.js',
+      './select-join.js',
+      './selection.js',
+    ],
+  ],
+  ['src/transition/evaluation/selection.ts', []],
+  [
+    'src/transition/evaluation/validate-fact-causality.ts',
+    [
+      '../context/decision-context.js',
+      '../facts/decision-fault-collector.js',
+      '../facts/validated-facts.js',
+      './select-node.js',
+    ],
+  ],
+  ['src/transition/facts/decision-fault-collector.ts', []],
+  [
+    'src/transition/facts/validate-candidate-verdicts.ts',
+    ['../context/decision-context.js', './decision-fault-collector.js'],
+  ],
+  [
+    'src/transition/facts/validate-gate-resolutions.ts',
+    ['../context/decision-context.js', './decision-fault-collector.js'],
+  ],
+  [
+    'src/transition/facts/validate-node-facts.ts',
+    ['../context/decision-context.js', './decision-fault-collector.js'],
+  ],
+  [
+    'src/transition/facts/validate-pipeline-facts.ts',
+    [
+      '../context/decision-context.js',
+      './decision-fault-collector.js',
+      './validate-candidate-verdicts.js',
+      './validate-gate-resolutions.js',
+      './validate-node-facts.js',
+      './validate-value-facts.js',
+      './validated-facts.js',
+    ],
+  ],
+  [
+    'src/transition/facts/validate-value-facts.ts',
+    ['../context/decision-context.js', './decision-fault-collector.js'],
+  ],
+  ['src/transition/facts/validated-facts.ts', []],
+]);
+for (const [path, expected] of decisionDependencies) {
+  assert.doesNotMatch(
+    sourceOf(path),
+    /\bfrom\s+['"](?:\.\.\/)+(?:definition|graph)\/(?:index\.js|[^'"]+)['"]/u,
+    `Decision private leaf must not import graph or definition: ${path}`,
+  );
+  const dependencies = [...sourceOf(path).matchAll(/\bfrom\s+['"](\.[^'"]+)['"]/gu)]
+    .map((match) => match[1]!)
+    .filter(
+      (specifier) =>
+        !specifier.startsWith('../..') &&
+        !/^\.\.\/(?:errors|graph|policy|spec)\/index\.js$/u.test(specifier),
+    )
+    .sort();
+  assert.deepEqual(dependencies, [...expected].sort(), `Decision DAG drift: ${path}`);
+}
 assert.equal(
   sourceTokens(sourceOf('src/definition/index.ts')),
   sourceTokens(

@@ -5,6 +5,7 @@ import * as ts from 'typescript/unstable/ast';
 import {
   NodeFlags,
   SyntaxKind,
+  type BindingName,
   type CallExpression,
   type FunctionLikeDeclaration,
   type Identifier,
@@ -48,7 +49,7 @@ interface BuilderCall {
 const TRACKED_NAMES = new Set([
   'buildGraphKernel',
   'decidePipeline',
-  'evaluationIndex',
+  'buildDecisionContext',
   'GraphKernel',
   'ValidatedCompiledPipeline',
   'assembleCompiledPipeline',
@@ -99,6 +100,26 @@ const REQUIRED_PATHS = [
   'src/transition/compiled/verify-serialized-indexes.ts',
   'src/transition/compiled/verify-serialized-topology.ts',
   'src/transition/decide-pipeline.ts',
+  'src/transition/context/build-decision-context.ts',
+  'src/transition/context/decision-context.ts',
+  'src/transition/evaluation/find-first-action.ts',
+  'src/transition/evaluation/find-first-wait.ts',
+  'src/transition/evaluation/find-reached-terminals.ts',
+  'src/transition/evaluation/select-branch.ts',
+  'src/transition/evaluation/select-consensus.ts',
+  'src/transition/evaluation/select-fork.ts',
+  'src/transition/evaluation/select-human-gate.ts',
+  'src/transition/evaluation/select-join.ts',
+  'src/transition/evaluation/select-node.ts',
+  'src/transition/evaluation/selection.ts',
+  'src/transition/evaluation/validate-fact-causality.ts',
+  'src/transition/facts/decision-fault-collector.ts',
+  'src/transition/facts/validate-candidate-verdicts.ts',
+  'src/transition/facts/validate-gate-resolutions.ts',
+  'src/transition/facts/validate-node-facts.ts',
+  'src/transition/facts/validate-pipeline-facts.ts',
+  'src/transition/facts/validate-value-facts.ts',
+  'src/transition/facts/validated-facts.ts',
   'src/transition/validate-compiled-pipeline.ts',
 ] as const;
 
@@ -323,7 +344,7 @@ const resolvedSymbolId = (checker: Checker, identifier: Identifier): number | un
 
 const resolvedCalls = (
   checker: Checker,
-  owner: FunctionLikeDeclaration,
+  owner: Node,
   target: FunctionLikeDeclaration,
 ): readonly CallExpression[] => {
   const targetIdentifier = functionIdentifier(target);
@@ -1766,15 +1787,37 @@ const validateDecisionFlow = (
 ): void => {
   const module = modules.find((entry) => entry.path === 'src/transition/decide-pipeline.ts');
   const decide = findFunction(modules, 'src/transition/decide-pipeline.ts', 'decidePipeline');
-  const evaluator = findFunction(modules, 'src/transition/decide-pipeline.ts', 'evaluationIndex');
-  if (!module || !decide || !evaluator) {
+  const builderModule = modules.find(
+    (entry) => entry.path === 'src/transition/context/build-decision-context.ts',
+  );
+  const builder = findFunction(
+    modules,
+    'src/transition/context/build-decision-context.ts',
+    'buildDecisionContext',
+  );
+  const transitionBarrel = modules.find((entry) => entry.path === 'src/transition/index.ts');
+  const privateBarrel = modules.find((entry) =>
+    /^src\/transition\/(?:context|evaluation|facts)\/index\.ts$/u.test(entry.path),
+  );
+  if (!module || !decide || !builderModule || !builder) {
     add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
     return;
+  }
+  if (
+    !transitionBarrel ||
+    compactSource(transitionBarrel.sourceFile.text) !==
+      compactSource(
+        "export { decidePipeline } from './decide-pipeline.js';\n" +
+          "export { validateCompiledPipeline } from './validate-compiled-pipeline.js';",
+      ) ||
+    privateBarrel
+  ) {
+    add(violations, 'GRAPH_KERNEL_ADAPTER_EXPOSURE', privateBarrel ?? transitionBarrel);
   }
   const validationCall = directCalls(decide, 'validateCompiledInternally')[0];
   if (
     directCalls(decide, 'validateCompiledInternally').length !== 1 ||
-    directCalls(decide, 'evaluationIndex').length !== 1 ||
+    directCalls(decide, 'buildDecisionContext').length !== 1 ||
     !validationCall ||
     !isDirectTopLevelCall(decide, validationCall) ||
     validationCall.arguments.length !== 1 ||
@@ -1782,27 +1825,23 @@ const validateDecisionFlow = (
   ) {
     add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, decide);
   }
-  const evaluationCall = directCalls(decide, 'evaluationIndex')[0];
+  const evaluationCall = directCalls(decide, 'buildDecisionContext')[0];
   if (
     !evaluationCall ||
-    evaluationCall.arguments[1]?.getText() !== 'compiled.kernel' ||
-    evaluationCall.arguments[0]?.getText() !== 'compiled.snapshot' ||
-    evaluationCall.arguments[2]?.getText() !== 'compiled.topologicalOffsets'
+    evaluationCall.arguments.length !== 1 ||
+    evaluationCall.arguments[0]?.getText() !== 'compiled'
   ) {
     add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, evaluationCall ?? decide);
   }
-  for (const [consumer, pipelineArgument] of [
-    ['validateFactShape', 1],
-    ['validateCausality', 0],
-    ['reachedTerminals', 0],
-    ['firstAction', 0],
-    ['firstWait', 0],
+  for (const [consumer, contextArgument] of [
+    ['validatePipelineFacts', 1],
+    ['validateFactCausality', 1],
+    ['findReachedTerminals', 1],
+    ['findFirstAction', 1],
+    ['findFirstWait', 1],
   ] as const) {
     const calls = directCalls(decide, consumer);
-    if (
-      calls.length !== 1 ||
-      calls[0]?.arguments[pipelineArgument]?.getText() !== 'compiled.snapshot'
-    ) {
+    if (calls.length !== 1 || calls[0]?.arguments[contextArgument]?.getText() !== 'context') {
       add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, calls[0] ?? decide);
     }
   }
@@ -1816,16 +1855,11 @@ const validateDecisionFlow = (
   ) {
     add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, pipelineInputReferences[2] ?? decide);
   }
-  const parameters = evaluator.parameters;
-  if (
-    parameters.length < 2 ||
-    nameOf(parameters[1]?.name) !== 'kernel' ||
-    !parameters[1]?.type ||
-    parameters[1].type.getText() !== 'GraphKernel'
-  ) {
-    add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, evaluator);
+  const parameters = builder.parameters;
+  if (parameters.length !== 1 || nameOf(parameters[0]?.name) !== 'compiled') {
+    add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', builderModule, builder);
   }
-  const evaluatorText = evaluator.getText();
+  const evaluatorText = builder.getText();
   if (
     evaluatorText.includes('buildGraphKernel') ||
     evaluatorText.includes('structuredClone') ||
@@ -1834,7 +1868,106 @@ const validateDecisionFlow = (
     /pipeline\.edges\.(?:reduce|forEach|map)/u.test(evaluatorText) ||
     /(?:topologicalOrder|buildAdjacency)\s*\(/u.test(evaluatorText)
   ) {
-    add(violations, 'GRAPH_KERNEL_REBUILD', module, evaluator);
+    add(violations, 'GRAPH_KERNEL_REBUILD', builderModule, builder);
+  }
+};
+
+const DECISION_EVALUATION_PATHS = [
+  'src/transition/evaluation/find-first-action.ts',
+  'src/transition/evaluation/find-first-wait.ts',
+  'src/transition/evaluation/find-reached-terminals.ts',
+  'src/transition/evaluation/select-branch.ts',
+  'src/transition/evaluation/select-consensus.ts',
+  'src/transition/evaluation/select-fork.ts',
+  'src/transition/evaluation/select-human-gate.ts',
+  'src/transition/evaluation/select-join.ts',
+  'src/transition/evaluation/select-node.ts',
+  'src/transition/evaluation/validate-fact-causality.ts',
+  'src/transition/facts/validate-candidate-verdicts.ts',
+  'src/transition/facts/validate-gate-resolutions.ts',
+  'src/transition/facts/validate-node-facts.ts',
+  'src/transition/facts/validate-pipeline-facts.ts',
+  'src/transition/facts/validate-value-facts.ts',
+] as const;
+
+const validateDecisionLeafSafety = (
+  modules: readonly ParsedModule[],
+  violations: ArchitectureViolation[],
+): void => {
+  for (const path of DECISION_EVALUATION_PATHS) {
+    const module = modules.find((candidate) => candidate.path === path);
+    if (!module) {
+      add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
+      continue;
+    }
+    const evaluationLeaf = path.includes('/evaluation/');
+    for (const node of descendants(module.sourceFile)) {
+      if (
+        (ts.isCallExpression(node) && node.expression.kind === SyntaxKind.ImportKeyword) ||
+        (evaluationLeaf &&
+          ts.isCallExpression(node) &&
+          ts.isIdentifier(node.expression) &&
+          [
+            'buildDecisionContext',
+            'buildGraphKernel',
+            'topologicalOrder',
+            'evaluationIndex',
+          ].includes(node.expression.text)) ||
+        (evaluationLeaf &&
+          ts.isIdentifier(node) &&
+          ['buildDecisionContext', 'buildGraphKernel', 'evaluationIndex'].includes(node.text)) ||
+        (evaluationLeaf &&
+          (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+          ['buildDecisionContext', 'buildGraphKernel', 'evaluationIndex'].includes(node.text)) ||
+        (evaluationLeaf &&
+          ts.isNewExpression(node) &&
+          ts.isIdentifier(node.expression) &&
+          ['Map', 'Set', 'WeakMap', 'WeakSet'].includes(node.expression.text)) ||
+        (evaluationLeaf &&
+          ts.isPropertyAccessExpression(node) &&
+          ['localeCompare', 'toLocaleLowerCase', 'toLocaleUpperCase'].includes(node.name.text)) ||
+        (evaluationLeaf &&
+          ts.isPropertyAccessExpression(node) &&
+          ['set', 'delete', 'clear', 'push', 'pop', 'shift', 'unshift', 'splice', 'sort'].includes(
+            node.name.text,
+          ) &&
+          /^(?:context|facts)(?:\.|\[)/u.test(node.expression.getText())) ||
+        (evaluationLeaf &&
+          ts.isBinaryExpression(node) &&
+          /^(?:=|\+=|-=|\*=|\/=|%=|\*\*=|<<=|>>=|>>>=|&=|\|=|\^=|&&=|\|\|=|\?\?=)$/u.test(
+            node.operatorToken.getText(),
+          ) &&
+          /^(?:context|facts)(?:\.|\[)/u.test(node.left.getText())) ||
+        (evaluationLeaf &&
+          ts.isPrefixUnaryExpression(node) &&
+          (node.operator === SyntaxKind.PlusPlusToken ||
+            node.operator === SyntaxKind.MinusMinusToken) &&
+          /^(?:context|facts)(?:\.|\[)/u.test(node.operand.getText())) ||
+        (evaluationLeaf &&
+          ts.isPostfixUnaryExpression(node) &&
+          /^(?:context|facts)(?:\.|\[)/u.test(node.operand.getText())) ||
+        (evaluationLeaf &&
+          ts.isDeleteExpression(node) &&
+          /^(?:context|facts)(?:\.|\[)/u.test(node.expression.getText()))
+      ) {
+        add(violations, 'GRAPH_KERNEL_REBUILD', module, node);
+      }
+    }
+    const imports = [...module.sourceFile.statements].filter(ts.isImportDeclaration);
+    for (const declaration of imports) {
+      const specifier = stringValue(declaration.moduleSpecifier);
+      if (
+        specifier?.includes('/graph/') ||
+        specifier?.includes('/compiled/') ||
+        specifier === '../index.js' ||
+        (path.includes('/select-') &&
+          (specifier?.includes('validate-fact-causality') ||
+            specifier?.includes('validate-pipeline-facts'))) ||
+        (path.includes('/facts/') && specifier?.includes('/evaluation/'))
+      ) {
+        add(violations, 'GRAPH_KERNEL_REBUILD', module, declaration);
+      }
+    }
   }
 };
 
@@ -1909,6 +2042,1517 @@ const validateRetainedState = (
   }
 };
 
+const validateDecisionSemanticSafety = (
+  checker: Checker,
+  modules: readonly ParsedModule[],
+  violations: ArchitectureViolation[],
+): void => {
+  const decisionPaths = [
+    'src/transition/context/build-decision-context.ts',
+    ...DECISION_EVALUATION_PATHS,
+  ];
+  for (const path of decisionPaths) {
+    const module = modules.find((candidate) => candidate.path === path);
+    if (!module) {
+      add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
+      continue;
+    }
+    const evaluationLeaf = path.includes('/evaluation/');
+    const declarations = descendants(module.sourceFile).filter(
+      (node): node is VariableDeclaration => ts.isVariableDeclaration(node),
+    );
+    const constructorAliases = new Set<number>();
+    const kernelBuilderAliases = new Set<number>();
+    type DecisionBindingKind =
+      | 'compiled'
+      | 'context'
+      | 'facts'
+      | 'forbidden-snapshot-collection'
+      | 'map'
+      | 'snapshot';
+    const bindingKinds = new Map<number, DecisionBindingKind>();
+    const bindingOrigins = new Map<number, number>();
+    const bindingPaths = new Map<number, string>();
+    for (const node of descendants(module.sourceFile)) {
+      if (ts.isIdentifier(node) && (node.text === 'Map' || node.text === 'Set')) {
+        const symbol = resolvedSymbolId(checker, node);
+        if (symbol !== undefined) {
+          constructorAliases.add(symbol);
+        }
+      }
+      if (ts.isIdentifier(node) && node.text === 'buildGraphKernel') {
+        const symbol = resolvedSymbolId(checker, node);
+        if (symbol !== undefined) {
+          kernelBuilderAliases.add(symbol);
+        }
+      }
+    }
+    for (const owner of descendants(module.sourceFile).filter(isFunctionLikeDeclaration)) {
+      for (const parameter of owner.parameters) {
+        if (!ts.isIdentifier(parameter.name)) {
+          continue;
+        }
+        const symbol = resolvedSymbolId(checker, parameter.name);
+        if (symbol === undefined) {
+          continue;
+        }
+        if (parameter.name.text === 'context') {
+          bindingKinds.set(symbol, 'context');
+          bindingOrigins.set(symbol, symbol);
+          bindingPaths.set(symbol, 'context');
+        } else if (parameter.name.text === 'facts') {
+          bindingKinds.set(symbol, 'facts');
+          bindingOrigins.set(symbol, symbol);
+          bindingPaths.set(symbol, 'facts');
+        }
+      }
+    }
+    const derivedPropertyKind = (
+      ownerKind: DecisionBindingKind | undefined,
+      property: string,
+    ): DecisionBindingKind | undefined => {
+      if (ownerKind === 'context' && property === 'compiled') {
+        return 'compiled';
+      }
+      if (ownerKind === 'compiled' && property === 'snapshot') {
+        return 'snapshot';
+      }
+      if (
+        ownerKind === 'snapshot' &&
+        ['edgeIndex', 'forkRegions', 'nodeIndex', 'nodes'].includes(property)
+      ) {
+        return 'forbidden-snapshot-collection';
+      }
+      if (ownerKind === 'context' || ownerKind === 'facts') {
+        return 'map';
+      }
+      return undefined;
+    };
+    const literalElementName = (expression: Node | undefined): string | undefined =>
+      expression &&
+      (ts.isStringLiteral(expression) ||
+        ts.isNoSubstitutionTemplateLiteral(expression) ||
+        ts.isNumericLiteral(expression))
+        ? expression.text
+        : undefined;
+    const derivedBindingKind = (expression: Node): DecisionBindingKind | undefined => {
+      if (
+        ts.isParenthesizedExpression(expression) ||
+        ts.isAssertionExpression(expression) ||
+        ts.isNonNullExpression(expression) ||
+        ts.isSatisfiesExpression(expression)
+      ) {
+        return derivedBindingKind(expression.expression);
+      }
+      if (ts.isIdentifier(expression)) {
+        const symbol = resolvedSymbolId(checker, expression);
+        return symbol === undefined ? undefined : bindingKinds.get(symbol);
+      }
+      if (ts.isPropertyAccessExpression(expression)) {
+        return derivedPropertyKind(derivedBindingKind(expression.expression), expression.name.text);
+      }
+      if (ts.isElementAccessExpression(expression)) {
+        const property = literalElementName(expression.argumentExpression);
+        return property === undefined
+          ? undefined
+          : derivedPropertyKind(derivedBindingKind(expression.expression), property);
+      }
+      if (ts.isConditionalExpression(expression)) {
+        const branches = [
+          derivedBindingKind(expression.whenTrue),
+          derivedBindingKind(expression.whenFalse),
+        ].filter((kind): kind is DecisionBindingKind => kind !== undefined);
+        return branches.length > 0 && branches.every((kind) => kind === branches[0])
+          ? branches[0]
+          : undefined;
+      }
+      if (
+        ts.isBinaryExpression(expression) &&
+        [
+          SyntaxKind.AmpersandAmpersandToken,
+          SyntaxKind.BarBarToken,
+          SyntaxKind.QuestionQuestionToken,
+        ].includes(expression.operatorToken.kind)
+      ) {
+        const branches = [
+          derivedBindingKind(expression.left),
+          derivedBindingKind(expression.right),
+        ].filter((kind): kind is DecisionBindingKind => kind !== undefined);
+        return branches.length > 0 && branches.every((kind) => kind === branches[0])
+          ? branches[0]
+          : undefined;
+      }
+      return undefined;
+    };
+    const derivedBindingOrigin = (expression: Node): number | undefined => {
+      if (
+        ts.isParenthesizedExpression(expression) ||
+        ts.isAssertionExpression(expression) ||
+        ts.isNonNullExpression(expression) ||
+        ts.isSatisfiesExpression(expression)
+      ) {
+        return derivedBindingOrigin(expression.expression);
+      }
+      if (ts.isIdentifier(expression)) {
+        const symbol = resolvedSymbolId(checker, expression);
+        return symbol === undefined ? undefined : bindingOrigins.get(symbol);
+      }
+      if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) {
+        return derivedBindingOrigin(expression.expression);
+      }
+      if (ts.isConditionalExpression(expression)) {
+        const origins = [
+          derivedBindingOrigin(expression.whenTrue),
+          derivedBindingOrigin(expression.whenFalse),
+        ].filter((origin): origin is number => origin !== undefined);
+        return origins.length > 0 && origins.every((origin) => origin === origins[0])
+          ? origins[0]
+          : undefined;
+      }
+      if (
+        ts.isBinaryExpression(expression) &&
+        [
+          SyntaxKind.AmpersandAmpersandToken,
+          SyntaxKind.BarBarToken,
+          SyntaxKind.QuestionQuestionToken,
+        ].includes(expression.operatorToken.kind)
+      ) {
+        const origins = [
+          derivedBindingOrigin(expression.left),
+          derivedBindingOrigin(expression.right),
+        ].filter((origin): origin is number => origin !== undefined);
+        return origins.length > 0 && origins.every((origin) => origin === origins[0])
+          ? origins[0]
+          : undefined;
+      }
+      return undefined;
+    };
+    const derivedBindingPath = (expression: Node): string | undefined => {
+      if (
+        ts.isParenthesizedExpression(expression) ||
+        ts.isAssertionExpression(expression) ||
+        ts.isNonNullExpression(expression) ||
+        ts.isSatisfiesExpression(expression)
+      ) {
+        return derivedBindingPath(expression.expression);
+      }
+      if (ts.isIdentifier(expression)) {
+        const symbol = resolvedSymbolId(checker, expression);
+        return symbol === undefined ? undefined : bindingPaths.get(symbol);
+      }
+      if (ts.isPropertyAccessExpression(expression)) {
+        const owner = derivedBindingPath(expression.expression);
+        return owner === undefined ? undefined : `${owner}.${expression.name.text}`;
+      }
+      if (ts.isElementAccessExpression(expression)) {
+        const owner = derivedBindingPath(expression.expression);
+        const property = literalElementName(expression.argumentExpression);
+        return owner === undefined || property === undefined ? undefined : `${owner}.${property}`;
+      }
+      return undefined;
+    };
+    const containsReturnedProvenance = (expression: Node): boolean => {
+      if (derivedBindingKind(expression) !== undefined) {
+        return true;
+      }
+      if (
+        ts.isParenthesizedExpression(expression) ||
+        ts.isAssertionExpression(expression) ||
+        ts.isNonNullExpression(expression) ||
+        ts.isSatisfiesExpression(expression)
+      ) {
+        return containsReturnedProvenance(expression.expression);
+      }
+      if (ts.isConditionalExpression(expression)) {
+        return (
+          containsReturnedProvenance(expression.whenTrue) ||
+          containsReturnedProvenance(expression.whenFalse)
+        );
+      }
+      if (ts.isArrayLiteralExpression(expression)) {
+        return expression.elements.some(containsReturnedProvenance);
+      }
+      if (ts.isObjectLiteralExpression(expression)) {
+        return expression.properties.some((property) => {
+          if (ts.isSpreadAssignment(property)) {
+            return containsReturnedProvenance(property.expression);
+          }
+          return (
+            (ts.isPropertyAssignment(property) &&
+              containsReturnedProvenance(property.initializer)) ||
+            (ts.isShorthandPropertyAssignment(property) &&
+              containsReturnedProvenance(property.name))
+          );
+        });
+      }
+      if (ts.isAwaitExpression(expression)) {
+        return containsReturnedProvenance(expression.expression);
+      }
+      if (ts.isYieldExpression(expression)) {
+        return expression.expression ? containsReturnedProvenance(expression.expression) : false;
+      }
+      if (ts.isTemplateExpression(expression)) {
+        return expression.templateSpans.some((span) => containsReturnedProvenance(span.expression));
+      }
+      if (ts.isTaggedTemplateExpression(expression)) {
+        return containsReturnedProvenance(expression.template);
+      }
+      if (
+        ts.isBinaryExpression(expression) &&
+        [
+          SyntaxKind.AmpersandAmpersandToken,
+          SyntaxKind.BarBarToken,
+          SyntaxKind.CommaToken,
+          SyntaxKind.QuestionQuestionToken,
+        ].includes(expression.operatorToken.kind)
+      ) {
+        return (
+          containsReturnedProvenance(expression.left) ||
+          containsReturnedProvenance(expression.right)
+        );
+      }
+      if (
+        ts.isCallExpression(expression) ||
+        ts.isNewExpression(expression) ||
+        ts.isPropertyAccessExpression(expression) ||
+        ts.isElementAccessExpression(expression) ||
+        ts.isArrowFunction(expression) ||
+        ts.isFunctionExpression(expression)
+      ) {
+        return false;
+      }
+      let nestedProvenance = false;
+      expression.forEachChild((child) => {
+        if (!nestedProvenance && ts.isExpression(child) && containsReturnedProvenance(child)) {
+          nestedProvenance = true;
+        }
+      });
+      return nestedProvenance;
+    };
+    const recursivelyContainsProvenance = (node: Node): boolean => {
+      if (ts.isExpression(node) && containsReturnedProvenance(node)) {
+        return true;
+      }
+      if (
+        ts.isCallExpression(node) ||
+        ts.isNewExpression(node) ||
+        ts.isPropertyAccessExpression(node) ||
+        ts.isElementAccessExpression(node)
+      ) {
+        return false;
+      }
+      let found = false;
+      node.forEachChild((child) => {
+        if (!found && recursivelyContainsProvenance(child)) {
+          found = true;
+        }
+      });
+      return found;
+    };
+    const enclosingFunctionCount = (node: Node): number => {
+      let count = 0;
+      for (let owner = node.parent; owner; owner = owner.parent) {
+        if (isFunctionLikeDeclaration(owner)) {
+          count += 1;
+        }
+      }
+      return count;
+    };
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const declaration of declarations) {
+        if (!declaration.initializer) {
+          continue;
+        }
+        if (ts.isIdentifier(declaration.name) && ts.isIdentifier(declaration.initializer)) {
+          const target = resolvedSymbolId(checker, declaration.name);
+          const source = resolvedSymbolId(checker, declaration.initializer);
+          if (
+            target !== undefined &&
+            source !== undefined &&
+            constructorAliases.has(source) &&
+            !constructorAliases.has(target)
+          ) {
+            constructorAliases.add(target);
+            changed = true;
+          }
+          if (
+            target !== undefined &&
+            source !== undefined &&
+            kernelBuilderAliases.has(source) &&
+            !kernelBuilderAliases.has(target)
+          ) {
+            kernelBuilderAliases.add(target);
+            changed = true;
+          }
+          const kind = source === undefined ? undefined : bindingKinds.get(source);
+          if (target !== undefined && kind && bindingKinds.get(target) !== kind) {
+            bindingKinds.set(target, kind);
+            const origin = source === undefined ? undefined : bindingOrigins.get(source);
+            if (origin !== undefined) {
+              bindingOrigins.set(target, origin);
+            }
+            const sourcePath = source === undefined ? undefined : bindingPaths.get(source);
+            if (sourcePath !== undefined) {
+              bindingPaths.set(target, sourcePath);
+            }
+            changed = true;
+          }
+        }
+        if (ts.isIdentifier(declaration.name)) {
+          const target = resolvedSymbolId(checker, declaration.name);
+          const derivedKind = derivedBindingKind(declaration.initializer);
+          if (target !== undefined && derivedKind && bindingKinds.get(target) !== derivedKind) {
+            bindingKinds.set(target, derivedKind);
+            const origin = derivedBindingOrigin(declaration.initializer);
+            if (origin !== undefined) {
+              bindingOrigins.set(target, origin);
+            }
+            const sourcePath = derivedBindingPath(declaration.initializer);
+            if (sourcePath !== undefined) {
+              bindingPaths.set(target, sourcePath);
+            }
+            if (derivedKind === 'forbidden-snapshot-collection') {
+              add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, declaration.name);
+            }
+            changed = true;
+          }
+          continue;
+        }
+        const bindPattern = (
+          name: BindingName,
+          sourceKind: DecisionBindingKind | undefined,
+          sourceOrigin: number | undefined,
+          sourcePath: string | undefined,
+        ): void => {
+          if (ts.isIdentifier(name)) {
+            const target = resolvedSymbolId(checker, name);
+            if (target !== undefined && sourceKind && bindingKinds.get(target) !== sourceKind) {
+              bindingKinds.set(target, sourceKind);
+              if (sourceOrigin !== undefined) {
+                bindingOrigins.set(target, sourceOrigin);
+              }
+              if (sourcePath !== undefined) {
+                bindingPaths.set(target, sourcePath);
+              }
+              if (sourceKind === 'forbidden-snapshot-collection') {
+                add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, name);
+              }
+              changed = true;
+            }
+            return;
+          }
+          for (const element of name.elements) {
+            if (ts.isOmittedExpression(element)) {
+              continue;
+            }
+            if (element.dotDotDotToken) {
+              if (sourceKind) {
+                add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, element);
+              }
+              continue;
+            }
+            if (ts.isArrayBindingPattern(name)) {
+              if (sourceKind) {
+                add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, element);
+              }
+              continue;
+            }
+            if (!element.name) {
+              if (sourceKind) {
+                add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, element);
+              }
+              continue;
+            }
+            const propertyNode = element.propertyName ?? element.name;
+            const property =
+              propertyNode &&
+              (ts.isIdentifier(propertyNode) ||
+                ts.isStringLiteral(propertyNode) ||
+                ts.isNumericLiteral(propertyNode))
+                ? propertyNode.text
+                : undefined;
+            if (property === undefined) {
+              if (sourceKind) {
+                add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, element);
+              }
+              continue;
+            }
+            bindPattern(
+              element.name,
+              derivedPropertyKind(sourceKind, property),
+              sourceOrigin,
+              sourcePath === undefined ? undefined : `${sourcePath}.${property}`,
+            );
+          }
+        };
+        bindPattern(
+          declaration.name,
+          derivedBindingKind(declaration.initializer),
+          derivedBindingOrigin(declaration.initializer),
+          derivedBindingPath(declaration.initializer),
+        );
+      }
+    }
+    for (const declaration of declarations) {
+      if (
+        declaration.initializer &&
+        !ts.isArrowFunction(declaration.initializer) &&
+        !ts.isFunctionExpression(declaration.initializer) &&
+        derivedBindingKind(declaration.initializer) === undefined &&
+        recursivelyContainsProvenance(declaration.initializer)
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, declaration);
+      }
+    }
+    for (const node of descendants(module.sourceFile)) {
+      if (
+        ts.isBindingElement(node) &&
+        node.initializer &&
+        recursivelyContainsProvenance(node.initializer)
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        ts.isPropertyDeclaration(node) &&
+        node.initializer &&
+        recursivelyContainsProvenance(node.initializer)
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (ts.isDecorator(node) && recursivelyContainsProvenance(node.expression)) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+    }
+    type ApprovedArgument = readonly [
+      position: number,
+      kind: DecisionBindingKind,
+      parameter: 'context' | 'facts',
+    ];
+    const approvedCallSpecifications: Readonly<
+      Record<string, readonly (readonly [callee: string, arguments: readonly ApprovedArgument[]])[]>
+    > = {
+      'src/transition/evaluation/find-first-action.ts': [
+        [
+          'selectNode',
+          [
+            [1, 'facts', 'facts'],
+            [2, 'context', 'context'],
+          ],
+        ],
+      ],
+      'src/transition/evaluation/find-first-wait.ts': [
+        [
+          'selectNode',
+          [
+            [1, 'facts', 'facts'],
+            [2, 'context', 'context'],
+          ],
+        ],
+      ],
+      'src/transition/evaluation/find-reached-terminals.ts': [],
+      'src/transition/evaluation/select-branch.ts': [],
+      'src/transition/evaluation/select-consensus.ts': [],
+      'src/transition/evaluation/select-fork.ts': [],
+      'src/transition/evaluation/select-human-gate.ts': [],
+      'src/transition/evaluation/select-join.ts': [],
+      'src/transition/evaluation/select-node.ts': [
+        ['selectBranch', [[1, 'facts', 'facts']]],
+        [
+          'selectFork',
+          [
+            [1, 'facts', 'facts'],
+            [2, 'context', 'context'],
+          ],
+        ],
+        [
+          'selectJoin',
+          [
+            [1, 'facts', 'facts'],
+            [2, 'context', 'context'],
+          ],
+        ],
+        [
+          'selectConsensus',
+          [
+            [1, 'facts', 'facts'],
+            [2, 'context', 'context'],
+          ],
+        ],
+        [
+          'selectHumanGate',
+          [
+            [1, 'facts', 'facts'],
+            [2, 'context', 'context'],
+          ],
+        ],
+      ],
+      'src/transition/evaluation/validate-fact-causality.ts': [
+        [
+          'validateActivations',
+          [
+            [0, 'facts', 'facts'],
+            [1, 'context', 'context'],
+          ],
+        ],
+        [
+          'validateTerminalSelectors',
+          [
+            [0, 'facts', 'facts'],
+            [1, 'context', 'context'],
+          ],
+        ],
+        [
+          'selectNode',
+          [
+            [1, 'facts', 'facts'],
+            [2, 'context', 'context'],
+          ],
+        ],
+      ],
+      'src/transition/facts/validate-candidate-verdicts.ts': [],
+      'src/transition/facts/validate-gate-resolutions.ts': [],
+      'src/transition/facts/validate-node-facts.ts': [],
+      'src/transition/facts/validate-pipeline-facts.ts': [
+        ['validateCandidateVerdicts', [[1, 'context', 'context']]],
+        ['validateGateResolutions', [[1, 'context', 'context']]],
+        ['validateNodeFacts', [[1, 'context', 'context']]],
+        ['validateValueFacts', [[1, 'context', 'context']]],
+      ],
+      'src/transition/facts/validate-value-facts.ts': [],
+    };
+    const approvedCallArguments = new Map<number, readonly ApprovedArgument[]>();
+    for (const [calleeName, arguments_] of approvedCallSpecifications[path] ?? []) {
+      const directCall = descendants(module.sourceFile).find(
+        (node): node is CallExpression =>
+          ts.isCallExpression(node) &&
+          ts.isIdentifier(node.expression) &&
+          node.expression.text === calleeName,
+      );
+      const symbol =
+        directCall && ts.isIdentifier(directCall.expression)
+          ? resolvedSymbolId(checker, directCall.expression)
+          : undefined;
+      if (symbol === undefined) {
+        add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module, directCall);
+        continue;
+      }
+      approvedCallArguments.set(symbol, arguments_);
+    }
+    for (const node of descendants(module.sourceFile)) {
+      if (
+        ts.isElementAccessExpression(node) &&
+        literalElementName(node.argumentExpression) === undefined &&
+        derivedBindingKind(node.expression) !== undefined
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === SyntaxKind.EqualsToken &&
+        containsReturnedProvenance(node.right)
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        (ts.isObjectLiteralExpression(node) ||
+          ts.isArrayLiteralExpression(node) ||
+          ts.isTaggedTemplateExpression(node) ||
+          ts.isTemplateExpression(node) ||
+          ts.isAwaitExpression(node) ||
+          ts.isYieldExpression(node) ||
+          ts.isConditionalExpression(node) ||
+          (ts.isBinaryExpression(node) &&
+            [
+              SyntaxKind.AmpersandAmpersandToken,
+              SyntaxKind.BarBarToken,
+              SyntaxKind.CommaToken,
+              SyntaxKind.QuestionQuestionToken,
+            ].includes(node.operatorToken.kind))) &&
+        containsReturnedProvenance(node)
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+        const calleeSymbol = ts.isIdentifier(node.expression)
+          ? resolvedSymbolId(checker, node.expression)
+          : undefined;
+        const approvedArguments =
+          calleeSymbol === undefined ? undefined : approvedCallArguments.get(calleeSymbol);
+        for (const [position, argument] of (node.arguments ?? []).entries()) {
+          if (!containsReturnedProvenance(argument)) {
+            continue;
+          }
+          const requirement = approvedArguments?.find(
+            ([approvedPosition]) => approvedPosition === position,
+          );
+          let expectedOrigin: number | undefined;
+          if (requirement) {
+            let owner: Node | undefined = node.parent;
+            while (owner) {
+              if (isFunctionLikeDeclaration(owner)) {
+                const expectedParameter = owner.parameters.find(
+                  (parameter) =>
+                    ts.isIdentifier(parameter.name) && parameter.name.text === requirement[2],
+                );
+                if (expectedParameter && ts.isIdentifier(expectedParameter.name)) {
+                  expectedOrigin = resolvedSymbolId(checker, expectedParameter.name);
+                  break;
+                }
+              }
+              owner = owner.parent;
+            }
+          }
+          if (
+            !requirement ||
+            derivedBindingKind(argument) !== requirement[1] ||
+            expectedOrigin === undefined ||
+            derivedBindingOrigin(argument) !== expectedOrigin
+          ) {
+            add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+          }
+        }
+      }
+      if (
+        ts.isReturnStatement(node) &&
+        node.expression &&
+        containsReturnedProvenance(node.expression) &&
+        enclosingFunctionCount(node) > 1
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        ts.isArrowFunction(node) &&
+        !ts.isBlock(node.body) &&
+        containsReturnedProvenance(node.body) &&
+        enclosingFunctionCount(node) > 0
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+    }
+    const allowedContextMaps: Readonly<Record<string, readonly string[]>> = {
+      'src/transition/evaluation/find-first-action.ts': ['nodeByKey', 'outgoingByKey'],
+      'src/transition/evaluation/find-first-wait.ts': ['nodeByKey'],
+      'src/transition/evaluation/find-reached-terminals.ts': ['nodeByKey'],
+      'src/transition/evaluation/select-branch.ts': [],
+      'src/transition/evaluation/select-consensus.ts': [],
+      'src/transition/evaluation/select-fork.ts': ['regionByFork', 'topologicalPosition'],
+      'src/transition/evaluation/select-human-gate.ts': [],
+      'src/transition/evaluation/select-join.ts': ['regionByJoin'],
+      'src/transition/evaluation/select-node.ts': [],
+      'src/transition/evaluation/validate-fact-causality.ts': [
+        'incomingByKey',
+        'nodeByKey',
+        'outgoingByKey',
+        'regionOwnerByNode',
+      ],
+    };
+    const allowedFactMaps: Readonly<Record<string, readonly string[]>> = {
+      'src/transition/evaluation/find-first-action.ts': ['nodeByKey'],
+      'src/transition/evaluation/find-first-wait.ts': ['nodeByKey', 'valueByKey'],
+      'src/transition/evaluation/find-reached-terminals.ts': ['nodeByKey'],
+      'src/transition/evaluation/select-branch.ts': ['valueByKey'],
+      'src/transition/evaluation/select-consensus.ts': ['consensusByNode'],
+      'src/transition/evaluation/select-fork.ts': [],
+      'src/transition/evaluation/select-human-gate.ts': ['gateResolutionByNode'],
+      'src/transition/evaluation/select-join.ts': ['nodeByKey'],
+      'src/transition/evaluation/select-node.ts': [],
+      'src/transition/evaluation/validate-fact-causality.ts': ['nodeByKey'],
+    };
+    const knownContextMaps = new Set([
+      'candidatesByNode',
+      'incomingByKey',
+      'nodeByKey',
+      'outgoingByKey',
+      'regionByFork',
+      'regionByJoin',
+      'regionOwnerByNode',
+      'resolutionsByNode',
+      'topologicalPosition',
+    ]);
+    const knownFactMaps = new Set([
+      'consensusByNode',
+      'gateResolutionByNode',
+      'nodeByKey',
+      'valueByKey',
+    ]);
+    const approvedReceiverMethods: Readonly<
+      Record<string, Readonly<Record<string, readonly string[]>>>
+    > = {
+      'src/transition/evaluation/find-first-action.ts': {
+        'context.nodeByKey': ['get'],
+        'context.outgoingByKey': ['get'],
+        'facts.nodeByKey': ['get', 'has'],
+      },
+      'src/transition/evaluation/find-first-wait.ts': {
+        'context.nodeByKey': ['get'],
+        'facts.nodeByKey': ['get'],
+        'facts.valueByKey': ['has'],
+      },
+      'src/transition/evaluation/find-reached-terminals.ts': {
+        'context.nodeByKey': ['get'],
+        'facts.nodeByKey': ['get'],
+      },
+      'src/transition/evaluation/select-branch.ts': { 'facts.valueByKey': ['get'] },
+      'src/transition/evaluation/select-consensus.ts': { 'facts.consensusByNode': ['get'] },
+      'src/transition/evaluation/select-fork.ts': {
+        'context.regionByFork': ['get'],
+        'context.topologicalPosition': ['get'],
+      },
+      'src/transition/evaluation/select-human-gate.ts': {
+        'facts.gateResolutionByNode': ['get'],
+      },
+      'src/transition/evaluation/select-join.ts': {
+        'context.regionByJoin': ['get'],
+        'facts.nodeByKey': ['get'],
+      },
+      'src/transition/evaluation/select-node.ts': {},
+      'src/transition/evaluation/validate-fact-causality.ts': {
+        'context.incomingByKey': ['get'],
+        'context.nodeByKey': ['get'],
+        'context.outgoingByKey': ['get'],
+        'context.regionOwnerByNode': ['get'],
+        'facts.nodeByKey': ['get', 'has'],
+      },
+      'src/transition/facts/validate-candidate-verdicts.ts': {
+        'context.candidatesByNode': ['get'],
+        'context.nodeByKey': ['get'],
+      },
+      'src/transition/facts/validate-gate-resolutions.ts': {
+        'context.nodeByKey': ['get'],
+        'context.resolutionsByNode': ['get'],
+      },
+      'src/transition/facts/validate-node-facts.ts': { 'context.nodeByKey': ['get'] },
+      'src/transition/facts/validate-pipeline-facts.ts': {},
+      'src/transition/facts/validate-value-facts.ts': {},
+    };
+    const isKnownMapPath = (receiverPath: string | undefined): receiverPath is string => {
+      if (receiverPath === undefined) {
+        return false;
+      }
+      const [root, property, ...remainder] = receiverPath.split('.');
+      return (
+        remainder.length === 0 &&
+        ((root === 'context' && knownContextMaps.has(property ?? '')) ||
+          (root === 'facts' && knownFactMaps.has(property ?? '')))
+      );
+    };
+    const enclosingParameterSymbol = (
+      node: Node,
+      parameterName: 'context' | 'facts',
+    ): number | undefined => {
+      for (let owner: Node | undefined = node.parent; owner; owner = owner.parent) {
+        if (!isFunctionLikeDeclaration(owner)) {
+          continue;
+        }
+        const parameter = owner.parameters.find(
+          (candidate) => ts.isIdentifier(candidate.name) && candidate.name.text === parameterName,
+        );
+        if (parameter && ts.isIdentifier(parameter.name)) {
+          return resolvedSymbolId(checker, parameter.name);
+        }
+      }
+      return undefined;
+    };
+    interface MapValueProvenance {
+      readonly origin: number;
+      readonly path: string;
+      readonly projection: readonly string[];
+    }
+    const mapValueBindings = new Map<number, MapValueProvenance>();
+    const derivedMapValue = (expression: Node): MapValueProvenance | undefined => {
+      if (
+        ts.isParenthesizedExpression(expression) ||
+        ts.isAssertionExpression(expression) ||
+        ts.isNonNullExpression(expression) ||
+        ts.isSatisfiesExpression(expression)
+      ) {
+        return derivedMapValue(expression.expression);
+      }
+      if (ts.isIdentifier(expression)) {
+        const symbol = resolvedSymbolId(checker, expression);
+        return symbol === undefined ? undefined : mapValueBindings.get(symbol);
+      }
+      if (ts.isPropertyAccessExpression(expression)) {
+        const owner = derivedMapValue(expression.expression);
+        return owner
+          ? { ...owner, projection: [...owner.projection, expression.name.text] }
+          : undefined;
+      }
+      if (ts.isElementAccessExpression(expression)) {
+        const owner = derivedMapValue(expression.expression);
+        const property = literalElementName(expression.argumentExpression);
+        return owner && property !== undefined
+          ? { ...owner, projection: [...owner.projection, property] }
+          : undefined;
+      }
+      if (
+        ts.isCallExpression(expression) &&
+        ts.isPropertyAccessExpression(expression.expression) &&
+        expression.expression.name.text === 'get'
+      ) {
+        const receiver = expression.expression.expression;
+        const receiverPath = derivedBindingPath(receiver);
+        const root = receiverPath?.startsWith('context.') ? 'context' : 'facts';
+        const origin = derivedBindingOrigin(receiver);
+        if (
+          isKnownMapPath(receiverPath) &&
+          approvedReceiverMethods[path]?.[receiverPath]?.includes('get') &&
+          derivedBindingKind(receiver) === 'map' &&
+          origin !== undefined &&
+          origin === enclosingParameterSymbol(expression, root)
+        ) {
+          return { origin, path: receiverPath, projection: [] };
+        }
+      }
+      if (ts.isConditionalExpression(expression)) {
+        const values = [
+          derivedMapValue(expression.whenTrue),
+          derivedMapValue(expression.whenFalse),
+        ].filter((value): value is MapValueProvenance => value !== undefined);
+        return values.length > 0 &&
+          values.every(
+            (value) =>
+              value.origin === values[0]?.origin &&
+              value.path === values[0]?.path &&
+              value.projection.join('.') === values[0]?.projection.join('.'),
+          )
+          ? values[0]
+          : undefined;
+      }
+      if (
+        ts.isBinaryExpression(expression) &&
+        [
+          SyntaxKind.AmpersandAmpersandToken,
+          SyntaxKind.BarBarToken,
+          SyntaxKind.QuestionQuestionToken,
+        ].includes(expression.operatorToken.kind)
+      ) {
+        const values = [derivedMapValue(expression.left), derivedMapValue(expression.right)].filter(
+          (value): value is MapValueProvenance => value !== undefined,
+        );
+        return values.length > 0 &&
+          values.every(
+            (value) =>
+              value.origin === values[0]?.origin &&
+              value.path === values[0]?.path &&
+              value.projection.join('.') === values[0]?.projection.join('.'),
+          )
+          ? values[0]
+          : undefined;
+      }
+      return undefined;
+    };
+    let mapValuesChanged = true;
+    while (mapValuesChanged) {
+      mapValuesChanged = false;
+      for (const declaration of declarations) {
+        if (!declaration.initializer || !ts.isIdentifier(declaration.name)) {
+          continue;
+        }
+        const target = resolvedSymbolId(checker, declaration.name);
+        const value = derivedMapValue(declaration.initializer);
+        if (target !== undefined && value && !mapValueBindings.has(target)) {
+          mapValueBindings.set(target, value);
+          mapValuesChanged = true;
+        }
+      }
+    }
+    const recursivelyContainsMapValue = (node: Node): boolean => {
+      if (ts.isExpression(node) && derivedMapValue(node) !== undefined) {
+        return true;
+      }
+      if (ts.isPropertyAccessExpression(node)) {
+        return recursivelyContainsMapValue(node.expression);
+      }
+      if (ts.isElementAccessExpression(node)) {
+        return (
+          recursivelyContainsMapValue(node.expression) ||
+          recursivelyContainsMapValue(node.argumentExpression)
+        );
+      }
+      if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+        return false;
+      }
+      if (ts.isConditionalExpression(node)) {
+        return (
+          recursivelyContainsMapValue(node.whenTrue) || recursivelyContainsMapValue(node.whenFalse)
+        );
+      }
+      let found = false;
+      node.forEachChild((child) => {
+        if (!found && recursivelyContainsMapValue(child)) {
+          found = true;
+        }
+      });
+      return found;
+    };
+    const recursivelyContainsEscapeCategory = (node: Node): boolean =>
+      recursivelyContainsProvenance(node) || recursivelyContainsMapValue(node);
+    const approvedMapValueCalls: Readonly<
+      Record<
+        string,
+        readonly (readonly [
+          callee: string,
+          position: number,
+          mapPath: string,
+          projection?: string,
+        ])[]
+      >
+    > = {
+      'src/transition/evaluation/find-first-action.ts': [['selectNode', 0, 'context.nodeByKey']],
+      'src/transition/evaluation/find-first-wait.ts': [['selectNode', 0, 'context.nodeByKey']],
+      'src/transition/evaluation/select-branch.ts': [['jsonScalarsEqual', 1, 'facts.valueByKey']],
+      'src/transition/evaluation/select-consensus.ts': [
+        ['outcomeFor', 1, 'facts.consensusByNode', 'approvals'],
+        ['outcomeFor', 2, 'facts.consensusByNode', 'rejections'],
+        ['outcomeFor', 3, 'facts.consensusByNode', 'total'],
+      ],
+      'src/transition/evaluation/validate-fact-causality.ts': [
+        ['selectNode', 0, 'context.nodeByKey'],
+      ],
+      'src/transition/facts/validate-node-facts.ts': [
+        ['nodeOutcomeExists', 0, 'context.nodeByKey'],
+      ],
+    };
+    const approvedMapValueReceiverMethods: Readonly<
+      Record<string, Readonly<Record<string, readonly string[]>>>
+    > = {
+      'src/transition/evaluation/find-first-action.ts': {
+        'context.outgoingByKey': ['map'],
+      },
+      'src/transition/evaluation/validate-fact-causality.ts': {
+        'context.incomingByKey': ['some'],
+        'context.outgoingByKey': ['map'],
+      },
+      'src/transition/evaluation/select-fork.ts': {
+        'context.regionByFork': ['branches.map'],
+      },
+      'src/transition/evaluation/select-join.ts': {
+        'context.regionByJoin': ['branches.map'],
+      },
+      'src/transition/facts/validate-candidate-verdicts.ts': {
+        'context.candidatesByNode': ['has'],
+      },
+      'src/transition/facts/validate-gate-resolutions.ts': {
+        'context.resolutionsByNode': ['has'],
+      },
+    };
+    const approvedMapValueReceiverArguments: Readonly<
+      Record<
+        string,
+        readonly (readonly [
+          receiverPath: string,
+          method: string,
+          position: number,
+          valuePath: string,
+          valueProjection?: string,
+        ])[]
+      >
+    > = {
+      'src/transition/evaluation/validate-fact-causality.ts': [
+        ['facts.nodeByKey', 'get', 0, 'context.regionOwnerByNode'],
+        ['context.outgoingByKey', 'get', 0, 'context.nodeByKey', 'key'],
+      ],
+      'src/transition/evaluation/find-first-wait.ts': [
+        ['facts.valueByKey', 'has', 0, 'context.nodeByKey', 'fact'],
+      ],
+      'src/transition/evaluation/find-reached-terminals.ts': [
+        ['facts.nodeByKey', 'get', 0, 'context.nodeByKey', 'key'],
+      ],
+    };
+    const approvedMapValueArguments = new Map<
+      number,
+      readonly (readonly [position: number, mapPath: string, projection: string])[]
+    >();
+    for (const [calleeName, position, mapPath, projection = ''] of approvedMapValueCalls[path] ??
+      []) {
+      const call = descendants(module.sourceFile).find(
+        (node): node is CallExpression =>
+          ts.isCallExpression(node) &&
+          ts.isIdentifier(node.expression) &&
+          node.expression.text === calleeName,
+      );
+      const symbol =
+        call && ts.isIdentifier(call.expression)
+          ? resolvedSymbolId(checker, call.expression)
+          : undefined;
+      if (symbol === undefined) {
+        add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module, call);
+        continue;
+      }
+      approvedMapValueArguments.set(symbol, [
+        ...(approvedMapValueArguments.get(symbol) ?? []),
+        [position, mapPath, projection],
+      ]);
+    }
+    const approvedProjectionReturns: Readonly<Record<string, readonly string[]>> = {
+      'src/transition/evaluation/find-first-action.ts': ['facts.nodeByKey:outcome'],
+      'src/transition/evaluation/find-reached-terminals.ts': [
+        'context.nodeByKey:key',
+        'context.nodeByKey:outcome',
+      ],
+      'src/transition/evaluation/select-fork.ts': ['context.regionByFork:join'],
+    };
+    const returnedMapValues = (node: Node): readonly MapValueProvenance[] => {
+      if (ts.isExpression(node)) {
+        const value = derivedMapValue(node);
+        if (value) {
+          return [value];
+        }
+      }
+      if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+        return [];
+      }
+      if (ts.isConditionalExpression(node)) {
+        return [...returnedMapValues(node.whenTrue), ...returnedMapValues(node.whenFalse)];
+      }
+      if (
+        ts.isBinaryExpression(node) &&
+        ![
+          SyntaxKind.AmpersandAmpersandToken,
+          SyntaxKind.BarBarToken,
+          SyntaxKind.QuestionQuestionToken,
+        ].includes(node.operatorToken.kind)
+      ) {
+        return [];
+      }
+      const values: MapValueProvenance[] = [];
+      node.forEachChild((child) => values.push(...returnedMapValues(child)));
+      return values;
+    };
+    const isApprovedProjectionReturn = (node: Node): boolean => {
+      const values = returnedMapValues(node);
+      return (
+        values.length > 0 &&
+        values.every((value) =>
+          approvedProjectionReturns[path]?.includes(`${value.path}:${value.projection.join('.')}`),
+        )
+      );
+    };
+    const allMapValues = (node: Node): readonly MapValueProvenance[] => {
+      if (ts.isExpression(node)) {
+        const value = derivedMapValue(node);
+        if (value) {
+          return [value];
+        }
+      }
+      const values: MapValueProvenance[] = [];
+      node.forEachChild((child) => values.push(...allMapValues(child)));
+      return values;
+    };
+    const approvedControlFlowCallbacks: Readonly<
+      Record<
+        string,
+        readonly (readonly [
+          method: string,
+          operators: readonly SyntaxKind[],
+          mapPath: string,
+          projections: readonly string[],
+        ])[]
+      >
+    > = {
+      'src/transition/evaluation/find-first-action.ts': [
+        ['find', [SyntaxKind.EqualsEqualsEqualsToken], 'facts.nodeByKey', ['outcome']],
+      ],
+      'src/transition/evaluation/select-fork.ts': [
+        [
+          'sort',
+          [SyntaxKind.MinusToken, SyntaxKind.QuestionQuestionToken],
+          'context.topologicalPosition',
+          [''],
+        ],
+      ],
+      'src/transition/evaluation/select-human-gate.ts': [
+        ['find', [SyntaxKind.EqualsEqualsEqualsToken], 'facts.gateResolutionByNode', ['']],
+      ],
+      'src/transition/evaluation/validate-fact-causality.ts': [
+        [
+          'some',
+          [SyntaxKind.AmpersandAmpersandToken, SyntaxKind.EqualsEqualsEqualsToken],
+          'facts.nodeByKey',
+          ['', 'state', 'outcome'],
+        ],
+      ],
+    };
+    const isApprovedControlFlowCallback = (
+      node: FunctionLikeDeclaration,
+      expression: Node,
+    ): boolean => {
+      if (
+        (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) ||
+        !ts.isCallExpression(node.parent) ||
+        !node.parent.arguments.includes(node) ||
+        !ts.isPropertyAccessExpression(node.parent.expression)
+      ) {
+        return false;
+      }
+      const method = node.parent.expression.name.text;
+      const values = allMapValues(expression);
+      const transformedOperators = descendants(expression)
+        .filter(
+          (candidate): candidate is ts.BinaryExpression =>
+            ts.isBinaryExpression(candidate) && recursivelyContainsMapValue(candidate),
+        )
+        .map((candidate) => candidate.operatorToken.kind);
+      return (approvedControlFlowCallbacks[path] ?? []).some(
+        ([approvedMethod, operators, mapPath, projections]) =>
+          method === approvedMethod &&
+          transformedOperators.length > 0 &&
+          transformedOperators.every((operator) => operators.includes(operator)) &&
+          values.length > 0 &&
+          values.every(
+            (value) =>
+              value.path === mapPath &&
+              projections.includes(value.projection.join('.')) &&
+              value.origin ===
+                enclosingParameterSymbol(
+                  node,
+                  mapPath.startsWith('context.') ? 'context' : 'facts',
+                ),
+          ),
+      );
+    };
+    const usedContextMaps = new Set<string>();
+    const usedFactMaps = new Set<string>();
+    for (const node of descendants(module.sourceFile)) {
+      if (!ts.isPropertyAccessExpression(node) || !ts.isIdentifier(node.expression)) {
+        continue;
+      }
+      const receiver = resolvedSymbolId(checker, node.expression);
+      const kind = receiver === undefined ? undefined : bindingKinds.get(receiver);
+      if (kind === 'context' && knownContextMaps.has(node.name.text)) {
+        usedContextMaps.add(node.name.text);
+      }
+      if (kind === 'facts' && knownFactMaps.has(node.name.text)) {
+        usedFactMaps.add(node.name.text);
+      }
+    }
+    if (evaluationLeaf) {
+      const expectedContext = allowedContextMaps[path] ?? [];
+      const expectedFacts = allowedFactMaps[path] ?? [];
+      if (
+        [...usedContextMaps].some((name) => !expectedContext.includes(name)) ||
+        expectedContext.some((name) => !usedContextMaps.has(name)) ||
+        [...usedFactMaps].some((name) => !expectedFacts.includes(name)) ||
+        expectedFacts.some((name) => !usedFactMaps.has(name))
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, module.sourceFile);
+      }
+    }
+    for (const owner of descendants(module.sourceFile).filter(isFunctionLikeDeclaration)) {
+      for (const parameter of owner.parameters) {
+        if (parameter.initializer && recursivelyContainsEscapeCategory(parameter.initializer)) {
+          add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, parameter);
+        }
+      }
+    }
+    for (const node of descendants(module.sourceFile)) {
+      if (
+        ts.isBindingElement(node) &&
+        node.initializer &&
+        recursivelyContainsEscapeCategory(node.initializer)
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        ts.isPropertyDeclaration(node) &&
+        node.initializer &&
+        recursivelyContainsEscapeCategory(node.initializer)
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (ts.isDecorator(node) && recursivelyContainsEscapeCategory(node.expression)) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        node.kind === SyntaxKind.ClassStaticBlockDeclaration &&
+        recursivelyContainsEscapeCategory(node)
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+    }
+    for (const node of descendants(module.sourceFile)) {
+      if (
+        ts.isVariableDeclaration(node) &&
+        node.initializer &&
+        !ts.isArrowFunction(node.initializer) &&
+        !ts.isFunctionExpression(node.initializer) &&
+        ((derivedMapValue(node.initializer)?.projection.length ?? 0) > 0 ||
+          (derivedMapValue(node.initializer) === undefined &&
+            recursivelyContainsMapValue(node.initializer)))
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        ts.isElementAccessExpression(node) &&
+        literalElementName(node.argumentExpression) === undefined &&
+        derivedMapValue(node.expression) !== undefined
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === SyntaxKind.EqualsToken &&
+        recursivelyContainsMapValue(node.right)
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        (ts.isReturnStatement(node) || ts.isYieldExpression(node)) &&
+        node.expression &&
+        recursivelyContainsMapValue(node.expression) &&
+        !isApprovedProjectionReturn(node.expression) &&
+        !(
+          ts.isReturnStatement(node) &&
+          isFunctionLikeDeclaration(node.parent?.parent) &&
+          isApprovedControlFlowCallback(node.parent.parent, node.expression)
+        )
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        ts.isArrowFunction(node) &&
+        !ts.isBlock(node.body) &&
+        recursivelyContainsMapValue(node.body) &&
+        !isApprovedControlFlowCallback(node, node.body) &&
+        !isApprovedProjectionReturn(node.body)
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        ts.isNewExpression(node) &&
+        (recursivelyContainsMapValue(node.expression) ||
+          (node.arguments ?? []).some((argument) => recursivelyContainsMapValue(argument)))
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (ts.isCallExpression(node)) {
+        const mapValueReceiver =
+          ts.isPropertyAccessExpression(node.expression) ||
+          ts.isElementAccessExpression(node.expression)
+            ? derivedMapValue(node.expression.expression)
+            : undefined;
+        if (mapValueReceiver) {
+          const approved =
+            ts.isPropertyAccessExpression(node.expression) &&
+            approvedMapValueReceiverMethods[path]?.[mapValueReceiver.path]?.includes(
+              [...mapValueReceiver.projection, node.expression.name.text].join('.'),
+            );
+          if (!approved) {
+            add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+          }
+        }
+        const approvedControlFlowCall = node.arguments.some(
+          (argument) =>
+            ts.isArrowFunction(argument) &&
+            !ts.isBlock(argument.body) &&
+            isApprovedControlFlowCallback(argument, argument.body),
+        );
+        if (
+          !mapValueReceiver &&
+          !approvedControlFlowCall &&
+          recursivelyContainsMapValue(node.expression)
+        ) {
+          add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+        }
+        const calleeSymbol = ts.isIdentifier(node.expression)
+          ? resolvedSymbolId(checker, node.expression)
+          : undefined;
+        for (const [position, argument] of node.arguments.entries()) {
+          if (ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)) {
+            continue;
+          }
+          if (!recursivelyContainsMapValue(argument)) {
+            continue;
+          }
+          const value = derivedMapValue(argument);
+          const argumentValues = value ? [value] : allMapValues(argument);
+          const approvedDirect = (
+            calleeSymbol === undefined ? [] : (approvedMapValueArguments.get(calleeSymbol) ?? [])
+          ).some(
+            ([approvedPosition, mapPath, projection]) =>
+              position === approvedPosition &&
+              argumentValues.length > 0 &&
+              argumentValues.every(
+                (argumentValue) =>
+                  argumentValue.path === mapPath &&
+                  argumentValue.projection.join('.') === projection &&
+                  argumentValue.origin ===
+                    enclosingParameterSymbol(
+                      node,
+                      mapPath.startsWith('context.') ? 'context' : 'facts',
+                    ),
+              ),
+          );
+          const receiverPath = ts.isPropertyAccessExpression(node.expression)
+            ? derivedBindingPath(node.expression.expression)
+            : undefined;
+          const receiverMethod = ts.isPropertyAccessExpression(node.expression)
+            ? node.expression.name.text
+            : undefined;
+          const approvedReceiver =
+            value !== undefined &&
+            receiverMethod !== undefined &&
+            approvedMapValueReceiverArguments[path]?.some(
+              ([approvedPath, method, approvedPosition, valuePath, valueProjection = '']) =>
+                receiverPath === approvedPath &&
+                receiverMethod === method &&
+                position === approvedPosition &&
+                value.path === valuePath &&
+                value.projection.join('.') === valueProjection &&
+                value.origin ===
+                  enclosingParameterSymbol(
+                    node,
+                    valuePath.startsWith('context.') ? 'context' : 'facts',
+                  ),
+            );
+          if (!approvedDirect && !approvedReceiver) {
+            add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+          }
+        }
+        const receiver =
+          ts.isPropertyAccessExpression(node.expression) ||
+          ts.isElementAccessExpression(node.expression)
+            ? node.expression.expression
+            : undefined;
+        const receiverPath = receiver ? derivedBindingPath(receiver) : undefined;
+        if (isKnownMapPath(receiverPath)) {
+          const root = receiverPath.startsWith('context.') ? 'context' : 'facts';
+          const approved =
+            ts.isPropertyAccessExpression(node.expression) &&
+            approvedReceiverMethods[path]?.[receiverPath]?.includes(node.expression.name.text) &&
+            receiver !== undefined &&
+            derivedBindingKind(receiver) === 'map' &&
+            derivedBindingOrigin(receiver) === enclosingParameterSymbol(node, root);
+          if (!approved) {
+            add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+          }
+        }
+      }
+      if (
+        (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
+        isKnownMapPath(derivedBindingPath(node.expression))
+      ) {
+        const receiverPath = derivedBindingPath(node.expression);
+        const root = receiverPath?.startsWith('context.') ? 'context' : 'facts';
+        const directApprovedCall =
+          ts.isCallExpression(node.parent) &&
+          node.parent.expression === node &&
+          ts.isPropertyAccessExpression(node) &&
+          receiverPath !== undefined &&
+          approvedReceiverMethods[path]?.[receiverPath]?.includes(node.name.text) &&
+          derivedBindingKind(node.expression) === 'map' &&
+          derivedBindingOrigin(node.expression) === enclosingParameterSymbol(node, root);
+        if (!directApprovedCall) {
+          add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+        }
+      }
+      if (ts.isForOfStatement(node) && isKnownMapPath(derivedBindingPath(node.expression))) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (ts.isSpreadElement(node) && isKnownMapPath(derivedBindingPath(node.expression))) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (
+        evaluationLeaf &&
+        ts.isNewExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        constructorAliases.has(resolvedSymbolId(checker, node.expression) ?? -1)
+      ) {
+        add(violations, 'GRAPH_KERNEL_REBUILD', module, node);
+      }
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        kernelBuilderAliases.has(resolvedSymbolId(checker, node.expression) ?? -1)
+      ) {
+        add(violations, 'GRAPH_KERNEL_REBUILD', module, node);
+      }
+      if (
+        (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+        node.text === 'buildGraphKernel'
+      ) {
+        add(violations, 'GRAPH_KERNEL_REBUILD', module, node);
+      }
+      if (
+        evaluationLeaf &&
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        constructorAliases.has(resolvedSymbolId(checker, node.expression) ?? -1)
+      ) {
+        add(violations, 'GRAPH_KERNEL_REBUILD', module, node);
+      }
+      if (
+        evaluationLeaf &&
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        ['set', 'delete', 'clear', 'push', 'pop', 'shift', 'unshift', 'splice', 'sort'].includes(
+          node.expression.name.text,
+        )
+      ) {
+        const receiver = node.expression.expression;
+        const receiverSymbol = ts.isIdentifier(receiver)
+          ? resolvedSymbolId(checker, receiver)
+          : undefined;
+        const directRoot = ts.isPropertyAccessExpression(receiver)
+          ? propertyPath(receiver)?.[0]
+          : undefined;
+        if (
+          (receiverSymbol !== undefined && bindingKinds.has(receiverSymbol)) ||
+          directRoot === 'context' ||
+          directRoot === 'facts'
+        ) {
+          add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, node);
+        }
+      }
+      if (
+        ts.isPropertyAccessExpression(node) &&
+        /(?:^|\.)(?:pipelineInput|factsInput)(?:\.|$)/u.test(node.getText())
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      }
+      if (path.includes('/evaluation/')) {
+        const accessedProperty = ts.isPropertyAccessExpression(node)
+          ? node.name.text
+          : ts.isElementAccessExpression(node)
+            ? literalElementName(node.argumentExpression)
+            : undefined;
+        const receiver =
+          ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)
+            ? node.expression
+            : undefined;
+        if (
+          receiver &&
+          derivedBindingKind(receiver) === 'snapshot' &&
+          accessedProperty !== undefined &&
+          ['edgeIndex', 'forkRegions', 'nodeIndex', 'nodes'].includes(accessedProperty)
+        ) {
+          add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+        }
+      }
+      if (
+        path.includes('/evaluation/') &&
+        ts.isCallExpression(node) &&
+        (ts.isPropertyAccessExpression(node.expression) ||
+          ts.isElementAccessExpression(node.expression))
+      ) {
+        const method = ts.isPropertyAccessExpression(node.expression)
+          ? node.expression.name.text
+          : literalElementName(node.expression.argumentExpression);
+        if (
+          method !== undefined &&
+          ['filter', 'flatMap', 'map', 'reduce', 'sort'].includes(method) &&
+          derivedBindingKind(node.expression.expression) === 'forbidden-snapshot-collection'
+        ) {
+          add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+        }
+      }
+    }
+  }
+};
+
 const validateSemanticResolution = (
   rootDirectory: string,
   violations: ArchitectureViolation[],
@@ -1960,6 +3604,7 @@ const validateSemanticResolution = (
         sourceFile: project.program.getSourceFile(path),
       }))
       .filter((module): module is ParsedModule => module.sourceFile !== undefined);
+    validateDecisionSemanticSafety(project.checker, modules, violations);
     const facadeModule = modules.find(
       (module) => module.path === 'src/definition/compile-pipeline.ts',
     );
@@ -2149,6 +3794,189 @@ const validateSemanticResolution = (
         laterPipelineReads[0] ?? decisionOwner ?? decisionModule?.sourceFile,
       );
     }
+
+    const decisionTargets = [
+      [
+        'src/transition/context/build-decision-context.ts',
+        'buildDecisionContext',
+        'GRAPH_KERNEL_IDENTITY_FLOW',
+      ],
+      [
+        'src/transition/facts/validate-pipeline-facts.ts',
+        'validatePipelineFacts',
+        'GRAPH_KERNEL_IDENTITY_FLOW',
+      ],
+      [
+        'src/transition/evaluation/validate-fact-causality.ts',
+        'validateFactCausality',
+        'GRAPH_KERNEL_IDENTITY_FLOW',
+      ],
+      [
+        'src/transition/evaluation/find-reached-terminals.ts',
+        'findReachedTerminals',
+        'GRAPH_KERNEL_IDENTITY_FLOW',
+      ],
+      [
+        'src/transition/evaluation/find-first-action.ts',
+        'findFirstAction',
+        'GRAPH_KERNEL_IDENTITY_FLOW',
+      ],
+      [
+        'src/transition/evaluation/find-first-wait.ts',
+        'findFirstWait',
+        'GRAPH_KERNEL_IDENTITY_FLOW',
+      ],
+    ] as const;
+    const decisionResolvedCalls = decisionTargets.map(([path, name]) => {
+      const target = findFunction(modules, path, name);
+      return decisionOwner && target ? resolvedCalls(project.checker, decisionOwner, target) : [];
+    });
+    const decisionPositions = decisionResolvedCalls.map(
+      (resolvedDecisionCalls) => resolvedDecisionCalls[0]?.getStart() ?? -1,
+    );
+    if (
+      decisionResolvedCalls.some((resolvedDecisionCalls, index) =>
+        index === 0
+          ? resolvedDecisionCalls.length !== 1 ||
+            resolvedDecisionCalls[0] === undefined ||
+            !isDirectTopLevelCall(decisionOwner!, resolvedDecisionCalls[0])
+          : resolvedDecisionCalls.length !== 1,
+      ) ||
+      decisionPositions.some(
+        (position, index) => index > 0 && position <= decisionPositions[index - 1]!,
+      )
+    ) {
+      add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', decisionModule, decisionOwner);
+    }
+    const contextCall = decisionResolvedCalls[0]?.[0];
+    const contextDeclaration = contextCall ? declarationOfCall(contextCall) : undefined;
+    const contextIdentifier =
+      contextDeclaration && ts.isIdentifier(contextDeclaration.name)
+        ? contextDeclaration.name
+        : undefined;
+    const contextSymbol = contextIdentifier
+      ? resolvedSymbolId(project.checker, contextIdentifier)
+      : undefined;
+    for (const resolvedDecisionCalls of decisionResolvedCalls.slice(1)) {
+      const call = resolvedDecisionCalls[0];
+      const contextArgument = call?.arguments.find(
+        (argument): argument is Identifier =>
+          ts.isIdentifier(argument) &&
+          contextSymbol !== undefined &&
+          resolvedSymbolId(project.checker, argument) === contextSymbol,
+      );
+      if (!contextArgument) {
+        add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', decisionModule, call ?? decisionOwner);
+      }
+    }
+    const decisionStatements =
+      decisionOwner?.body && ts.isBlock(decisionOwner.body)
+        ? decisionOwner.body.statements
+        : undefined;
+    const decisionGuard = decisionStatements?.[1];
+    const terminalPromotion = decisionStatements?.find(
+      (statement): statement is IfStatement =>
+        ts.isIfStatement(statement) && exactPropertyPath(statement.expression, ['terminal']),
+    );
+    const finalReturn = decisionStatements?.at(-1);
+    if (
+      !decisionStatements ||
+      !decisionOwner ||
+      !decisionValidationCalls[0] ||
+      !contextCall ||
+      topLevelStatement(decisionOwner, decisionValidationCalls[0]) !== decisionStatements[0] ||
+      !decisionGuard ||
+      !ts.isIfStatement(decisionGuard) ||
+      !ts.isPrefixUnaryExpression(decisionGuard.expression) ||
+      decisionGuard.expression.operator !== SyntaxKind.ExclamationToken ||
+      !exactPropertyPath(decisionGuard.expression.operand, ['compiled', 'ok']) ||
+      topLevelStatement(decisionOwner, contextCall) !== decisionStatements[2] ||
+      !terminalPromotion ||
+      !finalReturn ||
+      !ts.isReturnStatement(finalReturn) ||
+      terminalPromotion.getStart() >= finalReturn.getStart()
+    ) {
+      add(violations, 'GRAPH_KERNEL_TRUST_DOMINANCE', decisionModule, decisionOwner);
+    }
+
+    const builderPath = 'src/transition/context/build-decision-context.ts';
+    const builderModule = modules.find((module) => module.path === builderPath);
+    const builderOwner = findFunction(modules, builderPath, 'buildDecisionContext');
+    const builderParameter = builderOwner?.parameters[0]?.name;
+    const builderReturns = builderOwner
+      ? descendants(builderOwner).filter(
+          (node): node is ts.ReturnStatement =>
+            ts.isReturnStatement(node) && containingFunction(node) === builderOwner,
+        )
+      : [];
+    const returnedContext = builderReturns[0]?.expression;
+    const returnedCompiled = objectProperty(returnedContext, 'compiled');
+    const builderStatements =
+      builderOwner?.body && ts.isBlock(builderOwner.body) ? builderOwner.body.statements : [];
+    if (
+      !builderModule ||
+      !builderOwner ||
+      builderReturns.length !== 1 ||
+      !returnedCompiled ||
+      !ts.isIdentifier(returnedCompiled) ||
+      returnedCompiled.text !== nameOf(builderParameter) ||
+      compactSource(builderStatements[0]?.getText() ?? '') !==
+        compactSource('const { snapshot, kernel, topologicalOffsets } = compiled;') ||
+      directCalls(builderOwner, 'buildGraphKernel').length !== 0
+    ) {
+      add(
+        violations,
+        'GRAPH_KERNEL_IDENTITY_FLOW',
+        builderModule,
+        returnedCompiled ?? builderOwner ?? builderModule?.sourceFile,
+      );
+    }
+
+    const selectorPath = 'src/transition/evaluation/select-node.ts';
+    const selectorModule = modules.find((module) => module.path === selectorPath);
+    const selectorOwner = findFunction(modules, selectorPath, 'selectNode');
+    const selectorTargets = [
+      ['src/transition/evaluation/select-branch.ts', 'selectBranch'],
+      ['src/transition/evaluation/select-fork.ts', 'selectFork'],
+      ['src/transition/evaluation/select-join.ts', 'selectJoin'],
+      ['src/transition/evaluation/select-consensus.ts', 'selectConsensus'],
+      ['src/transition/evaluation/select-human-gate.ts', 'selectHumanGate'],
+    ] as const;
+    const selectorCalls = selectorTargets.map(([path, name]) => {
+      const target = findFunction(modules, path, name);
+      return selectorOwner && target ? resolvedCalls(project.checker, selectorOwner, target) : [];
+    });
+    if (
+      !selectorModule ||
+      !selectorOwner ||
+      selectorCalls.some((resolvedSelectorCalls) => resolvedSelectorCalls.length !== 1) ||
+      selectorCalls.some(
+        (resolvedSelectorCalls, index) =>
+          index > 0 &&
+          (resolvedSelectorCalls[0]?.getStart() ?? -1) <=
+            (selectorCalls[index - 1]?.[0]?.getStart() ?? -1),
+      )
+    ) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', selectorModule, selectorOwner);
+    }
+
+    const dispatchConsumers = [
+      ['src/transition/evaluation/validate-fact-causality.ts', 'validateFactCausality', 1],
+      ['src/transition/evaluation/find-first-action.ts', 'findFirstAction', 1],
+      ['src/transition/evaluation/find-first-wait.ts', 'findFirstWait', 3],
+    ] as const;
+    const selectorTarget = findFunction(modules, selectorPath, 'selectNode');
+    for (const [path, name, expectedCalls] of dispatchConsumers) {
+      const module = modules.find((candidate) => candidate.path === path);
+      const owner = findFunction(modules, path, name);
+      const resolvedSelectorCalls =
+        module && selectorTarget
+          ? resolvedCalls(project.checker, module.sourceFile, selectorTarget)
+          : [];
+      if (!module || !owner || resolvedSelectorCalls.length !== expectedCalls) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, owner);
+      }
+    }
   } catch {
     violations.push({ code: 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', path: 'src', line: 1 });
   } finally {
@@ -2235,6 +4063,7 @@ export const validateGraphKernelFlow = (
     validateHostileComparison(modules, violations);
     validateAdapter(modules, violations);
     validateDecisionFlow(modules, violations);
+    validateDecisionLeafSafety(modules, violations);
     validateRetainedState(modules, violations);
   } catch {
     violations.push({ code: 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', path: 'src', line: 1 });

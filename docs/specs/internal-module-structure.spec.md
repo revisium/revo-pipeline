@@ -171,6 +171,10 @@ rule-wide ignores, coverage exclusions, and duplication exclusions are forbidden
 The PR4b decomposition removes `boundedCompiledInspection`; it MUST NOT be replaced by a
 leaf, directory, or wildcard suppression. The temporary expiry registry MUST be empty.
 Additional criteria, globs, directory scopes, and owner records MUST fail verification.
+The decision decomposition removes `coreDecisionStateMachine` and
+`coreDecisionMembership`; neither criterion may migrate to a private leaf.
+`boundedFactInspection` remains limited to
+`src/policy/inspect-portable-value-set.ts`.
 
 Formatted physical source metrics are independently checked for explicitly enabled
 production leaves. A leaf spans its first line through its final non-terminal-newline line;
@@ -191,6 +195,20 @@ PR4b MUST additionally derive its integrity scope from every TypeScript leaf und
 `src/transition/compiled/**` plus `src/transition/validate-compiled-pipeline.ts`. It MUST
 exclude `decide-pipeline.ts`, use no grandfather list, and retain the PR4a scope. Adding a
 compiled leaf therefore adds it to the enforced 250/80 limits without a registry update.
+
+PR4c MUST derive its scope from every TypeScript production leaf under
+`src/transition/**`, excluding only `src/transition/index.ts`, while retaining the complete
+PR4a definition scope. This replaces the overlapping PR4b execution scope without weakening
+it. There is no registry, manual subset, exception, or grandfather list.
+
+Decision evaluation is decomposed into the exact private `context`, `facts`, and
+`evaluation` leaf inventory asserted by the executable architecture harness. Those
+directories have no barrels and leak no exports through the transition or root barrels.
+The façade alone validates the hostile compiled input, constructs one decision context,
+delegates fact validation and causality, and promotes terminal, action, wait, then noop.
+Facts never import evaluation; context imports neither facts nor evaluation; selectors
+share only the neutral selection contract and never import causality. The exact direct
+imports are fail-closed architecture data, and value or type cycles are forbidden.
 
 Compiler and hostile graph-flow both use symbol-resolved structural and dataflow proof.
 Digest pinning, weaker scanning, path-only allowlists, or temporary analyzer disablement is
