@@ -145,7 +145,10 @@ const sourceModules = await collectModules(join(root, 'src'));
 const testModules = await collectModules(join(root, 'test'));
 const architectureModules = await collectModules(join(root, 'scripts/architecture'));
 validateModuleStructure([...sourceModules, ...testModules, ...architectureModules]);
-validateSourceMetrics(sourceModules, sourceMetricScope(sourceModules, 'PR4a'));
+validateSourceMetrics(sourceModules, [
+  ...sourceMetricScope(sourceModules, 'PR4a'),
+  ...sourceMetricScope(sourceModules, 'PR4b'),
+]);
 assert.deepEqual(validateGraphKernelFlow(root), []);
 execFileSync(oxlint, ['--config', config, '--deny-warnings', 'src', 'test'], {
   cwd: root,
@@ -302,6 +305,81 @@ for (const [path, expected] of definitionDependencies) {
     .sort();
   assert.deepEqual(dependencies, [...expected].sort(), `Definition DAG drift: ${path}`);
 }
+
+const compiledIntegrityPaths = sourceModules
+  .map((module) => module.path)
+  .filter(
+    (path) =>
+      path.startsWith('src/transition/compiled/') ||
+      path === 'src/transition/validate-compiled-pipeline.ts',
+  )
+  .sort();
+assert.deepEqual(
+  compiledIntegrityPaths,
+  [
+    'src/transition/compiled/compare-serialized-graph.ts',
+    'src/transition/compiled/derive-expected-compiled-semantics.ts',
+    'src/transition/compiled/expected-compiled-semantics.ts',
+    'src/transition/compiled/hostile-compiled-validation.ts',
+    'src/transition/compiled/precheck-compiled-bounds.ts',
+    'src/transition/compiled/snapshot-compiled-input.ts',
+    'src/transition/compiled/validate-compiled-branch.ts',
+    'src/transition/compiled/validate-compiled-internally.ts',
+    'src/transition/compiled/validate-compiled-members.ts',
+    'src/transition/compiled/validate-compiled-node.ts',
+    'src/transition/compiled/verify-serialized-indexes.ts',
+    'src/transition/compiled/verify-serialized-topology.ts',
+    'src/transition/validate-compiled-pipeline.ts',
+  ],
+  'Compiled integrity must retain the exact approved private leaf map.',
+);
+
+const compiledIntegrityDependencies = new Map<string, readonly string[]>([
+  ['src/transition/compiled/compare-serialized-graph.ts', ['./expected-compiled-semantics.js']],
+  [
+    'src/transition/compiled/derive-expected-compiled-semantics.ts',
+    ['./expected-compiled-semantics.js'],
+  ],
+  ['src/transition/compiled/expected-compiled-semantics.ts', []],
+  ['src/transition/compiled/hostile-compiled-validation.ts', []],
+  ['src/transition/compiled/precheck-compiled-bounds.ts', []],
+  ['src/transition/compiled/snapshot-compiled-input.ts', []],
+  ['src/transition/compiled/validate-compiled-branch.ts', []],
+  [
+    'src/transition/compiled/validate-compiled-internally.ts',
+    [
+      './compare-serialized-graph.js',
+      './derive-expected-compiled-semantics.js',
+      './hostile-compiled-validation.js',
+      './precheck-compiled-bounds.js',
+      './snapshot-compiled-input.js',
+      './validate-compiled-members.js',
+      './verify-serialized-indexes.js',
+      './verify-serialized-topology.js',
+    ],
+  ],
+  ['src/transition/compiled/validate-compiled-members.ts', ['./validate-compiled-node.js']],
+  ['src/transition/compiled/validate-compiled-node.ts', ['./validate-compiled-branch.js']],
+  ['src/transition/compiled/verify-serialized-indexes.ts', []],
+  ['src/transition/compiled/verify-serialized-topology.ts', []],
+  ['src/transition/validate-compiled-pipeline.ts', ['./compiled/validate-compiled-internally.js']],
+]);
+for (const [path, expected] of compiledIntegrityDependencies) {
+  const dependencies = [...sourceOf(path).matchAll(/\bfrom\s+['"](\.[^'"]+)['"]/gu)]
+    .map((match) => match[1]!)
+    .filter(
+      (specifier) =>
+        !specifier.startsWith('../..') &&
+        !/^\.\.\/(?:errors|graph|policy|spec)\/index\.js$/u.test(specifier),
+    )
+    .sort();
+  assert.deepEqual(dependencies, [...expected].sort(), `Compiled integrity DAG drift: ${path}`);
+}
+assert.equal(
+  sourceModules.some((module) => module.path === 'src/transition/compiled/index.ts'),
+  false,
+  'Compiled integrity must not add a nested barrel.',
+);
 assert.equal(
   sourceTokens(sourceOf('src/definition/index.ts')),
   sourceTokens(
@@ -309,6 +387,14 @@ assert.equal(
       "export { definePipeline } from './define-pipeline.js';\n",
   ),
   'Definition barrel must expose only its two approved public values.',
+);
+assert.equal(
+  sourceTokens(sourceOf('src/transition/index.ts')),
+  sourceTokens(
+    "export { decidePipeline } from './decide-pipeline.js';\n" +
+      "export { validateCompiledPipeline } from './validate-compiled-pipeline.js';\n",
+  ),
+  'Transition barrel must not leak private compiled-integrity leaves.',
 );
 assert.equal(
   sourceTokens(sourceOf('src/graph/index.ts')),
@@ -355,8 +441,9 @@ assert.equal(
 );
 assert.equal(
   (
-    sourceOf('src/transition/validate-compiled-internally.ts').match(/\bbuildGraphKernel\s*\(/gu) ??
-    []
+    sourceOf('src/transition/compiled/validate-compiled-internally.ts').match(
+      /\bbuildGraphKernel\s*\(/gu,
+    ) ?? []
   ).length,
   1,
   'Hostile validation must build one post-equality graph kernel.',

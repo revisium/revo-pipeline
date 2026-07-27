@@ -21,13 +21,6 @@ const acceptedImplementationCriteria = new Map([
     { resourceKey: 'src/transition/decide-pipeline.ts', ruleKey: 'typescript:S3776' },
   ],
   [
-    'boundedCompiledInspection',
-    {
-      resourceKey: 'src/transition/validate-compiled-internally.ts',
-      ruleKey: 'typescript:S3776',
-    },
-  ],
-  [
     'coreDecisionMembership',
     { resourceKey: 'src/transition/decide-pipeline.ts', ruleKey: 'typescript:S7765' },
   ],
@@ -49,13 +42,7 @@ const allowedIssueIgnoreKeys = [
   ]),
 ].sort();
 
-const temporarySonarExpiries = {
-  boundedCompiledInspection: {
-    owner: 'PR4b',
-    resourceKey: 'src/transition/validate-compiled-internally.ts',
-    ruleKey: 'typescript:S3776',
-  },
-} as const;
+const temporarySonarExpiries = {} as const;
 
 const validateTemporarySonarExpiries = (registry: unknown): void => {
   expect(registry).toEqual(temporarySonarExpiries);
@@ -121,7 +108,7 @@ test('locks temporary Sonar criteria to their exact removal owners', async () =>
   }
 
   validateTemporarySonarExpiries(registry);
-  expect(Object.keys(registry).sort()).toEqual(['boundedCompiledInspection']);
+  expect(Object.keys(registry).sort()).toEqual([]);
 });
 
 test('rejects temporary Sonar expiry scope or ownership drift', () => {
@@ -129,15 +116,15 @@ test('rejects temporary Sonar expiry scope or ownership drift', () => {
     validateTemporarySonarExpiries({
       ...temporarySonarExpiries,
       boundedCompiledInspection: {
-        ...temporarySonarExpiries.boundedCompiledInspection,
         resourceKey: 'src/transition/*.ts',
+        owner: 'PR4b',
+        ruleKey: 'typescript:S3776',
       },
     }),
   ).toThrowError('expected');
   expect(() =>
     validateTemporarySonarExpiries({
-      ...temporarySonarExpiries,
-      additionalCriterion: {
+      boundedCompiledInspection: {
         owner: 'PR4c',
         resourceKey: 'src/transition/decide-pipeline.ts',
         ruleKey: 'typescript:S3776',
@@ -146,10 +133,10 @@ test('rejects temporary Sonar expiry scope or ownership drift', () => {
   ).toThrowError('expected');
   expect(() =>
     validateTemporarySonarExpiries({
-      ...temporarySonarExpiries,
       boundedCompiledInspection: {
-        ...temporarySonarExpiries.boundedCompiledInspection,
         owner: 'PR4a',
+        resourceKey: 'src/transition/compiled/validate-compiled-internally.ts',
+        ruleKey: 'typescript:S3776',
       },
     }),
   ).toThrowError('expected');

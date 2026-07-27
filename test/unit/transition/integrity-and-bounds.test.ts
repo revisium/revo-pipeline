@@ -451,6 +451,88 @@ describe('compiled integrity', () => {
     expect(validateCompiledPipeline(offsetsPipeline)).toEqual({ ok: false });
     expect(offsetReads).toBe(0);
   });
+
+  test('observes stateful node collections once before pruning oversized descendants', () => {
+    const pipeline = structuredClone(branchPipeline());
+    const branchIndex = pipeline.nodes.findIndex((node) => node.kind === 'branch');
+    const branch = pipeline.nodes[branchIndex];
+    expect(branch?.kind).toBe('branch');
+    if (branch?.kind !== 'branch') {
+      return;
+    }
+
+    let collectionObservations = 0;
+    let descendantReads = 0;
+    const oversizedCases = new Array<unknown>(PIPELINE_LIMITS.definition.branchCasesPerNode + 1);
+    Object.defineProperty(oversizedCases, '0', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        descendantReads += 1;
+        return null;
+      },
+    });
+    const statefulBranch = new Proxy(branch, {
+      getOwnPropertyDescriptor: (target, key) => {
+        if (key !== 'cases') {
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        }
+        collectionObservations += 1;
+        return {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value: collectionObservations === 1 ? oversizedCases : target.cases,
+        };
+      },
+    });
+    Reflect.set(pipeline.nodes, branchIndex, statefulBranch);
+
+    expect(validateCompiledPipeline(pipeline)).toEqual({ ok: false });
+    expect(collectionObservations).toBe(1);
+    expect(descendantReads).toBe(0);
+  });
+
+  test('preserves node collection descriptor order before pruning the first oversized value', () => {
+    const pipeline = structuredClone(branchPipeline());
+    const branchIndex = pipeline.nodes.findIndex((node) => node.kind === 'branch');
+    const branch = pipeline.nodes[branchIndex];
+    expect(branch?.kind).toBe('branch');
+    if (branch?.kind !== 'branch') {
+      return;
+    }
+
+    const descriptorOrder: PropertyKey[] = [];
+    let descendantReads = 0;
+    const oversizedCases = new Array<unknown>(PIPELINE_LIMITS.definition.branchCasesPerNode + 1);
+    Object.defineProperty(oversizedCases, '0', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        descendantReads += 1;
+        return null;
+      },
+    });
+    const statefulBranch = new Proxy(branch, {
+      getOwnPropertyDescriptor: (target, key) => {
+        descriptorOrder.push(key);
+        if (key === 'cases' && descriptorOrder.length === 1) {
+          return {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: oversizedCases,
+          };
+        }
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    Reflect.set(pipeline.nodes, branchIndex, statefulBranch);
+
+    expect(validateCompiledPipeline(pipeline)).toEqual({ ok: false });
+    expect(descriptorOrder).toEqual(['cases', 'branches', 'candidates', 'resolutions']);
+    expect(descendantReads).toBe(0);
+  });
 });
 
 describe('fact bounds and diagnostics', () => {

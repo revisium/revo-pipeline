@@ -21,7 +21,7 @@ import type {
   PipelineNode,
   PipelineValueFact,
 } from '../spec/index.js';
-import { validateCompiledInternally } from './validate-compiled-internally.js';
+import { validateCompiledInternally } from './compiled/validate-compiled-internally.js';
 
 type MutableFault = { code: DecisionFaultCode; path: string; message: string };
 type IndexedFact<T> = { readonly fact: T; readonly sourceIndex: number };
@@ -946,16 +946,16 @@ export const decidePipeline = (
       { code: 'PIPELINE_INVALID', path: '', message: 'Compiled pipeline is invalid.' },
     ]);
   }
-  const index = evaluationIndex(compiled.pipeline, compiled.kernel, compiled.topologicalOffsets);
+  const index = evaluationIndex(compiled.snapshot, compiled.kernel, compiled.topologicalOffsets);
   const faults: MutableFault[] = [];
-  const facts = validateFactShape(factsInput, compiled.pipeline, index, faults);
+  const facts = validateFactShape(factsInput, compiled.snapshot, index, faults);
   if (facts) {
-    validateCausality(compiled.pipeline, facts, index, faults);
+    validateCausality(compiled.snapshot, facts, index, faults);
   }
   if (faults.length > 0 || !facts) {
     return reject(faults);
   }
-  const terminals = reachedTerminals(compiled.pipeline, facts, index);
+  const terminals = reachedTerminals(compiled.snapshot, facts, index);
   if (terminals.length > 1) {
     return reject([
       { code: 'FACT_CAUSAL', path: '/nodes', message: 'Multiple terminals are reached.' },
@@ -966,7 +966,7 @@ export const decidePipeline = (
     return { kind: 'terminal', nodeKey: terminal.key, outcome: terminal.outcome };
   }
   return (
-    firstAction(compiled.pipeline, facts, index) ??
-    firstWait(compiled.pipeline, facts, index) ?? { kind: 'noop', reason: 'quiescent' }
+    firstAction(compiled.snapshot, facts, index) ??
+    firstWait(compiled.snapshot, facts, index) ?? { kind: 'noop', reason: 'quiescent' }
   );
 };

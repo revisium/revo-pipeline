@@ -51,6 +51,29 @@ test('derives the complete PR4a scope from every definition production leaf', ()
   ).toContain('src/definition/new-leaf.ts');
 });
 
+test('derives the complete PR4b integrity scope without decide or a grandfather list', () => {
+  const modules: readonly MetricSource[] = [
+    { path: 'src/transition/compiled/a.ts', source: 'export {};\n' },
+    { path: 'src/transition/compiled/nested/b.ts', source: 'export {};\n' },
+    { path: 'src/transition/validate-compiled-pipeline.ts', source: 'export {};\n' },
+    { path: 'src/transition/decide-pipeline.ts', source: 'export {};\n' },
+    { path: 'src/transition/index.ts', source: 'export {};\n' },
+    sourceWithLines(['void 0;']),
+  ];
+
+  expect(sourceMetricScope(modules, 'PR4b')).toEqual([
+    'src/transition/compiled/a.ts',
+    'src/transition/compiled/nested/b.ts',
+    'src/transition/validate-compiled-pipeline.ts',
+  ]);
+  expect(
+    sourceMetricScope(
+      [...modules, { path: 'src/transition/compiled/new-leaf.ts', source: 'export {};\n' }],
+      'PR4b',
+    ),
+  ).toContain('src/transition/compiled/new-leaf.ts');
+});
+
 test('enforces the inclusive formatted physical leaf boundary', () => {
   expect(() =>
     validateSourceMetrics([sourceWithLines(Array.from({ length: 250 }, () => 'void 0;'))], [path]),
