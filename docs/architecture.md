@@ -28,10 +28,16 @@ model/profile/prompt/workspace/provider binding, or host lifecycle. It never acc
 reads durable state, maps it to portable facts, atomically applies a decision, and reloads
 after conflicts. That host work is deliberately outside this package.
 
-The current Draft `@revisium/revo-run` architecture expects a future public decoder for
-untrusted persisted compiled JSON. The Accepted pipeline manifest contains no decoder,
-so this MVP provides a typed one-way seam but does not claim that Draft decoding
-integration is implemented.
+Accepted, unimplemented contracts now define a diagnostic decoder and a pure reducer.
+PR6 may add `decodeCompiledPipeline` and its three types. PR7 may add `reducePipeline`
+and twenty reducer types, reaching exactly five root values and 86 types. Acceptance is
+not shipment: the current root remains exactly three values and 63 types.
+
+One reducer occurrence is one complete finite DAG traversal. Occurrence keys isolate
+independent executions; bounded interior rework is compile-time, forward-only unrolling
+under distinct node keys in the same occurrence. The package returns one ordered atomic
+semantic effect batch. A host owns persistence and CAS, applies the whole batch, and
+reloads and recomputes everything after a conflict.
 
 ## Semantic invariants
 
@@ -45,5 +51,8 @@ integration is implemented.
 
 The accepted [definition](./specs/pipeline-definition-v1.spec.md),
 [transition](./specs/pipeline-transition-v1.spec.md), and
+[decoding](./specs/pipeline-decoding-v1.spec.md),
+[reducer](./specs/pipeline-reducer-v1.spec.md), and
 [module structure](./specs/internal-module-structure.spec.md) specifications own exact
-type, ordering, bound, fault, and dependency details.
+type, ordering, bound, fault, and dependency details. The Accepted
+[ADR](./adr/0002-portable-decoding-and-reduction.md) records the package/host boundary.

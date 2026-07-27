@@ -343,3 +343,16 @@ Implementation MUST test:
 The package owns only this calculation. Durable runs, node instances, attempts, outputs,
 events, CAS, leases, retries, resume, queues, authorization, and atomic decision
 application MUST remain outside it.
+
+## Private shared decision seam
+
+The public `decidePipeline` contract and its `noop` compatibility member remain
+unchanged. PR7 MUST extract a private `decideValidated` operation that evaluates one
+already inspected compiled context and validated projected facts. Both the public
+adapter and reducer drain use that single semantic evaluator.
+
+`decideValidated` MUST NOT inspect snapshots or commands, assemble effects, mutate
+working state, perform persistence, or become a layer/root export. Public
+`decidePipeline` continues to own hostile compiled and fact inspection and existing
+fault mapping. Reducer settledness, fault mapping, and `noop` rejection remain reducer
+responsibilities.
