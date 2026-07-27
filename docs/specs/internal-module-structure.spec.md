@@ -216,3 +216,65 @@ forbidden.
 
 A DAG rule change MUST update this specification, structural validator, unit partition,
 and positive/negative executable harness in the same change.
+
+## Accepted decoding and reduction target
+
+This section plans PR6/PR7 ownership without creating files or exports now. The
+top-level DAG does not change and no new layer or nested barrel is authorized.
+
+PR6 owns the decoder value, three decoder types, one sole hostile compiled inspector,
+and replacement/refactoring of the compiled-validation façade. PR7 owns the reducer
+value, twenty reducer types, private `decideValidated`, snapshot and command inspection,
+call-local working state, drain, decision appliers, terminal closure, and assembly.
+
+```text
+decode adapter -> sole compiled inspector -> compiled inspection leaves
+decide adapter -> compiled inspector + decision context + decideValidated
+reduce adapter -> compiled inspector + snapshot + command + working state + drain + assembly
+settledness -> decideValidated
+drain -> decideValidated + decision appliers
+decision appliers -> working state + fork-relation derivation
+assembly -> working state + diagnostic collector
+```
+
+The inspector MUST NOT depend on public adapters. `decideValidated` MUST NOT depend on
+snapshot, command, reducer, effects, or persistence. Snapshot inspection MUST NOT depend
+on command/reduction; command inspection MUST NOT depend on application; appliers MUST
+NOT depend on drain/assembly. Private leaves MUST NOT import a barrel or root, and type
+and value cycles remain forbidden.
+
+The current root allowlist remains exactly `definePipeline`, `compilePipeline`,
+`decidePipeline` and 63 types. PR6 may additionally expose
+`decodeCompiledPipeline`, `CompiledPipelineDecoding`, `DecodeFault`, and
+`DecodeFaultCode`. PR7 may additionally expose `reducePipeline` and exactly the twenty
+reducer types in the reducer specification. Inspection results, validated contexts,
+fact-path maps, working state, diagnostic collectors, `decideValidated`, and host DTOs
+MUST remain private.
+
+The exact planned new public type manifest is:
+
+```text
+CompiledPipelineDecoding
+DecodeFault
+DecodeFaultCode
+PipelineCandidateVerdictRecord
+PipelineCommand
+PipelineCommandApplication
+PipelineEffect
+PipelineEffectBatch
+PipelineForkRelation
+PipelineGateResolutionRecord
+PipelineNodeOccurrence
+PipelineOccurrenceKey
+PipelineReduction
+PipelineReductionFault
+PipelineReductionFaultCode
+PipelineReductionStatus
+PipelineRetirement
+PipelineSnapshot
+PipelineSnapshotNode
+PipelineTerminal
+PipelineValueRecord
+PipelineValueSource
+PipelineWait
+```

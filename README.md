@@ -81,14 +81,15 @@ retries, resume, authorization, queues, agents, scripts, and atomic application 
 returned decision. `@revisium/revo-run` can consume the public `CompiledPipeline`,
 `PipelineFacts`, and `PipelineDecision` types through a one-way dependency.
 
-The current Draft `@revisium/revo-run` documents a public `decodePipeline` seam for
-untrusted persisted JSON. This MVP intentionally does not export a decoder, so that
-Draft integration remains unresolved and is not proven by this package. A host may use
-already trusted typed compiled data today; a future Accepted decoder contract is needed
-before claiming safe unknown-JSON ingestion.
+Accepted contracts now define future diagnostic decoding and pure snapshot reduction.
+They are not yet exported: PR6 owns decoder implementation and PR7 owns reducer
+implementation. A host may use already trusted typed compiled data today; this package
+does not yet claim safe unknown-JSON ingestion or reduction.
 
 See the Accepted [definition contract](./docs/specs/pipeline-definition-v1.spec.md),
 [transition contract](./docs/specs/pipeline-transition-v1.spec.md),
+[decoding target](./docs/specs/pipeline-decoding-v1.spec.md),
+[reducer target](./docs/specs/pipeline-reducer-v1.spec.md),
 [module DAG](./docs/specs/internal-module-structure.spec.md), and
 [executable consumer example](./docs/examples/consumer.md).
 
