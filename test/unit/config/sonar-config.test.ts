@@ -28,10 +28,6 @@ const acceptedImplementationCriteria = new Map([
     },
   ],
   [
-    'compilerParameterSurface',
-    { resourceKey: 'src/definition/compile-pipeline.ts', ruleKey: 'typescript:S107' },
-  ],
-  [
     'coreDecisionMembership',
     { resourceKey: 'src/transition/decide-pipeline.ts', ruleKey: 'typescript:S7765' },
   ],
@@ -58,11 +54,6 @@ const temporarySonarExpiries = {
     owner: 'PR4b',
     resourceKey: 'src/transition/validate-compiled-internally.ts',
     ruleKey: 'typescript:S3776',
-  },
-  compilerParameterSurface: {
-    owner: 'PR4a',
-    resourceKey: 'src/definition/compile-pipeline.ts',
-    ruleKey: 'typescript:S107',
   },
 } as const;
 
@@ -130,19 +121,16 @@ test('locks temporary Sonar criteria to their exact removal owners', async () =>
   }
 
   validateTemporarySonarExpiries(registry);
-  expect(Object.keys(registry).sort()).toEqual([
-    'boundedCompiledInspection',
-    'compilerParameterSurface',
-  ]);
+  expect(Object.keys(registry).sort()).toEqual(['boundedCompiledInspection']);
 });
 
 test('rejects temporary Sonar expiry scope or ownership drift', () => {
   expect(() =>
     validateTemporarySonarExpiries({
       ...temporarySonarExpiries,
-      compilerParameterSurface: {
-        ...temporarySonarExpiries.compilerParameterSurface,
-        resourceKey: 'src/definition/*.ts',
+      boundedCompiledInspection: {
+        ...temporarySonarExpiries.boundedCompiledInspection,
+        resourceKey: 'src/transition/*.ts',
       },
     }),
   ).toThrowError('expected');

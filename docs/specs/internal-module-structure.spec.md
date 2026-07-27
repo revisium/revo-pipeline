@@ -108,34 +108,28 @@ hostile alias, unknown-helper escape, endpoint write, or post-equality mutation.
 Tracked calls embedded in `&&`, `||`, `??`, a ternary, assignment, argument, callback,
 loop, `switch`, `try`, or nested function MUST fail closed.
 
-The complete transitive proof is bound to reviewed AST-body digests for
-`compilePipeline`, `preflightForkRegions`, `classifyForkRegions`,
-`validateCompiledInternally`, `canonicalCoreGraph`, `canonicalRegions`, and
-`independentlyDerivedRegionMembers`. These owners collectively contain every A4 tracked
-compiler and hostile collection, writer, traversal, alias, helper boundary, equality
-gate, and builder input. A body change not recognized by the narrower semantic checks
-MUST still fail its owner digest. Updating a digest without reviewing the full owner
-body, its transitive collection table, fixtures, and this specification is forbidden.
+The compiler proof resolves the direct-import chain and exported symbols across its
+private definition leaves. Validation success MUST dominate normalization, projected
+edges MUST be the input to preflight, preflight success MUST dominate the sole
+`buildGraphKernel` call in `validateDefinitionGraph`, and the exact graph result MUST
+flow unchanged through classification into assembly. A conditional, aliased, repeated,
+unresolved, or out-of-order call fails closed.
 
-The transitive boundary additionally pins the complete source text of
-`src/definition/compile-pipeline.ts` and
-`src/transition/validate-compiled-internally.ts`. This full-file digest includes every
-outer precheck, node/edge projection, branch policy, readiness normalization,
-collection writer, and helper reachable from the seven primary owners. Any change
-anywhere in either file MUST fail architecture verification until the complete file
-boundary is reviewed and the file digest, owner digests, specification, and adversarial
-fixtures are reconciled together. Updating only a digest is not an accepted fix.
+The hostile-validation transitive proof remains bound to reviewed AST-body digests for
+`validateCompiledInternally`, `canonicalCoreGraph`, `canonicalRegions`, and
+`independentlyDerivedRegionMembers`, plus the complete source text of
+`src/transition/validate-compiled-internally.ts`. Updating a digest without reviewing
+the full hostile owner body, its transitive collection table, fixtures, and this
+specification is forbidden.
 
 Sonar issue exceptions MUST equal the reviewed criterion-name, rule-key, and exact
 production-file allowlist in `sonar-project.properties`. Globs, directories, global or
 rule-wide ignores, coverage exclusions, and duplication exclusions are forbidden.
-`compilerParameterSurface` (`typescript:S107` on
-`src/definition/compile-pipeline.ts`) expires in PR4a.
 `boundedCompiledInspection` (`typescript:S3776` on
 `src/transition/validate-compiled-internally.ts`) expires in PR4b.
-The temporary expiry registry MUST equal only those two exact criterion, rule, resource,
-and removal-owner records. Additional criteria, globs, directory scopes, and owner changes
-MUST fail verification.
+The temporary expiry registry MUST equal only that exact criterion, rule, resource, and
+removal-owner record. Additional criteria, globs, directory scopes, and owner changes MUST
+fail verification.
 
 Formatted physical source metrics are independently checked for explicitly enabled
 production leaves. A leaf spans its first line through its final non-terminal-newline line;
@@ -144,20 +138,18 @@ Runtime callable spans are measured recursively from the first declaration or ex
 token through the closing body or expression token. Function declarations, function
 expressions, arrows, methods, constructors, getters, setters, object methods, and nested
 callables are included; type-only and body-less signatures are excluded. 60 lines is an
-advisory review target; 80 pass and 81 fail `production-callable-span`. PR4-0 enables no
-production path and has no grandfather list.
+advisory review target; 80 pass and 81 fail `production-callable-span`.
 
 Metric scopes MUST reject duplicate entries and paths absent from the collected production
 modules before selecting files. PR4a MUST activate its scope through complete derivation
 from every `src/definition/**` TypeScript production leaf, excluding only the layer barrel;
 it MUST NOT use a manually enumerated subset or grandfather list. Adding a definition leaf
-therefore adds it to the derived PR4a scope without a registry update. This future scope
-contract is locked during PR4-0, but PR4-0 continues to activate the empty scope only.
+therefore adds it to the derived PR4a scope without a registry update.
 
-The graph-flow proof remains bound to the reviewed owner-body and complete-file SHA-256
-digests above. A later decomposition slice MUST replace each affected digest assertion
-atomically with equivalent structural and dataflow proof. Blind digest refresh, weaker
-scanning, or temporary analyzer disablement is forbidden.
+The hostile graph-flow proof remains bound to the reviewed owner-body and complete-file
+SHA-256 digests above. Compiler graph-flow uses symbol-resolved structural and dataflow
+proof. Blind digest refresh, weaker scanning, or temporary analyzer disablement is
+forbidden.
 
 A DAG rule change MUST update this specification, structural validator, unit partition,
 and positive/negative executable harness in the same change.

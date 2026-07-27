@@ -12,7 +12,7 @@ export interface MetricSource {
 }
 
 export type SourceMetricRule = 'production-callable-span' | 'production-leaf-span';
-export type SourceMetricPhase = 'PR4-0' | 'PR4a';
+export type SourceMetricPhase = 'PR4a';
 
 const MAX_FILE_LINES = 250;
 const MAX_CALLABLE_LINES = 80;
@@ -29,14 +29,12 @@ const isDefinitionLeaf = (path: string): boolean =>
 
 export const sourceMetricScope = (
   modules: readonly MetricSource[],
-  phase: SourceMetricPhase,
+  _phase: SourceMetricPhase,
 ): readonly string[] =>
-  phase === 'PR4-0'
-    ? []
-    : modules
-        .map((module) => module.path)
-        .filter(isDefinitionLeaf)
-        .sort();
+  modules
+    .map((module) => module.path)
+    .filter(isDefinitionLeaf)
+    .sort();
 
 const lineCount = (source: string): number => {
   const withoutTerminalNewline = source.replace(/\r?\n$/u, '');

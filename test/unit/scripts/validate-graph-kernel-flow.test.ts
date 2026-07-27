@@ -37,6 +37,19 @@ const replace = async (root: string, path: string, from: string, to: string): Pr
   await writeFile(target, source.replace(from, to));
 };
 
+const replaceInOrder = async (
+  root: string,
+  path: string,
+  changes: readonly { readonly from: string; readonly to: string }[],
+): Promise<void> => {
+  const [change, ...remaining] = changes;
+  if (!change) {
+    return;
+  }
+  await replace(root, path, change.from, change.to);
+  await replaceInOrder(root, path, remaining);
+};
+
 const expectViolation = (root: string, code: string, path: string): void => {
   expect(validateGraphKernelFlow(root)).toEqual(
     expect.arrayContaining([expect.objectContaining({ code, path })]),
@@ -67,290 +80,6 @@ test('maps every runtime scenario to its static proof invariant', () => {
 });
 
 test.each([
-  {
-    name: 'third builder call site',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_REBUILD',
-    from: 'const kernelBuild = buildGraphKernel({',
-    to: 'const unusedBuild = buildGraphKernel({ nodeKeys: [], edges: [] });\n  void unusedBuild;\n  const kernelBuild = buildGraphKernel({',
-  },
-  {
-    name: 'builder call in decidePipeline',
-    path: 'src/transition/decide-pipeline.ts',
-    code: 'GRAPH_KERNEL_BUILD_SITE',
-    from: '  const compiled = validateCompiledInternally(pipelineInput);',
-    to: '  const forbidden = buildGraphKernel({ nodeKeys: [], edges: [] });\n  void forbidden;\n  const compiled = validateCompiledInternally(pipelineInput);',
-  },
-  {
-    name: 'builder call in evaluator',
-    path: 'src/transition/decide-pipeline.ts',
-    code: 'GRAPH_KERNEL_BUILD_SITE',
-    from: '): EvaluationIndex => {\n  const regionOwnerByNode',
-    to: '): EvaluationIndex => {\n  const forbidden = buildGraphKernel({ nodeKeys: [], edges: [] });\n  void forbidden;\n  const regionOwnerByNode',
-  },
-  {
-    name: 'builder alias then call',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_BUILD_SITE',
-    from: '  const kernelBuild = buildGraphKernel({',
-    to: '  const builder = buildGraphKernel;\n  const kernelBuild = builder({',
-  },
-  {
-    name: 'builder passed as an argument',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_BUILD_SITE',
-    from: '  const kernelBuild = buildGraphKernel({',
-    to: '  void Promise.resolve(buildGraphKernel);\n  const kernelBuild = buildGraphKernel({',
-  },
-  {
-    name: 'builder call inside a loop',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_BUILD_REPEAT',
-    from:
-      '  const kernelBuild = buildGraphKernel({\n' +
-      '    nodeKeys,\n' +
-      '    edges: inducedEdges,\n' +
-      '  });',
-    to:
-      '  const kernelBuild = [0].map(() => buildGraphKernel({\n' +
-      '    nodeKeys,\n' +
-      '    edges: inducedEdges,\n' +
-      '  }))[0]!;',
-  },
-  {
-    name: 'builder call inside a deferred retry closure',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_BUILD_REPEAT',
-    from:
-      '  const kernelBuild = buildGraphKernel({\n' +
-      '    nodeKeys,\n' +
-      '    edges: inducedEdges,\n' +
-      '  });',
-    to:
-      '  const kernelBuild = (() => buildGraphKernel({\n' +
-      '    nodeKeys,\n' +
-      '    edges: inducedEdges,\n' +
-      '  }))();',
-  },
-  {
-    name: 'builder call inside a recursive path',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_BUILD_REPEAT',
-    from:
-      '  const kernelBuild = buildGraphKernel({\n' +
-      '    nodeKeys,\n' +
-      '    edges: inducedEdges,\n' +
-      '  });',
-    to:
-      '  const recurse = (): ReturnType<typeof buildGraphKernel> => buildGraphKernel({\n' +
-      '    nodeKeys,\n' +
-      '    edges: inducedEdges,\n' +
-      '  });\n' +
-      '  const kernelBuild = recurse();',
-  },
-  {
-    name: 'compiler builder before portable dominance',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: 'inspectPortableValueSet(definition,',
-    to: 'inspectDefinition(definition,',
-  },
-  {
-    name: 'compiler prerequisite is conditionally bypassed',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-    to: '  if (value.entry) {\n    validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);\n  }',
-  },
-  {
-    name: 'compiler prerequisite is switch-controlled',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-    to: '  switch (value.entry) {\n    default:\n      validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);\n  }',
-  },
-  {
-    name: 'compiler prerequisite is loop-controlled',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-    to: '  for (const once of [true]) {\n    void once;\n    validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);\n  }',
-  },
-  {
-    name: 'compiler prerequisite is try-controlled',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-    to: '  try {\n    validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);\n  } finally {\n    void 0;\n  }',
-  },
-  {
-    name: 'compiler prerequisite is callback-controlled',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-    to: '  [true].forEach(() => validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults));',
-  },
-  {
-    name: 'compiler prerequisite is hidden behind logical and',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-    to: '  value.entry && validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-  },
-  {
-    name: 'compiler prerequisite is hidden behind logical or',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-    to: '  value.entry || validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-  },
-  {
-    name: 'compiler prerequisite is hidden behind nullish coalescing',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-    to: '  value.entry ?? validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-  },
-  {
-    name: 'compiler prerequisite is hidden in a ternary',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults);',
-    to: '  value.entry ? validateReferences(value.entry, copiedNodes, preliminaryEdges, sourceIndexes, faults) : undefined;',
-  },
-  {
-    name: 'compiler structural preflight is bypassed',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const preflight = preflightForkRegions(copiedNodes, nodeKeys, sourceIndexes, sourceNodes, faults);',
-    to: '  const preflight = value.entry ? preflightForkRegions(copiedNodes, nodeKeys, sourceIndexes, sourceNodes, faults) : undefined;',
-  },
-  {
-    name: 'compiler node keys use a noncanonical node map',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const nodeKeys = copiedNodes.map((node) => node.key);',
-    to: '  const nodeKeys = derivableNodes.map((record) => record.node.key);',
-  },
-  {
-    name: 'compiler induced edges come from an unproven helper',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const inducedEdges = Object.freeze(induced.map(({ semantic }) => semantic));',
-    to: '  const inducedEdges = unprovenTopology(induced);',
-  },
-  {
-    name: 'compiler induced graph omits the exact known-endpoint filter',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '    knownKeys.has(edge.from) && knownKeys.has(edge.to)',
-    to: '    true',
-  },
-  {
-    name: 'compiler retains legacy adjacency construction',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_REBUILD',
-    from: '  const preflight = preflightForkRegions(',
-    to: '  void buildEdgeBuckets;\n  const preflight = preflightForkRegions(',
-  },
-  {
-    name: 'compiler retains legacy per-branch traversal',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_REBUILD',
-    from: '  const preflight = preflightForkRegions(',
-    to: '  void collectSemanticRegionMembers;\n  const preflight = preflightForkRegions(',
-  },
-  {
-    name: 'compiler mutates an endpoint after classification',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const entry = typeof value.entry ===',
-    to: "  edges[0]!.from = 'tampered';\n  const entry = typeof value.entry ===",
-  },
-  {
-    name: 'compiler mutates induced topology after proof',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  const kernelBuild = buildGraphKernel({',
-    to: "  inducedEdges.push({ from: 'a', to: 'b' });\n  const kernelBuild = buildGraphKernel({",
-  },
-  {
-    name: 'compiler swaps the proven builder input',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '    edges: inducedEdges,\n  });',
-    to: '    edges,\n  });',
-  },
-  {
-    name: 'compiler suppresses the safe induced diagnostic path',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
-    from: '  const kernelBuild = buildGraphKernel({',
-    to: '  if (faults.length > 0) {\n    return { ok: false, faults: orderedFaults(faults) };\n  }\n  const kernelBuild = buildGraphKernel({',
-  },
-  {
-    name: 'compiler neutralizes the final offset guard',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '  if (!edgeOffsetsAreIdentical) {',
-    to: '  if (edgeOffsetsAreIdentical) {',
-  },
-  {
-    name: 'compiler removes semantic-offset identity',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '        inducedSemanticOffsets[offset] === offset &&',
-    to: '        true &&',
-  },
-  {
-    name: 'compiler inverts semantic-offset identity',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '        inducedSemanticOffsets[offset] === offset &&',
-    to: '        inducedSemanticOffsets[offset] !== offset &&',
-  },
-  {
-    name: 'compiler removes from identity',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '        inducedEdges[offset]?.from === edge.from &&',
-    to: '        true &&',
-  },
-  {
-    name: 'compiler inverts from identity',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '        inducedEdges[offset]?.from === edge.from &&',
-    to: '        inducedEdges[offset]?.from !== edge.from &&',
-  },
-  {
-    name: 'compiler removes outcome identity',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '        inducedEdges[offset]?.outcome === edge.outcome &&',
-    to: '        true &&',
-  },
-  {
-    name: 'compiler inverts outcome identity',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '        inducedEdges[offset]?.outcome === edge.outcome &&',
-    to: '        inducedEdges[offset]?.outcome !== edge.outcome &&',
-  },
-  {
-    name: 'compiler removes to identity',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '        inducedEdges[offset]?.to === edge.to,',
-    to: '        true,',
-  },
-  {
-    name: 'compiler inverts to identity',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '        inducedEdges[offset]?.to === edge.to,',
-    to: '        inducedEdges[offset]?.to !== edge.to,',
-  },
   {
     name: 'validator builder before semantic equality',
     path: 'src/transition/validate-compiled-internally.ts',
@@ -655,20 +384,6 @@ test.each([
     to: '  if (pipeline.entry === "never") return () => kernel;\n  const regionOwnerByNode = new Map<string, string>();',
   },
   {
-    name: 'compiler edge projection helper changes outside owner digests',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: 'const edgesForNode = (node: PipelineNode): CompiledEdge[] => {',
-    to: 'const edgesForNode = (node: PipelineNode): CompiledEdge[] => {\n  void node;',
-  },
-  {
-    name: 'compiler readiness helper changes outside owner digests',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: '): void => {\n  const exit = nodeByKey.get(branch.branch.exit);',
-    to: '): void => {\n  void edges;\n  const exit = nodeByKey.get(branch.branch.exit);',
-  },
-  {
     name: 'hostile branch integrity helper changes outside owner digests',
     path: 'src/transition/validate-compiled-internally.ts',
     code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
@@ -689,32 +404,503 @@ test.each([
     from: 'const precheckCompiledBounds = (input: unknown): boolean => {\n  if (!isRecord(input)) {\n    return true;',
     to: 'const precheckCompiledBounds = (input: unknown): boolean => {\n  if (!isRecord(input)) {\n    return false;',
   },
+] as const)('rejects $name', async ({ path, code, from, to }) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(root, path, from, to);
+  expectViolation(root, code, path);
+});
+
+test.each([
   {
-    name: 'ambiguous tracked import alias',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_ANALYSIS_UNPROVEN',
-    from: '  buildGraphKernel,',
-    to: '  buildGraphKernel as makeKernel,',
+    name: 'second compiler builder',
+    path: 'src/definition/compilation/validate-definition-graph.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: '  const kernelBuild = buildGraphKernel({ nodeKeys, edges: inducedEdges });',
+    to:
+      '  const unusedBuild = buildGraphKernel({ nodeKeys, edges: inducedEdges });\n' +
+      '  void unusedBuild;\n' +
+      '  const kernelBuild = buildGraphKernel({ nodeKeys, edges: inducedEdges });',
   },
   {
-    name: 'tracked import does not resolve',
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_ANALYSIS_UNPROVEN',
-    from: "} from '../graph/index.js';",
-    to: "} from '../graph/missing.js';",
+    name: 'compiler builder alias',
+    path: 'src/definition/compilation/validate-definition-graph.ts',
+    code: 'GRAPH_KERNEL_BUILD_SITE',
+    from: '  const kernelBuild = buildGraphKernel({ nodeKeys, edges: inducedEdges });',
+    to:
+      '  const builder = buildGraphKernel;\n' +
+      '  const kernelBuild = builder({ nodeKeys, edges: inducedEdges });',
   },
   {
-    name: 'computed builder lookup',
+    name: 'validation dominance bypass',
+    path: 'src/definition/compile-pipeline.ts',
+    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+    from: '  if (!validation.canCompile) {',
+    to: '  if (definition === undefined && !validation.canCompile) {',
+  },
+  {
+    name: 'projection input remap',
+    path: 'src/definition/compile-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const projectedGraph = projectPipelineEdges(copiedNodes);',
+    to: '  const projectedGraph = projectPipelineEdges(nodes);',
+  },
+  {
+    name: 'graph input remap',
+    path: 'src/definition/compile-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '    edges: projectedGraph.edges,',
+    to: '    edges: [],',
+  },
+  {
+    name: 'classification graph alias',
+    path: 'src/definition/compile-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const classifiedRegions = classifyForkRegions({\n    faults,\n    graph,',
+    to:
+      '  const replacementGraph = { ...graph };\n' +
+      '  const classifiedRegions = classifyForkRegions({\n' +
+      '    faults,\n' +
+      '    graph: replacementGraph,',
+  },
+  {
+    name: 'compiler size guard bypass',
+    path: 'src/definition/compilation/validate-definition-graph.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '    nodeKeys.length > PIPELINE_LIMITS.definition.nodes ||',
+    to: '    false ||',
+  },
+  {
+    name: 'compiler induced endpoint filter bypass',
+    path: 'src/definition/compilation/validate-definition-graph.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '    knownKeys.has(edge.from) && knownKeys.has(edge.to)',
+    to: '    true',
+  },
+  {
+    name: 'compiler builder input swap',
+    path: 'src/definition/compilation/validate-definition-graph.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const kernelBuild = buildGraphKernel({ nodeKeys, edges: inducedEdges });',
+    to: '  const kernelBuild = buildGraphKernel({ nodeKeys, edges });',
+  },
+  {
+    name: 'normalization skips canonical branch-case normalization',
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '.map(normalizeCase)',
+    to: '.map((entry) => entry)',
+  },
+  {
+    name: 'normalization skips consensus candidate ordering',
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'candidates: [...node.candidates].sort(compareUnicodeCodePoints),',
+    to: 'candidates: [...node.candidates],',
+  },
+  {
+    name: 'normalization skips human-gate NFC',
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: "subject: node.subject.normalize('NFC'),",
+    to: 'subject: node.subject,',
+  },
+  {
+    name: 'projection changes the human-gate resolution outcome',
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'edge(entry.resolution, entry.to)',
+    to: "edge('tampered', entry.to)",
+  },
+  {
+    name: 'projection changes the package-owned source key',
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'from: node.key,',
+    to: "from: 'tampered',",
+  },
+  {
+    name: 'projection changes the initial semantic role',
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: "role: 'activation',",
+    to: "role: 'readiness',",
+  },
+  {
+    name: 'projection changes fork branch ownership',
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'branch: branch.name,',
+    to: 'branch: null,',
+  },
+  {
+    name: 'projection changes canonical field ordering',
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from:
+      'compareUnicodeCodePoints(left.from, right.from) ||\n' +
+      '  compareUnicodeCodePoints(left.outcome, right.outcome)',
+    to:
+      'compareUnicodeCodePoints(left.outcome, right.outcome) ||\n' +
+      '  compareUnicodeCodePoints(left.from, right.from)',
+  },
+  {
+    name: 'projection skips the canonical edge sort',
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'nodes.flatMap(edgesForNode).sort(edgeComparator)',
+    to: 'nodes.flatMap(edgesForNode)',
+  },
+  {
+    name: 'preflight remaps the barrier endpoint',
+    path: 'src/definition/compilation/preflight-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'const barrierNodeOffset = nodeOffsets.get(join.key);',
+    to: 'const barrierNodeOffset = nodeOffsets.get(fork.key);',
+  },
+  {
+    name: 'preflight remaps a branch endpoint',
+    path: 'src/definition/compilation/preflight-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'entryNodeOffset: nodeOffsets.get(branch.entry),',
+    to: 'entryNodeOffset: nodeOffsets.get(branch.exit),',
+  },
+  {
+    name: 'preflight bypasses known-query provenance',
+    path: 'src/definition/compilation/preflight-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'const queryIsKnown =\n      barrierNodeOffset !== undefined &&',
+    to: 'const queryIsKnown =\n      true &&',
+  },
+  {
+    name: 'reference validation is conditional',
+    path: 'src/definition/compilation/validate-definition-graph.ts',
+    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+    from: '  validateReferences(entry, nodes, projectedEdges, sourceIndexes, faults);',
+    to:
+      '  if (entry) {\n' +
+      '    validateReferences(entry, nodes, projectedEdges, sourceIndexes, faults);\n' +
+      '  }',
+  },
+  {
+    name: 'reference validation is out of order',
+    path: 'src/definition/compilation/validate-definition-graph.ts',
+    code: 'GRAPH_KERNEL_TRUST_DOMINANCE',
+    from:
+      '  validateReferences(entry, nodes, projectedEdges, sourceIndexes, faults);\n' +
+      '  const edges: MutableCompiledEdge[] = projectedEdges.map((edge) => ({ ...edge }));',
+    to:
+      '  const edges: MutableCompiledEdge[] = projectedEdges.map((edge) => ({ ...edge }));\n' +
+      '  validateReferences(entry, nodes, projectedEdges, sourceIndexes, faults);',
+  },
+  {
+    name: 'compiler induced edges mutate after construction',
+    path: 'src/definition/compilation/validate-definition-graph.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const inducedSemanticOffsets = Object.freeze(',
+    to:
+      "  inducedEdges.push({ from: 'a', outcome: 'x', to: 'b' });\n" +
+      '  const inducedSemanticOffsets = Object.freeze(',
+  },
+  {
+    name: 'classification bypasses branch edge permission',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const permittedInternal = fromOwner !== undefined && fromOwner === toOwner;',
+    to: '  const permittedInternal = true;',
+  },
+  {
+    name: 'readiness classification changes role provenance',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: "edge.role = 'readiness';",
+    to: "edge.role = 'activation';",
+  },
+  {
+    name: 'readiness classification changes fork provenance',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'edge.fork = fork.fork.key;',
+    to: 'edge.fork = fork.join.key;',
+  },
+  {
+    name: 'readiness classification changes branch provenance',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'edge.branch = branch.branch.name;',
+    to: 'edge.branch = null;',
+  },
+  {
+    name: 'final semantic-offset identity is removed',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '        graph.inducedSemanticOffsets[offset] === offset &&',
+    to: '        true &&',
+  },
+  {
+    name: 'final semantic-offset identity is inverted',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '        graph.inducedSemanticOffsets[offset] === offset &&',
+    to: '        graph.inducedSemanticOffsets[offset] !== offset &&',
+  },
+  {
+    name: 'final from identity is removed',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '        graph.inducedEdges[offset]?.from === edge.from &&',
+    to: '        true &&',
+  },
+  {
+    name: 'final from identity is inverted',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '        graph.inducedEdges[offset]?.from === edge.from &&',
+    to: '        graph.inducedEdges[offset]?.from !== edge.from &&',
+  },
+  {
+    name: 'final outcome identity is removed',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '        graph.inducedEdges[offset]?.outcome === edge.outcome &&',
+    to: '        true &&',
+  },
+  {
+    name: 'final outcome identity is inverted',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '        graph.inducedEdges[offset]?.outcome === edge.outcome &&',
+    to: '        graph.inducedEdges[offset]?.outcome !== edge.outcome &&',
+  },
+  {
+    name: 'final to identity is removed',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '        graph.inducedEdges[offset]?.to === edge.to,',
+    to: '        true,',
+  },
+  {
+    name: 'final to identity is inverted',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '        graph.inducedEdges[offset]?.to === edge.to,',
+    to: '        graph.inducedEdges[offset]?.to !== edge.to,',
+  },
+  {
+    name: 'assembly skips deep freeze promotion',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'pipeline: deepFreeze({',
+    to: 'pipeline: ({',
+  },
+  {
+    name: 'assembly substitutes serialized edges',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'edges: graph.edges,',
+    to: 'edges: graph.inducedEdges,',
+  },
+  {
+    name: 'assembly changes index input nodes',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '...buildIndexes(nodes, graph),',
+    to: '...buildIndexes([], graph),',
+  },
+  {
+    name: 'assembly swaps incoming index provenance',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'edges: graph.kernel.incomingEdgeOffsets[offset] ?? [],',
+    to: 'edges: graph.kernel.outgoingEdgeOffsets[offset] ?? [],',
+  },
+  {
+    name: 'compiler projection call is conditional',
+    path: 'src/definition/compile-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const projectedGraph = projectPipelineEdges(copiedNodes);',
+    to: '  const projectedGraph = entry ? projectPipelineEdges(copiedNodes) : { edges: [] };',
+  },
+  {
+    name: 'compiler projection call is aliased',
+    path: 'src/definition/compile-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const projectedGraph = projectPipelineEdges(copiedNodes);',
+    to:
+      '  const project = projectPipelineEdges;\n' +
+      '  const projectedGraph = project(copiedNodes);',
+  },
+  {
+    name: 'compiler projection call is repeated',
+    path: 'src/definition/compile-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const projectedGraph = projectPipelineEdges(copiedNodes);',
+    to:
+      '  void projectPipelineEdges(copiedNodes);\n' +
+      '  const projectedGraph = projectPipelineEdges(copiedNodes);',
+  },
+  {
+    name: 'compiler projection and preflight calls are out of order',
+    path: 'src/definition/compile-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from:
+      '  const projectedGraph = projectPipelineEdges(copiedNodes);\n' +
+      '  const nodeKeys = copiedNodes.map((node) => node.key);\n' +
+      '  const preflight = preflightForkRegions(copiedNodes, nodeKeys, sourceIndexes, sourceNodes, faults);',
+    to:
+      '  const nodeKeys = copiedNodes.map((node) => node.key);\n' +
+      '  const preflight = preflightForkRegions(copiedNodes, nodeKeys, sourceIndexes, sourceNodes, faults);\n' +
+      '  const projectedGraph = projectPipelineEdges(copiedNodes);',
+  },
+  {
+    name: 'remapped compiler owner import',
     path: 'src/definition/compile-pipeline.ts',
     code: 'GRAPH_KERNEL_ANALYSIS_UNPROVEN',
-    from: '  const kernelBuild = buildGraphKernel({',
-    to: "  void graph['buildGraphKernel'];\n  const kernelBuild = buildGraphKernel({",
+    from: 'import { validateDefinitionGraph }',
+    to: 'import { validateDefinitionGraph as remappedGraph }',
   },
 ] as const)('rejects $name', async ({ path, code, from, to }) => {
   expect.hasAssertions();
   const root = await fixture();
   await replace(root, path, from, to);
   expectViolation(root, code, path);
+});
+
+test.each([
+  {
+    name: 'normalization live human-gate initializer despite a nested exact decoy',
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    changes: [
+      {
+        from: 'export const normalizePipelineNode = (node: PipelineNode): PipelineNode => {\n',
+        to:
+          'export const normalizePipelineNode = (node: PipelineNode): PipelineNode => {\n' +
+          "  const decoy = () => ({ subject: node.subject.normalize('NFC') });\n" +
+          '  void decoy;\n',
+      },
+      {
+        from: "        subject: node.subject.normalize('NFC'),",
+        to: '        subject: node.subject,',
+      },
+    ],
+  },
+  {
+    name: 'projection live human-gate return despite a nested exact decoy',
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    changes: [
+      {
+        from:
+          "    case 'humanGate':\n" +
+          '      return node.resolutions.map((entry) => edge(entry.resolution, entry.to));',
+        to:
+          "    case 'humanGate': {\n" +
+          '      const decoy = () =>\n' +
+          '        node.resolutions.map((entry) => edge(entry.resolution, entry.to));\n' +
+          '      void decoy;\n' +
+          "      return node.resolutions.map((entry) => edge('tampered', entry.to));\n" +
+          '    }',
+      },
+    ],
+  },
+  {
+    name: 'preflight live query initializer and return despite a nested exact decoy',
+    path: 'src/definition/compilation/preflight-fork-regions.ts',
+    changes: [
+      {
+        from:
+          '    const queryIsKnown =\n' +
+          '      barrierNodeOffset !== undefined &&\n' +
+          '      queryBranches.every(\n' +
+          '        (branch) => branch.entryNodeOffset !== undefined && branch.exitNodeOffset !== undefined,\n' +
+          '      );',
+        to: '    const queryIsKnown = false;',
+      },
+      {
+        from: '  return { forks, queries };\n};',
+        to:
+          '  const decoy = () => {\n' +
+          '    const queryIsKnown =\n' +
+          '      barrierNodeOffset !== undefined &&\n' +
+          '      queryBranches.every(\n' +
+          '        (branch) => branch.entryNodeOffset !== undefined && branch.exitNodeOffset !== undefined,\n' +
+          '      );\n' +
+          '    void queryIsKnown;\n' +
+          '    return { forks, queries };\n' +
+          '  };\n' +
+          '  void decoy;\n' +
+          '  return { forks: [], queries: [] };\n' +
+          '};',
+      },
+    ],
+  },
+  {
+    name: 'readiness live assignments despite a nested exact decoy',
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    changes: [
+      {
+        from:
+          '  for (const edge of exitEdges) {\n' +
+          "    edge.role = 'readiness';\n" +
+          '    edge.fork = fork.fork.key;\n' +
+          '    edge.branch = branch.branch.name;\n' +
+          '  }',
+        to:
+          '  const decoy = (edge: MutableEdge) => {\n' +
+          "    edge.role = 'readiness';\n" +
+          '    edge.fork = fork.fork.key;\n' +
+          '    edge.branch = branch.branch.name;\n' +
+          '  };\n' +
+          '  void decoy;\n' +
+          '  for (const edge of exitEdges) {\n' +
+          "    edge.role = 'activation';\n" +
+          '    edge.fork = fork.join.key;\n' +
+          '    edge.branch = null;\n' +
+          '  }',
+      },
+    ],
+  },
+  {
+    name: 'assembly live promotion and indexes despite a nested exact decoy',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    changes: [
+      {
+        from: '  return {\n    ok: true,\n    pipeline: deepFreeze({',
+        to:
+          '  const decoy = () => ({\n' +
+          '    pipeline: deepFreeze({ edges: graph.edges, ...buildIndexes(nodes, graph) }),\n' +
+          '  });\n' +
+          '  void decoy;\n' +
+          '  return {\n' +
+          '    ok: true,\n' +
+          '    pipeline: ({',
+      },
+    ],
+  },
+] as const)('rejects $name', async ({ path, changes }) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replaceInOrder(root, path, changes);
+  expectViolation(root, 'GRAPH_KERNEL_INPUT_PROVENANCE', path);
+});
+
+test.each([
+  {
+    name: 'normalization spread overrides the proven subject in the same return object',
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    from: "        subject: node.subject.normalize('NFC'),",
+    to: "        subject: node.subject.normalize('NFC'),\n        ...{ subject: node.subject },",
+  },
+  {
+    name: 'assembly spread overrides the proven pipeline in the same return object',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    from: '      ...buildIndexes(nodes, graph),\n    }),\n  };\n};',
+    to: '      ...buildIndexes(nodes, graph),\n    }),\n    ...{ pipeline: undefined },\n  };\n};',
+  },
+] as const)('rejects $name', async ({ path, from, to }) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(root, path, from, to);
+  expectViolation(root, 'GRAPH_KERNEL_INPUT_PROVENANCE', path);
 });
 
 test('fails closed on a parse failure', async () => {

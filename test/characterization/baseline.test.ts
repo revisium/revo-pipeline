@@ -1,9 +1,8 @@
-import { execFile, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { promisify } from 'node:util';
 
 import { describe, expect, test, vi } from 'vitest';
 
@@ -110,23 +109,6 @@ const verifierFailure = (fixture: string): string => {
 };
 
 describe('immutable characterization controls', () => {
-  test('PR4-0 changes no tracked, staged, committed, or untracked production source; remove only in PR4a', async () => {
-    const execute = promisify(execFile);
-    const { stdout: tracked } = await execute(
-      'git',
-      ['diff', '--name-only', 'c5dafd574269c230e4921614a481fc7277f2ff00', '--', 'src'],
-      { cwd: new URL('../..', import.meta.url) },
-    );
-    const { stdout: untracked } = await execute(
-      'git',
-      ['ls-files', '--others', '--exclude-standard', '--', 'src'],
-      { cwd: new URL('../..', import.meta.url) },
-    );
-    const { stdout: status } = await execute('git', ['status', '--porcelain', '--', 'src'], {
-      cwd: new URL('../..', import.meta.url),
-    });
-    expect({ tracked, untracked, status }).toEqual({ tracked: '', untracked: '', status: '' });
-  });
   test('the checked corpus agrees with current public behavior', async () => {
     const verifier = await import('../../scripts/verify-characterization.js');
     expect(verifier).toBeDefined();
