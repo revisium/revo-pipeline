@@ -16,14 +16,6 @@ const acceptedImplementationCriteria = new Map([
     'boundedFactInspection',
     { resourceKey: 'src/policy/inspect-portable-value-set.ts', ruleKey: 'typescript:S3776' },
   ],
-  [
-    'coreDecisionStateMachine',
-    { resourceKey: 'src/transition/decide-pipeline.ts', ruleKey: 'typescript:S3776' },
-  ],
-  [
-    'coreDecisionMembership',
-    { resourceKey: 'src/transition/decide-pipeline.ts', ruleKey: 'typescript:S7765' },
-  ],
 ]);
 
 const acceptedCriteria = new Map([

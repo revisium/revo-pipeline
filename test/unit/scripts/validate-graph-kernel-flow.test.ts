@@ -249,8 +249,8 @@ test.each([
     name: 'substitutes the decision evaluation kernel',
     path: 'src/transition/decide-pipeline.ts',
     code: 'GRAPH_KERNEL_IDENTITY_FLOW',
-    from: 'evaluationIndex(compiled.snapshot, compiled.kernel, compiled.topologicalOffsets)',
-    to: 'evaluationIndex(compiled.snapshot, { ...compiled.kernel }, compiled.topologicalOffsets)',
+    from: 'buildDecisionContext(compiled)',
+    to: 'buildDecisionContext({ ...compiled, kernel: { ...compiled.kernel } })',
   },
   {
     name: 'exposes the private kernel through the stripping adapter',
@@ -373,8 +373,8 @@ test.each([
     name: 'substitutes the decision topology offsets',
     path: 'src/transition/decide-pipeline.ts',
     code: 'GRAPH_KERNEL_IDENTITY_FLOW',
-    from: 'evaluationIndex(compiled.snapshot, compiled.kernel, compiled.topologicalOffsets)',
-    to: 'evaluationIndex(compiled.snapshot, compiled.kernel, [...compiled.topologicalOffsets])',
+    from: 'buildDecisionContext(compiled)',
+    to: 'buildDecisionContext({ ...compiled, topologicalOffsets: [...compiled.topologicalOffsets] })',
   },
   {
     name: 'uses a nested six-field edge-equality decoy around a weakened live return',
@@ -965,6 +965,1600 @@ test.each([
   const root = await fixture();
   await replace(root, path, from, to);
   expectViolation(root, 'GRAPH_KERNEL_INPUT_PROVENANCE', path);
+});
+
+test.each([
+  {
+    name: 'builds a second decision context',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: '  const context = buildDecisionContext(compiled);',
+    to:
+      '  const context = buildDecisionContext(compiled);\n' +
+      '  const duplicateContext = buildDecisionContext(compiled);\n' +
+      '  void duplicateContext;',
+  },
+  {
+    name: 'constructs context before the success guard',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from:
+      '  if (!compiled.ok) {\n' +
+      '    const invalid = new DecisionFaultCollector();\n' +
+      "    invalid.add('PIPELINE_INVALID', '', 'Compiled pipeline is invalid.');\n" +
+      '    return invalid.reject();\n' +
+      '  }\n' +
+      '  const context = buildDecisionContext(compiled);',
+    to:
+      '  const context = compiled.ok ? buildDecisionContext(compiled) : undefined;\n' +
+      '  if (!compiled.ok) {\n' +
+      '    const invalid = new DecisionFaultCollector();\n' +
+      "    invalid.add('PIPELINE_INVALID', '', 'Compiled pipeline is invalid.');\n" +
+      '    return invalid.reject();\n' +
+      '  }\n' +
+      '  if (!context) throw new Error();',
+  },
+  {
+    name: 'clones the hostile success before context construction',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: 'buildDecisionContext(compiled)',
+    to: 'buildDecisionContext({ ...compiled })',
+  },
+  {
+    name: 'stores a cloned hostile success in context',
+    path: 'src/transition/context/build-decision-context.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: '    compiled,',
+    to: '    compiled: { ...compiled },',
+  },
+  {
+    name: 'passes a distinct context to fact validation',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: 'validatePipelineFacts(factsInput, context, faults)',
+    to: 'validatePipelineFacts(factsInput, buildDecisionContext(compiled), faults)',
+  },
+  {
+    name: 'rebuilds a map inside a selector',
+    path: 'src/transition/evaluation/select-fork.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: '  const region = context.regionByFork.get(node.key);',
+    to:
+      '  const rebuilt = new Map(context.nodeByKey);\n' +
+      '  void rebuilt;\n' +
+      '  const region = context.regionByFork.get(node.key);',
+  },
+  {
+    name: 'imports and rebuilds a graph kernel in a finder',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: "import type { PipelineDecision } from '../../errors/index.js';",
+    to:
+      "import type { PipelineDecision } from '../../errors/index.js';\n" +
+      "import { buildGraphKernel } from '../../graph/index.js';\n" +
+      'void buildGraphKernel;',
+  },
+  {
+    name: 'feeds a serialized node index into evaluation',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const pipeline = context.compiled.snapshot;',
+    to:
+      '  const pipeline = context.compiled.snapshot;\n' +
+      '  void context.compiled.snapshot.nodeIndex;',
+  },
+  {
+    name: 'bypasses selectNode in causality',
+    path: 'src/transition/evaluation/validate-fact-causality.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '    const selection = selectNode(node, facts, context);',
+    to: "    const selection = node.kind === 'branch' ? undefined : undefined;",
+  },
+  {
+    name: 'mutates a context map from a selector',
+    path: 'src/transition/evaluation/select-fork.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: '  const region = context.regionByFork.get(node.key);',
+    to:
+      "  context.nodeByKey.set('mutant', node);\n" +
+      '  const region = context.regionByFork.get(node.key);',
+  },
+  {
+    name: 'uses a dynamic import from a finder',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: '  const pipeline = context.compiled.snapshot;',
+    to: "  void import('./selection.js');\n  const pipeline = context.compiled.snapshot;",
+  },
+  {
+    name: 'calls selectNode through a direct alias',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '      const selection = selectNode(node, facts, context);',
+    to:
+      '      const choose = selectNode;\n' +
+      '      const selection = choose(node, facts, context);',
+  },
+  {
+    name: 'hides a second context build in a dead nested decoy',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: '  const context = buildDecisionContext(compiled);',
+    to:
+      '  const decoy = () => buildDecisionContext(compiled);\n' +
+      '  void decoy;\n' +
+      '  const context = buildDecisionContext(compiled);',
+  },
+  {
+    name: 'reorders action and wait precedence',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from:
+      '    findFirstAction(facts, context) ??\n' +
+      "    findFirstWait(facts, context) ?? { kind: 'noop', reason: 'quiescent' }",
+    to:
+      '    findFirstWait(facts, context) ??\n' +
+      "    findFirstAction(facts, context) ?? { kind: 'noop', reason: 'quiescent' }",
+  },
+  {
+    name: 'uses locale ordering for fork targets',
+    path: 'src/transition/evaluation/select-fork.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from:
+      '            (context.topologicalPosition.get(left) ?? 0) -\n' +
+      '            (context.topologicalPosition.get(right) ?? 0),',
+    to: '            left.localeCompare(right),',
+  },
+  {
+    name: 'imports evaluation from facts',
+    path: 'src/transition/facts/validate-pipeline-facts.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: "import { inspectPortableValueSet, PIPELINE_LIMITS } from '../../policy/index.js';",
+    to:
+      "import { inspectPortableValueSet, PIPELINE_LIMITS } from '../../policy/index.js';\n" +
+      "import type { Selection } from '../evaluation/selection.js';\n" +
+      'type MutantSelection = Selection;',
+  },
+  {
+    name: 'imports causality from a selector',
+    path: 'src/transition/evaluation/select-fork.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: "import type { Selection } from './selection.js';",
+    to:
+      "import type { Selection } from './selection.js';\n" +
+      "import { validateFactCausality } from './validate-fact-causality.js';\n" +
+      'void validateFactCausality;',
+  },
+  {
+    name: 'uses a computed graph-builder evasion',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: '  const pipeline = context.compiled.snapshot;',
+    to: "  void globalThis['buildGraphKernel'];\n  const pipeline = context.compiled.snapshot;",
+  },
+] as const)('rejects PR4c mutant: $name', async ({ path, code, from, to }) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(root, path, from, to);
+  expectViolation(root, code, path);
+});
+
+test.each([
+  ['conditional', '  const context = compiled.ok ? buildDecisionContext(compiled) : undefined;'],
+  ['logical', '  const context = compiled.ok && buildDecisionContext(compiled);'],
+  [
+    'ternary alias',
+    '  const builder = compiled.ok ? buildDecisionContext : buildDecisionContext;\n' +
+      '  const context = builder(compiled);',
+  ],
+  [
+    'callback',
+    '  const contexts = [compiled].map(buildDecisionContext);\n' +
+      '  const context = contexts[0]!;',
+  ],
+  [
+    'loop',
+    '  let context!: ReturnType<typeof buildDecisionContext>;\n' +
+      '  for (const success of [compiled]) context = buildDecisionContext(success);',
+  ],
+  [
+    'switch',
+    '  let context!: ReturnType<typeof buildDecisionContext>;\n' +
+      '  switch (compiled.ok) { default: context = buildDecisionContext(compiled); }',
+  ],
+  [
+    'try',
+    '  let context!: ReturnType<typeof buildDecisionContext>;\n' +
+      '  try { context = buildDecisionContext(compiled); } catch { throw new Error(); }',
+  ],
+  [
+    'transitive alias',
+    '  const builder = buildDecisionContext;\n' +
+      '  const transitiveBuilder = builder;\n' +
+      '  const context = transitiveBuilder(compiled);',
+  ],
+  [
+    'recursive',
+    '  const recursivelyBuild = (remaining: number): ReturnType<typeof buildDecisionContext> =>\n' +
+      '    remaining === 0 ? buildDecisionContext(compiled) : recursivelyBuild(remaining - 1);\n' +
+      '  const context = recursivelyBuild(0);',
+  ],
+] as const)('rejects PR4c context-construction evasion: %s', async (_name, replacement) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/decide-pipeline.ts',
+    '  const context = buildDecisionContext(compiled);',
+    replacement,
+  );
+  expectViolation(root, 'GRAPH_KERNEL_IDENTITY_FLOW', 'src/transition/decide-pipeline.ts');
+});
+
+test.each([
+  [
+    'snapshot',
+    '  const { snapshot, kernel, topologicalOffsets } = compiled;',
+    '  const snapshot = { ...compiled.snapshot };\n' +
+      '  const { kernel, topologicalOffsets } = compiled;',
+  ],
+  [
+    'kernel',
+    '  const { snapshot, kernel, topologicalOffsets } = compiled;',
+    '  const kernel = { ...compiled.kernel };\n' +
+      '  const { snapshot, topologicalOffsets } = compiled;',
+  ],
+  [
+    'topological offsets',
+    '  const { snapshot, kernel, topologicalOffsets } = compiled;',
+    '  const topologicalOffsets = [...compiled.topologicalOffsets];\n' +
+      '  const { snapshot, kernel } = compiled;',
+  ],
+] as const)('rejects PR4c stored identity substitution: %s', async (_name, from, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(root, 'src/transition/context/build-decision-context.ts', from, to);
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_IDENTITY_FLOW',
+    'src/transition/context/build-decision-context.ts',
+  );
+});
+
+test.each([
+  {
+    name: 'direct Map constructor alias in selector',
+    path: 'src/transition/evaluation/select-fork.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: '  const region = context.regionByFork.get(node.key);',
+    to:
+      '  const MapAlias = Map;\n' +
+      '  const rebuilt = new MapAlias(context.nodeByKey);\n' +
+      '  void rebuilt;\n' +
+      '  const region = context.regionByFork.get(node.key);',
+  },
+  {
+    name: 'transitive Set constructor alias in finder',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: '  const pipeline = context.compiled.snapshot;',
+    to:
+      '  const SetAlias = Set;\n' +
+      '  const TransitiveSet = SetAlias;\n' +
+      '  const rebuilt = new TransitiveSet(context.nodeByKey.keys());\n' +
+      '  void rebuilt;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  },
+  {
+    name: 'mutates through a context-map alias',
+    path: 'src/transition/evaluation/select-fork.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: '  const region = context.regionByFork.get(node.key);',
+    to:
+      '  const aliasedMap = context.nodeByKey;\n' +
+      "  aliasedMap.set('mutant', node);\n" +
+      '  const region = context.regionByFork.get(node.key);',
+  },
+  {
+    name: 'mutates through a transitive facts-map alias',
+    path: 'src/transition/evaluation/select-branch.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: '  const value = facts.valueByKey.get(node.fact);',
+    to:
+      '  const aliasedMap = facts.valueByKey;\n' +
+      '  const transitiveMap = aliasedMap;\n' +
+      "  transitiveMap.set('mutant', null);\n" +
+      '  const value = facts.valueByKey.get(node.fact);',
+  },
+  {
+    name: 'falls back to serialized nodes from selector',
+    path: 'src/transition/evaluation/select-fork.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const region = context.regionByFork.get(node.key);',
+    to:
+      '  void context.compiled.snapshot.nodes;\n' +
+      '  const region = context.regionByFork.get(node.key);',
+  },
+  {
+    name: 'falls back to aliased caller data',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const pipeline = context.compiled.snapshot;',
+    to:
+      '  const pipelineInput = context.compiled.snapshot;\n' +
+      '  void pipelineInput.nodes;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  },
+  {
+    name: 'passes distinct context to causality',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: 'validateFactCausality(facts, context, faults)',
+    to: 'validateFactCausality(facts, buildDecisionContext(compiled), faults)',
+  },
+  {
+    name: 'passes distinct context to terminal scan',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: 'findReachedTerminals(facts, context)',
+    to: 'findReachedTerminals(facts, buildDecisionContext(compiled))',
+  },
+  {
+    name: 'passes distinct context to action scan',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: 'findFirstAction(facts, context)',
+    to: 'findFirstAction(facts, buildDecisionContext(compiled))',
+  },
+  {
+    name: 'passes distinct context to wait scan',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: 'findFirstWait(facts, context)',
+    to: 'findFirstWait(facts, buildDecisionContext(compiled))',
+  },
+  {
+    name: 'rebuilds incoming index inside scan iteration',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: '  for (const key of pipeline.topologicalOrder) {',
+    to:
+      '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const incoming = new Map(context.incomingByKey);\n' +
+      '    void incoming;',
+  },
+  {
+    name: 'rebuilds outgoing index inside scan iteration through alias',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: '  for (const key of pipeline.topologicalOrder) {',
+    to:
+      '  const MapAlias = Map;\n' +
+      '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const outgoing = new MapAlias(context.outgoingByKey);\n' +
+      '    void outgoing;',
+  },
+  {
+    name: 'rebuilds topological positions per selector scan',
+    path: 'src/transition/evaluation/find-first-wait.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: '  for (const key of context.compiled.snapshot.topologicalOrder) {',
+    to:
+      '  for (const key of context.compiled.snapshot.topologicalOrder) {\n' +
+      '    const positions = new Map(context.topologicalPosition);\n' +
+      '    void positions;',
+  },
+  {
+    name: 'rebuilds graph kernel in context through alias',
+    path: 'src/transition/context/build-decision-context.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: "import type { HostileCompiledValidation } from '../compiled/hostile-compiled-validation.js';",
+    to:
+      "import type { HostileCompiledValidation } from '../compiled/hostile-compiled-validation.js';\n" +
+      "import { buildGraphKernel } from '../../graph/index.js';\n" +
+      'const rebuild = buildGraphKernel;\n' +
+      'void rebuild({ nodeKeys: [], edges: [] });',
+  },
+  {
+    name: 'rebuilds graph kernel in selector through transitive alias',
+    path: 'src/transition/evaluation/select-fork.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: "import type { PipelineNode } from '../../spec/index.js';",
+    to:
+      "import type { PipelineNode } from '../../spec/index.js';\n" +
+      "import { buildGraphKernel } from '../../graph/index.js';\n" +
+      'const rebuild = buildGraphKernel;\n' +
+      'const transitiveRebuild = rebuild;\n' +
+      'void transitiveRebuild({ nodeKeys: [], edges: [] });',
+  },
+  {
+    name: 'rebuilds graph kernel in finder factory',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_REBUILD',
+    from: "import type { PipelineDecision } from '../../errors/index.js';",
+    to:
+      "import type { PipelineDecision } from '../../errors/index.js';\n" +
+      "import { buildGraphKernel } from '../../graph/index.js';\n" +
+      'const rebuildFactory = () => buildGraphKernel;\n' +
+      'void rebuildFactory()({ nodeKeys: [], edges: [] });',
+  },
+  {
+    name: 'feeds serialized edge index into evaluation',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '  const pipeline = context.compiled.snapshot;',
+    to:
+      '  void context.compiled.snapshot.edgeIndex;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  },
+  {
+    name: 'promotes action before terminal',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: '  const terminal = terminals[0];',
+    to:
+      '  const earlyAction = findFirstAction(facts, context);\n' +
+      '  if (earlyAction) return earlyAction;\n' +
+      '  const terminal = terminals[0];',
+  },
+  {
+    name: 'aliases hostile success before context construction',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: '  const context = buildDecisionContext(compiled);',
+    to:
+      '  const successfulCompiled = compiled;\n' +
+      '  const context = buildDecisionContext(successfulCompiled);',
+  },
+  {
+    name: 'exports a private context leaf from transition barrel',
+    path: 'src/transition/index.ts',
+    code: 'GRAPH_KERNEL_ADAPTER_EXPOSURE',
+    from: "export { decidePipeline } from './decide-pipeline.js';",
+    to:
+      "export { decidePipeline } from './decide-pipeline.js';\n" +
+      "export type { DecisionContext } from './context/decision-context.js';",
+  },
+  {
+    name: 'uses computed context-builder call',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: '  const context = buildDecisionContext(compiled);',
+    to:
+      '  const builders = { buildDecisionContext };\n' +
+      "  const context = builders['buildDecisionContext'](compiled);",
+  },
+  {
+    name: 'retries context construction',
+    path: 'src/transition/decide-pipeline.ts',
+    code: 'GRAPH_KERNEL_IDENTITY_FLOW',
+    from: '  const context = buildDecisionContext(compiled);',
+    to:
+      '  let context!: ReturnType<typeof buildDecisionContext>;\n' +
+      '  for (let attempt = 0; attempt < 2; attempt += 1) {\n' +
+      '    context = buildDecisionContext(compiled);\n' +
+      '  }',
+  },
+] as const)('rejects PR4c semantic mutant: $name', async ({ path, code, from, to }) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(root, path, from, to);
+  expectViolation(root, code, path);
+});
+
+test.each([
+  {
+    name: 'direct compiled and snapshot alias fallback',
+    replacement:
+      '  const snapshotAlias = context.compiled.snapshot;\n' +
+      '  void snapshotAlias.nodes;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  },
+  {
+    name: 'transitive compiled and snapshot alias fallback',
+    replacement:
+      '  const compiledAlias = context.compiled;\n' +
+      '  const transitiveCompiled = compiledAlias;\n' +
+      '  const snapshotAlias = transitiveCompiled.snapshot;\n' +
+      '  const transitiveSnapshot = snapshotAlias;\n' +
+      '  void transitiveSnapshot.forkRegions;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  },
+  {
+    name: 'per-iteration reconstruction through snapshot collection alias',
+    replacement:
+      '  const compiledAlias = context.compiled;\n' +
+      '  const snapshotAlias = compiledAlias.snapshot;\n' +
+      '  const serializedNodes = snapshotAlias.nodes;\n' +
+      '  const pipeline = context.compiled.snapshot;\n' +
+      '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const rebuilt = serializedNodes.map((node) => [node.key, node] as const);\n' +
+      '    void rebuilt;',
+    replacesLoop: true,
+  },
+] as const)(
+  'rejects PR4c snapshot provenance mutant: $name',
+  async ({ replacement, replacesLoop }) => {
+    expect.hasAssertions();
+    const root = await fixture();
+    if (replacesLoop) {
+      await replace(
+        root,
+        'src/transition/evaluation/find-first-action.ts',
+        '  const pipeline = context.compiled.snapshot;\n' +
+          '  const byNode = facts.nodeByKey;\n' +
+          '  if (!byNode.has(pipeline.entry)) {\n' +
+          "    return { kind: 'activate', cause: { kind: 'entry' }, nodeKeys: [pipeline.entry] };\n" +
+          '  }\n' +
+          '  for (const key of pipeline.topologicalOrder) {',
+        replacement.replace(
+          '  const pipeline = context.compiled.snapshot;\n',
+          '  const pipeline = context.compiled.snapshot;\n' +
+            '  const byNode = facts.nodeByKey;\n' +
+            '  if (!byNode.has(pipeline.entry)) {\n' +
+            "    return { kind: 'activate', cause: { kind: 'entry' }, nodeKeys: [pipeline.entry] };\n" +
+            '  }\n',
+        ),
+      );
+    } else {
+      await replace(
+        root,
+        'src/transition/evaluation/find-first-action.ts',
+        '  const pipeline = context.compiled.snapshot;',
+        replacement,
+      );
+    }
+    expectViolation(
+      root,
+      'GRAPH_KERNEL_INPUT_PROVENANCE',
+      'src/transition/evaluation/find-first-action.ts',
+    );
+  },
+);
+
+test.each([
+  [
+    'literal computed access chain',
+    "  void context['compiled']['snapshot']['nodes'];\n" +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'nested destructuring',
+    '  const { compiled: { snapshot: { nodes } } } = context;\n' +
+      '  void nodes;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'renamed and defaulted destructuring aliases',
+    '  const { compiled: compiledAlias = context.compiled } = context;\n' +
+      '  const { snapshot: snapshotAlias = compiledAlias.snapshot } = compiledAlias;\n' +
+      '  const { forkRegions: regionsAlias = snapshotAlias.forkRegions } = snapshotAlias;\n' +
+      '  void regionsAlias;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'dynamic computed access fails closed',
+    "  const dynamicKey: string = 'nodes';\n" +
+      '  void context.compiled.snapshot[dynamicKey];\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'object rest binding fails closed',
+    '  const { compiled: { snapshot: { ...snapshotRest } } } = context;\n' +
+      '  void snapshotRest;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'array binding from a forbidden collection fails closed',
+    '  const [firstNode] = context.compiled.snapshot.nodes;\n' +
+      '  void firstNode;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c computed/destructured provenance mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c per-iteration destructured reconstruction', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const { compiled: { snapshot: { nodes } } } = context;\n' +
+      '    const rebuilt = nodes.reduce((index, node) => index.set(node.key, node), new Map());\n' +
+      '    void rebuilt;',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'post-declaration assignment',
+    '  let snapshotAlias: unknown;\n' +
+      '  snapshotAlias = context.compiled.snapshot;\n' +
+      '  void snapshotAlias;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'computed post-declaration assignment',
+    '  let snapshotAlias: unknown;\n' +
+      "  snapshotAlias = context['compiled']['snapshot'];\n" +
+      '  void snapshotAlias;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'assignment destructuring',
+    '  let nodes: unknown;\n' +
+      '  ({ compiled: { snapshot: { nodes } } } = context);\n' +
+      '  void nodes;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'concise callback factory return and call result',
+    "  const snapshotFactory = () => context['compiled'].snapshot;\n" +
+      '  const snapshotAlias = snapshotFactory();\n' +
+      '  void snapshotAlias;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'transitive block factory return and call result',
+    '  const compiledAlias = context.compiled;\n' +
+      '  const snapshotFactory = () => {\n' +
+      '    const transitiveCompiled = compiledAlias;\n' +
+      '    return transitiveCompiled.snapshot;\n' +
+      '  };\n' +
+      '  const snapshotAlias = snapshotFactory();\n' +
+      '  void snapshotAlias;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'wrapped computed facts factory return',
+    "  const factsFactory = () => ({ payload: facts['nodeByKey'] });\n" +
+      '  const leakedFacts = factsFactory();\n' +
+      '  void leakedFacts;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c assignment/callback flow mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c per-iteration callback-return provenance', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const snapshotFactory = () => context.compiled.snapshot;\n' +
+      '    const snapshotAlias = snapshotFactory();\n' +
+      '    void snapshotAlias;',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'object box',
+    '  const boxed = { snapshot: context.compiled.snapshot };\n' +
+      '  void boxed;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'array box',
+    '  const boxed = [facts.nodeByKey];\n' +
+      '  void boxed;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'spread container',
+    '  const boxed = { ...context.compiled.snapshot };\n' +
+      '  void boxed;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'parameterized identity',
+    '  const identity = <T>(value: T): T => value;\n' +
+      '  const leaked = identity(context.compiled.snapshot);\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'indirect computed identity',
+    '  const helpers = { identity: <T>(value: T): T => value };\n' +
+      "  const leaked = helpers['identity'](facts.nodeByKey);\n" +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'transitive call-result wrapper',
+    '  const snapshotAlias = context.compiled.snapshot;\n' +
+      '  const factory = () => ({ snapshot: snapshotAlias });\n' +
+      '  const leaked = factory();\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'tagged template wrapper',
+    '  const tag = (_strings: TemplateStringsArray, value: unknown): unknown => value;\n' +
+      '  const leaked = tag`${context.compiled.snapshot}`;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'comma wrapper',
+    '  const leaked = (undefined, facts.nodeByKey);\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c wrapper laundering mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c per-iteration container laundering', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const identity = <T>(value: T): T => value;\n' +
+      '    const leaked = new Map([["snapshot", identity(context.compiled.snapshot)]]);\n' +
+      '    void leaked;',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  {
+    name: 'swapped selectNode context and facts',
+    path: 'src/transition/evaluation/find-first-action.ts',
+    from: 'selectNode(node, facts, context)',
+    to: 'selectNode(node, context as any, facts as any)',
+  },
+  {
+    name: 'snapshot passed to validator context slot',
+    path: 'src/transition/facts/validate-pipeline-facts.ts',
+    from: 'validateCandidateVerdicts(verdicts, context, faults)',
+    to: 'validateCandidateVerdicts(verdicts, context.compiled.snapshot as any, faults)',
+  },
+  {
+    name: 'swapped causality context and facts',
+    path: 'src/transition/evaluation/validate-fact-causality.ts',
+    from: 'validateActivations(facts, context, faults)',
+    to: 'validateActivations(context as any, facts as any, faults)',
+  },
+] as const)('rejects PR4c approved-call provenance mismatch: $name', async ({ path, from, to }) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(root, path, from, to);
+  expectViolation(root, 'GRAPH_KERNEL_INPUT_PROVENANCE', path);
+});
+
+test.each([
+  [
+    'ternary',
+    '  const leaked = true ? context.compiled.snapshot : undefined;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'logical and',
+    '  const leaked = true && facts.nodeByKey;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'logical or',
+    '  const leaked = undefined || context.compiled.snapshot;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'nullish coalescing',
+    '  const leaked = undefined ?? facts.nodeByKey;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'nested mixed wrappers',
+    '  const leaked = true\n' +
+      '    ? (undefined ?? context.compiled.snapshot)\n' +
+      '    : (false || facts.nodeByKey);\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c conditional/logical provenance mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c per-iteration nested logical provenance', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const leaked = true ? (false || context.compiled.snapshot) : facts.nodeByKey;\n' +
+      '    void leaked;',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'direct binding default',
+    '  const { missing = context.compiled.snapshot } = {};\n' +
+      '  void missing;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'nested renamed binding default',
+    '  const { outer: { inner: leaked = facts.nodeByKey } = {} } = {};\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'computed binding default',
+    "  const property = 'missing';\n" +
+      '  const { [property]: leaked = context.compiled.snapshot } = {};\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'wrapped binding default',
+    '  const { missing = { payload: facts.nodeByKey } } = {};\n' +
+      '  void missing;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c binding-default provenance mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'class expression field',
+    '  const Carrier = class { readonly payload = context.compiled.snapshot; };\n' +
+      '  void new Carrier();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'local class declaration field',
+    '  class Carrier { readonly payload = facts.nodeByKey; }\n' +
+      '  void new Carrier();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'static class field',
+    '  class Carrier { static readonly payload = context.compiled.snapshot; }\n' +
+      '  void Carrier.payload;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c class-carrier provenance mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c per-iteration class carrier', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    class Carrier { readonly payload = { snapshot: context.compiled.snapshot }; }\n' +
+      '    void new Carrier();',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'direct entries call',
+    '  void context.nodeByKey.entries();\n  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'transitive values call',
+    '  const firstAlias = facts.nodeByKey;\n' +
+      '  const secondAlias = firstAlias;\n' +
+      '  void secondAlias.values();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'computed keys call',
+    "  void context['nodeByKey']['keys']();\n  const pipeline = context.compiled.snapshot;",
+  ],
+  [
+    'forEach call',
+    '  context.nodeByKey.forEach(() => undefined);\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'iterator call',
+    '  void context.nodeByKey[Symbol.iterator]();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'map spread',
+    '  const leaked = [...facts.nodeByKey];\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'for-of map iteration',
+    '  for (const entry of context.nodeByKey) {\n' +
+      '    void entry;\n' +
+      '  }\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'map iteration destructuring',
+    '  const [firstEntry] = facts.nodeByKey;\n' +
+      '  void firstEntry;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c map receiver/iteration mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c per-iteration map reconstruction', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const mapAlias = facts.nodeByKey;\n' +
+      '    const rebuilt = new Map(mapAlias.entries());\n' +
+      '    void rebuilt;',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'direct get result pushed to array',
+    '  const leakedNode = context.nodeByKey.get("missing");\n' +
+      '  const bucket: unknown[] = [];\n' +
+      '  bucket.push(leakedNode);\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'transitive get result pushed to array',
+    '  const leakedNode = context.nodeByKey.get("missing");\n' +
+      '  const firstAlias = leakedNode;\n' +
+      '  const secondAlias = firstAlias;\n' +
+      '  const bucket: unknown[] = [];\n' +
+      '  bucket.unshift(secondAlias);\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'get result assigned to object index',
+    '  const leakedNode = context.nodeByKey.get("missing");\n' +
+      '  const bucket: Record<string, unknown> = {};\n' +
+      '  bucket["node"] = leakedNode;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'get result accumulated in Map',
+    '  const leakedNode = context.nodeByKey.get("missing");\n' +
+      '  const bucket = new Map<string, unknown>();\n' +
+      '  bucket.set("node", leakedNode);\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'get result object wrapper',
+    '  const leakedNode = context.nodeByKey.get("missing");\n' +
+      '  const boxed = { leakedNode };\n' +
+      '  void boxed;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'get result callback return',
+    '  const leakedNode = context.nodeByKey.get("missing");\n' +
+      '  const factory = () => leakedNode;\n' +
+      '  void factory;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c approved-get result escape mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c cross-iteration get-result reconstruction', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    '  const escapedNodes: unknown[] = [];\n  const pipeline = context.compiled.snapshot;',
+  );
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const leakedNode = context.nodeByKey.get(key);\n' +
+      '    escapedNodes.push(leakedNode);',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'IIFE parameter default',
+    '  ((value = context.nodeByKey.get("missing")) => void value)();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'named callback parameter default',
+    '  function factory(value = context.nodeByKey.get("missing")) { return value; }\n' +
+      '  void factory();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'arrow callback parameter default',
+    '  const factory = (value = facts.nodeByKey.get("missing")) => value;\n' +
+      '  void factory();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'nested destructured parameter default',
+    '  const factory = ({ nested: { value = context.nodeByKey.get("missing") } = {} } = {}) => value;\n' +
+      '  void factory();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'computed renamed parameter default',
+    "  const property = 'value';\n" +
+      '  const factory = ({ [property]: renamed = context.nodeByKey.get("missing") } = {}) => renamed;\n' +
+      '  void factory();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'captured pre-bound map value default',
+    '  const leakedNode = context.nodeByKey.get("missing");\n' +
+      '  const factory = (value = leakedNode) => value;\n' +
+      '  void factory();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'rest binding with wrapped parameter default',
+    '  const leakedNode = context.nodeByKey.get("missing");\n' +
+      '  const factory = ({ ...rest } = { value: leakedNode }) => rest;\n' +
+      '  void factory();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c map-value parameter-default mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c per-loop map-value default accumulator', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const leakedNode = context.nodeByKey.get(key);\n' +
+      '    const accumulate = (bucket = [leakedNode]) => bucket;\n' +
+      '    void accumulate();',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'instance field map value',
+    '  class Carrier { readonly value = context.nodeByKey.get("missing"); }\n' +
+      '  void new Carrier();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'static field map value',
+    '  class Carrier { static readonly value = facts.nodeByKey.get("missing"); }\n' +
+      '  void Carrier.value;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'class expression field map value',
+    '  const Carrier = class { readonly value = context.nodeByKey.get("missing"); };\n' +
+      '  void new Carrier();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'decorator map value',
+    '  @(context.nodeByKey.get("missing") as any)\n' +
+      '  class Carrier {}\n' +
+      '  void Carrier;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'static block map value',
+    '  class Carrier {\n' +
+      '    static { const value = context.nodeByKey.get("missing"); void value; }\n' +
+      '  }\n' +
+      '  void Carrier;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'shared root and map-value field sink',
+    '  class Carrier {\n' +
+      '    readonly root = context.compiled.snapshot;\n' +
+      '    readonly value = context.nodeByKey.get("missing");\n' +
+      '  }\n' +
+      '  void new Carrier();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c shared class escape-sink mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c per-iteration class map-value accumulator', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    class Carrier { readonly value = context.nodeByKey.get(key); }\n' +
+      '    void new Carrier();',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'direct optional key projection',
+    '  const leaked = context.nodeByKey.get("missing")?.key;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'transitive kind projection',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const transitiveAlias = nodeAlias;\n' +
+      '  const leaked = transitiveAlias?.kind;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'literal computed projection',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      "  const leaked = nodeAlias?.['key'];\n" +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'nested outcomes projection',
+    '  const nodeAlias = context.nodeByKey.get("missing") as any;\n' +
+      '  const leaked = nodeAlias?.outcomes?.approved;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'nested cases projection',
+    '  const nodeAlias = context.nodeByKey.get("missing") as any;\n' +
+      '  const leaked = nodeAlias?.cases?.[0]?.to;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'nested resolutions projection',
+    '  const nodeAlias = context.nodeByKey.get("missing") as any;\n' +
+      '  const leaked = nodeAlias?.resolutions?.[0]?.to;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'dynamic computed projection',
+    '  const nodeAlias = context.nodeByKey.get("missing") as any;\n' +
+      "  const property: string = 'key';\n" +
+      '  const leaked = nodeAlias?.[property];\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c map-value projection mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c per-loop projected-value reconstruction', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    '  const projected: unknown[] = [];\n' +
+      '  const byKey: Record<string, unknown> = {};\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  );
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const nodeAlias = context.nodeByKey.get(key);\n' +
+      '    projected.push(nodeAlias?.key);\n' +
+      '    byKey[key] = nodeAlias?.kind;',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'left-hand string concatenation',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = "node:" + nodeAlias?.key;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'right-hand string concatenation',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = nodeAlias?.key + ":node";\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'template interpolation',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = `node:${nodeAlias?.key}`;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'numeric unary transform',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = +(nodeAlias?.key as any);\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'stored equality result',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = nodeAlias?.kind === "task";\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'nested transform',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = !(nodeAlias?.key + "!");\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'computed property key',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = { [nodeAlias?.key ?? "missing"]: true };\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'comma transform',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = (0, nodeAlias?.key);\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'postfix unary transform',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  let numericAlias = nodeAlias as any;\n' +
+      '  const leaked = numericAlias++;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'tagged template transform',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = String.raw`node:${nodeAlias?.key}`;\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'call transform',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = String(nodeAlias?.key);\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'constructor transform',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = new String(nodeAlias?.key);\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'await transform',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = (async () => await nodeAlias?.key)();\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'yield transform',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const leaked = (function* () { yield nodeAlias?.key; })();\n' +
+      '  void leaked;\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c transformed map-value mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test('rejects PR4c per-loop transformed accumulation', async () => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    '  const transformed: unknown[] = [];\n  const pipeline = context.compiled.snapshot;',
+  );
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  for (const key of pipeline.topologicalOrder) {',
+    '  for (const key of pipeline.topologicalOrder) {\n' +
+      '    const nodeAlias = context.nodeByKey.get(key);\n' +
+      '    transformed.push("node:" + nodeAlias?.key);',
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
+});
+
+test.each([
+  [
+    'block-arrow transformed return through call accumulation',
+    '  const accumulated: unknown[] = [];\n' +
+      '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const project = () => { return "node:" + nodeAlias?.key; };\n' +
+      '  accumulated.push(project());\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'function transformed return through call accumulation',
+    '  const accumulated: unknown[] = [];\n' +
+      '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  function project() { return "node:" + nodeAlias?.key; }\n' +
+      '  accumulated.push(project());\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'concise-arrow transformed return through call accumulation',
+    '  const accumulated: unknown[] = [];\n' +
+      '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const project = () => "node:" + nodeAlias?.key;\n' +
+      '  accumulated.push(project());\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'yield transformed return through call accumulation',
+    '  const accumulated: unknown[] = [];\n' +
+      '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  function* project() { yield "node:" + nodeAlias?.key; }\n' +
+      '  accumulated.push(...project());\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+  [
+    'empty transformed-provenance extraction',
+    '  const nodeAlias = context.nodeByKey.get("missing");\n' +
+      '  const project = () => { return nodeAlias?.key === "missing"; };\n' +
+      '  void project();\n' +
+      '  const pipeline = context.compiled.snapshot;',
+  ],
+] as const)('rejects PR4c transformed return escape mutant: %s', async (_name, to) => {
+  expect.hasAssertions();
+  const root = await fixture();
+  await replace(
+    root,
+    'src/transition/evaluation/find-first-action.ts',
+    '  const pipeline = context.compiled.snapshot;',
+    to,
+  );
+  expectViolation(
+    root,
+    'GRAPH_KERNEL_INPUT_PROVENANCE',
+    'src/transition/evaluation/find-first-action.ts',
+  );
 });
 
 test('fails closed on a parse failure', async () => {
