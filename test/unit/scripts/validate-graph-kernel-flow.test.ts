@@ -281,8 +281,8 @@ test.each([
     name: 'mutates an expected structural endpoint',
     path: 'src/transition/compiled/derive-expected-compiled-semantics.ts',
     code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: "      Reflect.set(edge, 'role', 'readiness');",
-    to: "      Reflect.set(edge, 'from', 'tampered');",
+    from: "    Reflect.set(edge, 'role', 'readiness');",
+    to: "    Reflect.set(edge, 'from', 'tampered');",
   },
   {
     name: 'weakens exact serialized edge equality',

@@ -12,7 +12,7 @@ const edgeIndexMatches = (
   return (
     serialized.length === kernel.nodeKeys.length &&
     serialized.every((entry, nodeOffset) => {
-      const expectedOffsets = expected[nodeOffset];
+      const expectedOffsets = expected?.[nodeOffset];
       return (
         entry.key === kernel.nodeKeys[nodeOffset] &&
         expectedOffsets !== undefined &&

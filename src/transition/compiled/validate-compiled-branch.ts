@@ -1,5 +1,9 @@
-import { compareUnicodeCodePoints, isValidKey, isValidSemanticName } from '../../policy/index.js';
-import { PIPELINE_LIMITS } from '../../policy/index.js';
+import {
+  compareUnicodeCodePoints,
+  isValidKey,
+  isValidSemanticName,
+  PIPELINE_LIMITS,
+} from '../../policy/index.js';
 import type { FactDefinition, JsonScalar, PipelineNode } from '../../spec/index.js';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -48,6 +52,38 @@ const scalarComparator = (left: JsonScalar, right: JsonScalar): number => {
 const scalarIdentity = (value: JsonScalar): string =>
   value === null ? 'null:' : `${typeof value}:${String(value)}`;
 
+type BranchCase = Extract<PipelineNode, { readonly kind: 'branch' }>['cases'][number];
+
+const caseOrderIsValid = (
+  entry: BranchCase,
+  previous: BranchCase | undefined,
+  names: ReadonlySet<string>,
+): boolean =>
+  !names.has(entry.name) &&
+  (previous === undefined ||
+    compareUnicodeCodePoints(previous.name, entry.name) < 0 ||
+    (previous.name === entry.name && compareUnicodeCodePoints(previous.to, entry.to) < 0));
+
+const validatedCaseIdentities = (
+  entry: BranchCase,
+  factType: FactDefinition['type'],
+  usedIdentities: ReadonlySet<string>,
+): readonly string[] | undefined => {
+  const values = entry.when.op === 'equals' ? [entry.when.value] : entry.when.values;
+  const identities = values.map(scalarIdentity);
+  const unordered =
+    entry.when.op === 'oneOf' &&
+    values.some((value, index) => index > 0 && scalarComparator(values[index - 1]!, value) >= 0);
+  return values.length === 0 ||
+    values.length > PIPELINE_LIMITS.definition.predicateValuesPerCase ||
+    values.some((value) => scalarType(value) !== factType) ||
+    new Set(identities).size !== identities.length ||
+    identities.some((identity) => usedIdentities.has(identity)) ||
+    unordered
+    ? undefined
+    : identities;
+};
+
 const hasBranchShape = (
   value: Record<string, unknown>,
 ): value is Record<string, unknown> & Extract<PipelineNode, { readonly kind: 'branch' }> =>
@@ -89,29 +125,14 @@ const hasBranchIntegrity = (
   const names = new Set<string>();
   let previous: (typeof node.cases)[number] | undefined;
   for (const entry of node.cases) {
-    if (
-      names.has(entry.name) ||
-      (previous !== undefined &&
-        (compareUnicodeCodePoints(previous.name, entry.name) > 0 ||
-          (previous.name === entry.name && compareUnicodeCodePoints(previous.to, entry.to) >= 0)))
-    ) {
+    if (!caseOrderIsValid(entry, previous, names)) {
       return false;
     }
     names.add(entry.name);
     previous = entry;
     const values = entry.when.op === 'equals' ? [entry.when.value] : entry.when.values;
-    const identities = values.map(scalarIdentity);
-    if (
-      values.length === 0 ||
-      values.length > PIPELINE_LIMITS.definition.predicateValuesPerCase ||
-      values.some((value) => scalarType(value) !== factType) ||
-      new Set(identities).size !== identities.length ||
-      identities.some((identity) => domainIdentities.has(identity)) ||
-      (entry.when.op === 'oneOf' &&
-        values.some(
-          (value, index) => index > 0 && scalarComparator(values[index - 1]!, value) >= 0,
-        ))
-    ) {
+    const identities = validatedCaseIdentities(entry, factType, domainIdentities);
+    if (identities === undefined) {
       return false;
     }
     domains.push(...values);

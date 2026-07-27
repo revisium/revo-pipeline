@@ -1667,7 +1667,7 @@ const validateHostileComparison = (
        actual.join === expected.join &&
        actual.branches.length === expected.branches.length &&
        actual.branches.every((branch, branchIndex) => {
-         const expectedBranch = expected.branches[branchIndex];
+         const expectedBranch = expected.branches?.[branchIndex];
          return (
            expectedBranch !== undefined &&
            branch.name === expectedBranch.name &&

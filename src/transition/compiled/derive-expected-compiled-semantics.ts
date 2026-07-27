@@ -1,6 +1,10 @@
 import { compareUnicodeCodePoints } from '../../policy/index.js';
-import type { CompiledEdge, CompiledForkBranch } from '../../spec/index.js';
-import type { CompiledForkRegion, PipelineNode } from '../../spec/index.js';
+import type {
+  CompiledEdge,
+  CompiledForkBranch,
+  CompiledForkRegion,
+  PipelineNode,
+} from '../../spec/index.js';
 import type { ExpectedCompiledSemantics } from './expected-compiled-semantics.js';
 
 type ForkNode = Extract<PipelineNode, { readonly kind: 'fork' }>;
@@ -158,43 +162,40 @@ const deriveRegion = (
   return { fork: fork.key, join: fork.join, branches };
 };
 
+const validateExpectedEdge = (edge: CompiledEdge, state: RegionDerivationState): boolean => {
+  const fromOwner = state.memberOwner.get(edge.from);
+  const toOwner = state.memberOwner.get(edge.to);
+  if (fromOwner && toOwner) {
+    if (fromOwner.fork !== toOwner.fork || fromOwner.branch !== toOwner.branch) {
+      return false;
+    }
+    state.internalOutgoing.set(edge.from, (state.internalOutgoing.get(edge.from) ?? 0) + 1);
+    state.internalIncoming.set(edge.to, (state.internalIncoming.get(edge.to) ?? 0) + 1);
+    return true;
+  }
+  if (fromOwner) {
+    if (edge.from !== fromOwner.exit || edge.to !== fromOwner.join) {
+      return false;
+    }
+    Reflect.set(edge, 'role', 'readiness');
+    Reflect.set(edge, 'fork', fromOwner.fork);
+    Reflect.set(edge, 'branch', fromOwner.branch);
+    return true;
+  }
+  if (toOwner) {
+    if (edge.from !== toOwner.fork || edge.to !== toOwner.entry) {
+      return false;
+    }
+    return true;
+  }
+  const targetJoinFork = state.joinOwner.get(edge.to);
+  return targetJoinFork === undefined || edge.from === targetJoinFork;
+};
+
 const validateExpectedEdges = (
   edges: readonly CompiledEdge[],
   state: RegionDerivationState,
-): boolean => {
-  for (const edge of edges) {
-    const fromOwner = state.memberOwner.get(edge.from);
-    const toOwner = state.memberOwner.get(edge.to);
-    const targetJoinFork = state.joinOwner.get(edge.to);
-    if (fromOwner && toOwner) {
-      if (fromOwner.fork !== toOwner.fork || fromOwner.branch !== toOwner.branch) {
-        return false;
-      }
-      state.internalOutgoing.set(edge.from, (state.internalOutgoing.get(edge.from) ?? 0) + 1);
-      state.internalIncoming.set(edge.to, (state.internalIncoming.get(edge.to) ?? 0) + 1);
-      continue;
-    }
-    if (fromOwner) {
-      if (edge.from !== fromOwner.exit || edge.to !== fromOwner.join) {
-        return false;
-      }
-      Reflect.set(edge, 'role', 'readiness');
-      Reflect.set(edge, 'fork', fromOwner.fork);
-      Reflect.set(edge, 'branch', fromOwner.branch);
-      continue;
-    }
-    if (toOwner) {
-      if (edge.from !== toOwner.fork || edge.to !== toOwner.entry) {
-        return false;
-      }
-      continue;
-    }
-    if (targetJoinFork !== undefined && edge.from !== targetJoinFork) {
-      return false;
-    }
-  }
-  return true;
-};
+): boolean => edges.every((edge) => validateExpectedEdge(edge, state));
 
 const membersAreContinuous = (state: RegionDerivationState): boolean =>
   [...state.memberOwner].every(

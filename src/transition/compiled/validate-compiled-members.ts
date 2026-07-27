@@ -1,5 +1,9 @@
-import { compareUnicodeCodePoints, isValidKey, isValidSemanticName } from '../../policy/index.js';
-import { PIPELINE_LIMITS } from '../../policy/index.js';
+import {
+  compareUnicodeCodePoints,
+  isValidKey,
+  isValidSemanticName,
+  PIPELINE_LIMITS,
+} from '../../policy/index.js';
 import type { CompiledPipeline } from '../../spec/index.js';
 import { validateCompiledNode } from './validate-compiled-node.js';
 
