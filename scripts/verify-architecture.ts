@@ -145,7 +145,7 @@ const sourceModules = await collectModules(join(root, 'src'));
 const testModules = await collectModules(join(root, 'test'));
 const architectureModules = await collectModules(join(root, 'scripts/architecture'));
 validateModuleStructure([...sourceModules, ...testModules, ...architectureModules]);
-validateSourceMetrics(sourceModules, sourceMetricScope(sourceModules, 'PR4-0'));
+validateSourceMetrics(sourceModules, sourceMetricScope(sourceModules, 'PR4a'));
 assert.deepEqual(validateGraphKernelFlow(root), []);
 execFileSync(oxlint, ['--config', config, '--deny-warnings', 'src', 'test'], {
   cwd: root,
@@ -181,6 +181,135 @@ assert.deepEqual(graphModulePaths, [
   'src/graph/reverse-reachable-node-offsets.ts',
   'src/graph/topological-order.ts',
 ]);
+
+const definitionModulePaths = sourceModules
+  .map((module) => module.path)
+  .filter((path) => path.startsWith('src/definition/'))
+  .sort();
+assert.deepEqual(
+  definitionModulePaths,
+  [
+    'src/definition/compilation/assemble-compiled-pipeline.ts',
+    'src/definition/compilation/classify-fork-regions.ts',
+    'src/definition/compilation/normalize-pipeline-node.ts',
+    'src/definition/compilation/preflight-fork-regions.ts',
+    'src/definition/compilation/project-pipeline-edges.ts',
+    'src/definition/compilation/validate-definition-graph.ts',
+    'src/definition/compile-pipeline.ts',
+    'src/definition/contracts/compiler-semantic-graph.ts',
+    'src/definition/contracts/definition-validation-result.ts',
+    'src/definition/define-pipeline.ts',
+    'src/definition/index.ts',
+    'src/definition/validation/definition-validation-context.ts',
+    'src/definition/validation/validate-branch-node.ts',
+    'src/definition/validation/validate-consensus-node.ts',
+    'src/definition/validation/validate-definition.ts',
+    'src/definition/validation/validate-facts.ts',
+    'src/definition/validation/validate-fork-node.ts',
+    'src/definition/validation/validate-human-gate-node.ts',
+    'src/definition/validation/validate-join-node.ts',
+    'src/definition/validation/validate-pipeline-nodes.ts',
+  ],
+  'Definition must retain the exact approved private leaf map.',
+);
+
+const definitionDependencies = new Map<string, readonly string[]>([
+  [
+    'src/definition/compile-pipeline.ts',
+    [
+      './compilation/assemble-compiled-pipeline.js',
+      './compilation/classify-fork-regions.js',
+      './compilation/normalize-pipeline-node.js',
+      './compilation/preflight-fork-regions.js',
+      './compilation/project-pipeline-edges.js',
+      './compilation/validate-definition-graph.js',
+      './validation/validate-definition.js',
+    ],
+  ],
+  [
+    'src/definition/compilation/assemble-compiled-pipeline.ts',
+    ['../contracts/compiler-semantic-graph.js'],
+  ],
+  [
+    'src/definition/compilation/classify-fork-regions.ts',
+    [
+      '../contracts/compiler-semantic-graph.js',
+      '../contracts/definition-validation-result.js',
+      './preflight-fork-regions.js',
+    ],
+  ],
+  ['src/definition/compilation/normalize-pipeline-node.ts', []],
+  [
+    'src/definition/compilation/preflight-fork-regions.ts',
+    ['../contracts/definition-validation-result.js'],
+  ],
+  [
+    'src/definition/compilation/project-pipeline-edges.ts',
+    ['../contracts/compiler-semantic-graph.js'],
+  ],
+  [
+    'src/definition/compilation/validate-definition-graph.ts',
+    [
+      '../contracts/compiler-semantic-graph.js',
+      '../contracts/definition-validation-result.js',
+      './preflight-fork-regions.js',
+    ],
+  ],
+  ['src/definition/contracts/compiler-semantic-graph.ts', []],
+  ['src/definition/contracts/definition-validation-result.ts', []],
+  ['src/definition/define-pipeline.ts', []],
+  [
+    'src/definition/validation/validate-definition.ts',
+    [
+      '../contracts/definition-validation-result.js',
+      './definition-validation-context.js',
+      './validate-facts.js',
+      './validate-pipeline-nodes.js',
+    ],
+  ],
+  ['src/definition/validation/definition-validation-context.ts', []],
+  [
+    'src/definition/validation/validate-pipeline-nodes.ts',
+    [
+      './definition-validation-context.js',
+      './validate-branch-node.js',
+      './validate-consensus-node.js',
+      './validate-fork-node.js',
+      './validate-human-gate-node.js',
+      './validate-join-node.js',
+    ],
+  ],
+  ...[
+    'validate-branch-node',
+    'validate-consensus-node',
+    'validate-facts',
+    'validate-fork-node',
+    'validate-human-gate-node',
+    'validate-join-node',
+  ].map(
+    (name) =>
+      [`src/definition/validation/${name}.ts`, ['./definition-validation-context.js']] as const,
+  ),
+]);
+for (const [path, expected] of definitionDependencies) {
+  const dependencies = [...sourceOf(path).matchAll(/\bfrom\s+['"](\.[^'"]+)['"]/gu)]
+    .map((match) => match[1]!)
+    .filter(
+      (specifier) =>
+        !specifier.startsWith('../..') &&
+        !/^\.\.\/(?:errors|graph|policy|spec)\/index\.js$/u.test(specifier),
+    )
+    .sort();
+  assert.deepEqual(dependencies, [...expected].sort(), `Definition DAG drift: ${path}`);
+}
+assert.equal(
+  sourceTokens(sourceOf('src/definition/index.ts')),
+  sourceTokens(
+    "export { compilePipeline } from './compile-pipeline.js';\n" +
+      "export { definePipeline } from './define-pipeline.js';\n",
+  ),
+  'Definition barrel must expose only its two approved public values.',
+);
 assert.equal(
   sourceTokens(sourceOf('src/graph/index.ts')),
   sourceTokens(
@@ -216,7 +345,11 @@ assert.doesNotMatch(
   'Evaluation must receive the validated kernel rather than build a replacement.',
 );
 assert.equal(
-  (sourceOf('src/definition/compile-pipeline.ts').match(/\bbuildGraphKernel\s*\(/gu) ?? []).length,
+  (
+    sourceOf('src/definition/compilation/validate-definition-graph.ts').match(
+      /\bbuildGraphKernel\s*\(/gu,
+    ) ?? []
+  ).length,
   1,
   'Compiler must build one canonical graph kernel.',
 );

@@ -3,10 +3,5 @@
     "owner": "PR4b",
     "resourceKey": "src/transition/validate-compiled-internally.ts",
     "ruleKey": "typescript:S3776"
-  },
-  "compilerParameterSurface": {
-    "owner": "PR4a",
-    "resourceKey": "src/definition/compile-pipeline.ts",
-    "ruleKey": "typescript:S107"
   }
 }

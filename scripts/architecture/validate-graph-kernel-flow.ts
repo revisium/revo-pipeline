@@ -15,7 +15,7 @@ import {
   type VariableDeclaration,
 } from 'typescript/unstable/ast';
 import { createVirtualFileSystem } from 'typescript/unstable/fs';
-import { API } from 'typescript/unstable/sync';
+import { API, SymbolFlags, type Checker } from 'typescript/unstable/sync';
 
 type GraphKernelRule =
   | 'GRAPH_KERNEL_ADAPTER_EXPOSURE'
@@ -52,17 +52,31 @@ const TRACKED_NAMES = new Set([
   'evaluationIndex',
   'GraphKernel',
   'ValidatedCompiledPipeline',
+  'assembleCompiledPipeline',
+  'classifyForkRegions',
+  'normalizePipelineNode',
+  'preflightForkRegions',
+  'projectPipelineEdges',
+  'validateDefinition',
+  'validateDefinitionGraph',
   'validateCompiledInternally',
   'validateCompiledPipeline',
 ]);
 
 const ALLOWED_BUILDERS = new Map([
-  ['src/definition/compile-pipeline.ts', 'compilePipeline'],
+  ['src/definition/compilation/validate-definition-graph.ts', 'validateDefinitionGraph'],
   ['src/transition/validate-compiled-internally.ts', 'canonicalCoreGraph'],
 ]);
 
 const REQUIRED_PATHS = [
+  'src/definition/compilation/assemble-compiled-pipeline.ts',
+  'src/definition/compilation/classify-fork-regions.ts',
+  'src/definition/compilation/normalize-pipeline-node.ts',
+  'src/definition/compilation/preflight-fork-regions.ts',
+  'src/definition/compilation/project-pipeline-edges.ts',
+  'src/definition/compilation/validate-definition-graph.ts',
   'src/definition/compile-pipeline.ts',
+  'src/definition/contracts/compiler-semantic-graph.ts',
   'src/graph/build-graph-kernel.ts',
   'src/graph/graph-kernel.ts',
   'src/graph/index.ts',
@@ -73,24 +87,6 @@ const REQUIRED_PATHS = [
 ] as const;
 
 const ACCEPTED_OWNER_DIGESTS = [
-  {
-    path: 'src/definition/compile-pipeline.ts',
-    name: 'compilePipeline',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    digest: '5e601cebbdf06ebe1882a7a46b2ce1485ed27c331eafd94b4eca0362259c1669',
-  },
-  {
-    path: 'src/definition/compile-pipeline.ts',
-    name: 'preflightForkRegions',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    digest: 'f619d28422ddc193db794b6be3a10d851215cf271c135128f71f16be5aac5528',
-  },
-  {
-    path: 'src/definition/compile-pipeline.ts',
-    name: 'classifyForkRegions',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    digest: 'd4e293cc77b4548642ee22f8a3d18e4f079c829bd57ff08df5f2527a82f44eb1',
-  },
   {
     path: 'src/transition/validate-compiled-internally.ts',
     name: 'validateCompiledInternally',
@@ -123,11 +119,6 @@ const ACCEPTED_OWNER_DIGESTS = [
 }[];
 
 const ACCEPTED_FILE_DIGESTS = [
-  {
-    path: 'src/definition/compile-pipeline.ts',
-    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    digest: 'f061385d4fa3ee91972301b589afc0a9a5c16de4ed00d2cab322011ce6f63acc',
-  },
   {
     path: 'src/transition/validate-compiled-internally.ts',
     code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
@@ -262,6 +253,9 @@ const isDirectTopLevelCall = (owner: FunctionLikeDeclaration, call: CallExpressi
   if (ts.isExpressionStatement(statement)) {
     return statement.expression === call;
   }
+  if (ts.isReturnStatement(statement)) {
+    return statement.expression === call;
+  }
   if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) {
     return false;
   }
@@ -354,127 +348,6 @@ const propertyPath = (node: Node): readonly string[] | undefined => {
   return parent ? [...parent, node.name.text] : undefined;
 };
 
-const unwrapped = (node: Node): Node =>
-  ts.isParenthesizedExpression(node) ? unwrapped(node.expression) : node;
-
-const conjunctions = (node: Node): readonly Node[] => {
-  const expression = unwrapped(node);
-  return ts.isBinaryExpression(expression) &&
-    expression.operatorToken.kind === SyntaxKind.AmpersandAmpersandToken
-    ? [...conjunctions(expression.left), ...conjunctions(expression.right)]
-    : [expression];
-};
-
-const strictEquality = (
-  node: Node,
-  left: (operand: Node) => boolean,
-  right: (operand: Node) => boolean,
-): boolean => {
-  const expression = unwrapped(node);
-  return (
-    ts.isBinaryExpression(expression) &&
-    expression.operatorToken.kind === SyntaxKind.EqualsEqualsEqualsToken &&
-    left(unwrapped(expression.left)) &&
-    right(unwrapped(expression.right))
-  );
-};
-
-const identifierNamed = (node: Node, name: string): boolean =>
-  ts.isIdentifier(node) && node.text === name;
-
-const elementOf = (node: Node, collection: string, index: string): boolean =>
-  ts.isElementAccessExpression(node) &&
-  identifierNamed(node.expression, collection) &&
-  node.argumentExpression !== undefined &&
-  identifierNamed(node.argumentExpression, index);
-
-const propertyOf = (node: Node, owner: string, property: string): boolean =>
-  ts.isPropertyAccessExpression(node) &&
-  identifierNamed(node.expression, owner) &&
-  node.name.text === property;
-
-const elementProperty = (
-  node: Node,
-  collection: string,
-  index: string,
-  property: string,
-): boolean =>
-  ts.isPropertyAccessExpression(node) &&
-  elementOf(node.expression, collection, index) &&
-  node.name.text === property;
-
-const exactCompilerOffsetIdentity = (declaration: VariableDeclaration | undefined): boolean => {
-  const initializer = declaration?.initializer;
-  if (!initializer) {
-    return false;
-  }
-  const outer = conjunctions(initializer);
-  if (outer.length !== 2) {
-    return false;
-  }
-  const lengthEquality = outer.find((entry) =>
-    strictEquality(
-      entry,
-      (left) => JSON.stringify(propertyPath(left)) === JSON.stringify(['edges', 'length']),
-      (right) => JSON.stringify(propertyPath(right)) === JSON.stringify(['inducedEdges', 'length']),
-    ),
-  );
-  const everyCall = outer.find(
-    (entry): entry is CallExpression =>
-      ts.isCallExpression(entry) &&
-      ts.isPropertyAccessExpression(entry.expression) &&
-      identifierNamed(entry.expression.expression, 'edges') &&
-      entry.expression.name.text === 'every',
-  );
-  const callback = everyCall?.arguments[0];
-  if (
-    !lengthEquality ||
-    !callback ||
-    !ts.isArrowFunction(callback) ||
-    callback.parameters.length !== 2 ||
-    nameOf(callback.parameters[0]?.name) !== 'edge' ||
-    nameOf(callback.parameters[1]?.name) !== 'offset' ||
-    ts.isBlock(callback.body)
-  ) {
-    return false;
-  }
-  const predicates = conjunctions(callback.body);
-  if (predicates.length !== 4) {
-    return false;
-  }
-  const required = [
-    (entry: Node): boolean =>
-      strictEquality(
-        entry,
-        (left) => elementOf(left, 'inducedSemanticOffsets', 'offset'),
-        (right) => identifierNamed(right, 'offset'),
-      ),
-    ...(['from', 'outcome', 'to'] as const).map(
-      (property) =>
-        (entry: Node): boolean =>
-          strictEquality(
-            entry,
-            (left) => elementProperty(left, 'inducedEdges', 'offset', property),
-            (right) => propertyOf(right, 'edge', property),
-          ),
-    ),
-  ];
-  return required.every((requirement) => predicates.some(requirement));
-};
-
-const isPositiveLengthGuard = (statement: Node | undefined, path: readonly string[]): boolean => {
-  if (!isTerminatingGuard(statement) || !ts.isBinaryExpression(statement.expression)) {
-    return false;
-  }
-  const condition = statement.expression;
-  return (
-    condition.operatorToken.kind === SyntaxKind.GreaterThanToken &&
-    JSON.stringify(propertyPath(condition.left)) === JSON.stringify(path) &&
-    ts.isNumericLiteral(condition.right) &&
-    condition.right.text === '0'
-  );
-};
-
 const callNamed = (node: Node, name: string): node is CallExpression =>
   ts.isCallExpression(node) &&
   ((ts.isIdentifier(node.expression) && node.expression.text === name) ||
@@ -515,14 +388,43 @@ const initializerText = (declaration: VariableDeclaration | undefined): string =
 const directCalls = (root: Node, name: string): readonly CallExpression[] =>
   descendants(root).filter((node): node is CallExpression => callNamed(node, name));
 
-const earlierDirectCall = (
+const functionIdentifier = (owner: FunctionLikeDeclaration): Identifier | undefined => {
+  if ('name' in owner && owner.name && ts.isIdentifier(owner.name)) {
+    return owner.name;
+  }
+  const parent = owner.parent;
+  return parent && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)
+    ? parent.name
+    : undefined;
+};
+
+const resolvedSymbolId = (checker: Checker, identifier: Identifier): number | undefined => {
+  const symbol = checker.getResolvedSymbol(identifier);
+  if (!symbol) {
+    return undefined;
+  }
+  const resolved =
+    (symbol.flags & SymbolFlags.Alias) === 0 ? symbol : checker.getAliasedSymbol(symbol);
+  return checker.isUnknownSymbol(resolved) ? undefined : resolved.getExportSymbol().id;
+};
+
+const resolvedCalls = (
+  checker: Checker,
   owner: FunctionLikeDeclaration,
-  call: CallExpression,
-  name: string,
-): CallExpression | undefined =>
-  directCalls(owner, name).find(
-    (candidate) => candidate.getStart() < call.getStart() && isDirectTopLevelCall(owner, candidate),
+  target: FunctionLikeDeclaration,
+): readonly CallExpression[] => {
+  const targetIdentifier = functionIdentifier(target);
+  const targetSymbol = targetIdentifier ? resolvedSymbolId(checker, targetIdentifier) : undefined;
+  if (targetSymbol === undefined) {
+    return [];
+  }
+  return descendants(owner).filter(
+    (node): node is CallExpression =>
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      resolvedSymbolId(checker, node.expression) === targetSymbol,
   );
+};
 
 const typeNames = (node: Node): readonly string[] =>
   descendants(node)
@@ -546,6 +448,69 @@ const objectProperty = (object: Node | undefined, name: string): Node | undefine
   }
   return ts.isShorthandPropertyAssignment(property) ? property.name : undefined;
 };
+
+const exactPropertyPath = (node: Node | undefined, path: readonly string[]): boolean =>
+  node !== undefined && JSON.stringify(propertyPath(node)) === JSON.stringify(path);
+
+const stringValue = (node: Node | undefined): string | undefined =>
+  node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+    ? node.text
+    : undefined;
+
+const switchClause = (owner: FunctionLikeDeclaration, value: string): ts.CaseClause | undefined => {
+  const clauses = descendants(owner).filter(
+    (node): node is ts.CaseClause =>
+      ts.isCaseClause(node) &&
+      containingFunction(node) === owner &&
+      ts.isSwitchStatement(node.parent.parent) &&
+      topLevelStatement(owner, node.parent.parent) === node.parent.parent &&
+      exactPropertyPath(node.parent.parent.expression, ['node', 'kind']) &&
+      stringValue(node.expression) === value,
+  );
+  return clauses.length === 1 ? clauses[0] : undefined;
+};
+
+const directClauseReturn = (clause: ts.CaseClause | undefined): ts.ReturnStatement | undefined => {
+  if (!clause || clause.statements.length !== 1) {
+    return undefined;
+  }
+  const statement = clause.statements[0];
+  return statement && ts.isReturnStatement(statement) ? statement : undefined;
+};
+
+const isIdentifierNamed = (node: Node | undefined, name: string): boolean =>
+  node !== undefined && ts.isIdentifier(node) && node.text === name;
+
+const hasExactObjectProperties = (
+  node: Node | undefined,
+  expectedNames: readonly string[],
+): node is ts.ObjectLiteralExpression => {
+  if (
+    !node ||
+    !ts.isObjectLiteralExpression(node) ||
+    node.properties.length !== expectedNames.length
+  ) {
+    return false;
+  }
+  const names = node.properties.map((property) => {
+    if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) {
+      return undefined;
+    }
+    return nameOf(property.name);
+  });
+  return names.every((name, index) => name === expectedNames[index]);
+};
+
+const isExactCall = (
+  node: Node | undefined,
+  name: string,
+  argumentsMatch: readonly ((argument: Node | undefined) => boolean)[],
+): node is CallExpression =>
+  node !== undefined &&
+  ts.isCallExpression(node) &&
+  callNamed(node, name) &&
+  node.arguments.length === argumentsMatch.length &&
+  argumentsMatch.every((matches, index) => matches(node.arguments[index]));
 
 const localConst = (
   owner: FunctionLikeDeclaration,
@@ -598,6 +563,273 @@ const isPipelineNodeKeyMap = (node: Node | undefined): boolean => {
             ts.isPropertyAccessExpression(candidate.expression) &&
             candidate.expression.name.text === 'key',
         )))
+  );
+};
+
+const validatesHumanGateNormalization = (owner: FunctionLikeDeclaration): boolean => {
+  const returned = directClauseReturn(switchClause(owner, 'humanGate'))?.expression;
+  if (!hasExactObjectProperties(returned, ['kind', 'key', 'subject', 'resolutions'])) {
+    return false;
+  }
+  const subject = objectProperty(returned, 'subject');
+  return (
+    subject !== undefined &&
+    ts.isCallExpression(subject) &&
+    ts.isPropertyAccessExpression(subject.expression) &&
+    exactPropertyPath(subject.expression.expression, ['node', 'subject']) &&
+    subject.expression.name.text === 'normalize' &&
+    subject.arguments.length === 1 &&
+    stringValue(subject.arguments[0]) === 'NFC'
+  );
+};
+
+const validatesHumanGateProjection = (owner: FunctionLikeDeclaration): boolean => {
+  const returned = directClauseReturn(switchClause(owner, 'humanGate'))?.expression;
+  if (
+    !returned ||
+    !ts.isCallExpression(returned) ||
+    !ts.isPropertyAccessExpression(returned.expression) ||
+    !exactPropertyPath(returned.expression.expression, ['node', 'resolutions']) ||
+    returned.expression.name.text !== 'map' ||
+    returned.arguments.length !== 1
+  ) {
+    return false;
+  }
+  const mapper = returned.arguments[0];
+  const mapperParameter = mapper && ts.isArrowFunction(mapper) ? mapper.parameters[0] : undefined;
+  if (
+    !mapper ||
+    !ts.isArrowFunction(mapper) ||
+    mapper.parameters.length !== 1 ||
+    !mapperParameter ||
+    !ts.isIdentifier(mapperParameter.name) ||
+    !ts.isCallExpression(mapper.body) ||
+    !callNamed(mapper.body, 'edge') ||
+    mapper.body.arguments.length !== 2
+  ) {
+    return false;
+  }
+  const parameter = mapperParameter.name.text;
+  return (
+    exactPropertyPath(mapper.body.arguments[0], [parameter, 'resolution']) &&
+    exactPropertyPath(mapper.body.arguments[1], [parameter, 'to'])
+  );
+};
+
+const isUndefinedComparison = (node: Node | undefined, path: readonly string[]): boolean =>
+  node !== undefined &&
+  ts.isBinaryExpression(node) &&
+  node.operatorToken.kind === SyntaxKind.ExclamationEqualsEqualsToken &&
+  exactPropertyPath(node.left, path) &&
+  isIdentifierNamed(node.right, 'undefined');
+
+const validatesPreflightQuery = (owner: FunctionLikeDeclaration): boolean => {
+  const declarations = descendants(owner).filter(
+    (node): node is VariableDeclaration =>
+      ts.isVariableDeclaration(node) &&
+      containingFunction(node) === owner &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === 'queryIsKnown' &&
+      isConstDeclaration(node),
+  );
+  const declaration = declarations.length === 1 ? declarations[0] : undefined;
+  const declarationStatement =
+    declaration &&
+    ts.isVariableDeclarationList(declaration.parent) &&
+    ts.isVariableStatement(declaration.parent.parent)
+      ? declaration.parent.parent
+      : undefined;
+  const loopBody = declarationStatement?.parent;
+  const loop = loopBody?.parent;
+  const initializer =
+    loopBody &&
+    ts.isBlock(loopBody) &&
+    loop &&
+    ts.isForOfStatement(loop) &&
+    loop.statement === loopBody &&
+    topLevelStatement(owner, loop) === loop &&
+    declarationStatement &&
+    loopBody.statements.includes(declarationStatement)
+      ? declaration?.initializer
+      : undefined;
+  if (
+    !initializer ||
+    !ts.isBinaryExpression(initializer) ||
+    initializer.operatorToken.kind !== SyntaxKind.AmpersandAmpersandToken ||
+    !isUndefinedComparison(initializer.left, ['barrierNodeOffset']) ||
+    !ts.isCallExpression(initializer.right) ||
+    !ts.isPropertyAccessExpression(initializer.right.expression) ||
+    !isIdentifierNamed(initializer.right.expression.expression, 'queryBranches') ||
+    initializer.right.expression.name.text !== 'every' ||
+    initializer.right.arguments.length !== 1
+  ) {
+    return false;
+  }
+  const predicate = initializer.right.arguments[0];
+  const predicateParameter =
+    predicate && ts.isArrowFunction(predicate) ? predicate.parameters[0] : undefined;
+  if (
+    !predicate ||
+    !ts.isArrowFunction(predicate) ||
+    predicate.parameters.length !== 1 ||
+    !predicateParameter ||
+    !ts.isIdentifier(predicateParameter.name) ||
+    !ts.isBinaryExpression(predicate.body) ||
+    predicate.body.operatorToken.kind !== SyntaxKind.AmpersandAmpersandToken
+  ) {
+    return false;
+  }
+  const parameter = predicateParameter.name.text;
+  const queryIsExact =
+    isUndefinedComparison(predicate.body.left, [parameter, 'entryNodeOffset']) &&
+    isUndefinedComparison(predicate.body.right, [parameter, 'exitNodeOffset']);
+  const returns =
+    owner.body && ts.isBlock(owner.body)
+      ? owner.body.statements.filter((statement): statement is ts.ReturnStatement =>
+          ts.isReturnStatement(statement),
+        )
+      : [];
+  const returned = returns.length === 1 ? returns[0]?.expression : undefined;
+  return (
+    queryIsExact &&
+    returned !== undefined &&
+    ts.isObjectLiteralExpression(returned) &&
+    returned.properties.length === 2 &&
+    isIdentifierNamed(objectProperty(returned, 'forks'), 'forks') &&
+    isIdentifierNamed(objectProperty(returned, 'queries'), 'queries')
+  );
+};
+
+const assignmentMatches = (
+  statement: Node | undefined,
+  left: readonly string[],
+  right: readonly string[],
+): boolean =>
+  statement !== undefined &&
+  ts.isExpressionStatement(statement) &&
+  ts.isBinaryExpression(statement.expression) &&
+  statement.expression.operatorToken.kind === SyntaxKind.EqualsToken &&
+  exactPropertyPath(statement.expression.left, left) &&
+  exactPropertyPath(statement.expression.right, right);
+
+const validatesReadinessAssignments = (owner: FunctionLikeDeclaration): boolean => {
+  const loops = descendants(owner).filter(
+    (node): node is ts.ForOfStatement =>
+      ts.isForOfStatement(node) &&
+      containingFunction(node) === owner &&
+      topLevelStatement(owner, node) === node &&
+      isIdentifierNamed(node.expression, 'exitEdges'),
+  );
+  const body = loops.length === 1 ? loops[0]?.statement : undefined;
+  if (!body || !ts.isBlock(body) || body.statements.length !== 3) {
+    return false;
+  }
+  const roleAssignment = body.statements[0];
+  const roleIsReadiness =
+    roleAssignment !== undefined &&
+    ts.isExpressionStatement(roleAssignment) &&
+    ts.isBinaryExpression(roleAssignment.expression) &&
+    roleAssignment.expression.operatorToken.kind === SyntaxKind.EqualsToken &&
+    exactPropertyPath(roleAssignment.expression.left, ['edge', 'role']) &&
+    stringValue(roleAssignment.expression.right) === 'readiness';
+  return (
+    roleIsReadiness &&
+    assignmentMatches(body.statements[1], ['edge', 'fork'], ['fork', 'fork', 'key']) &&
+    assignmentMatches(body.statements[2], ['edge', 'branch'], ['branch', 'branch', 'name'])
+  );
+};
+
+const validatesAssemblyPromotion = (owner: FunctionLikeDeclaration): boolean => {
+  const returns =
+    owner.body && ts.isBlock(owner.body)
+      ? owner.body.statements.filter((statement): statement is ts.ReturnStatement =>
+          ts.isReturnStatement(statement),
+        )
+      : [];
+  const returned = returns.length === 1 ? returns[0]?.expression : undefined;
+  if (!hasExactObjectProperties(returned, ['ok', 'pipeline'])) {
+    return false;
+  }
+  const ok = objectProperty(returned, 'ok');
+  const pipeline = objectProperty(returned, 'pipeline');
+  if (
+    ok?.kind !== SyntaxKind.TrueKeyword ||
+    !pipeline ||
+    !isExactCall(pipeline, 'deepFreeze', [
+      (argument) => argument !== undefined && ts.isObjectLiteralExpression(argument),
+    ])
+  ) {
+    return false;
+  }
+  const snapshot = pipeline.arguments[0];
+  if (!snapshot || !ts.isObjectLiteralExpression(snapshot)) {
+    return false;
+  }
+  const spreads = snapshot.properties.filter(ts.isSpreadAssignment);
+  return (
+    exactPropertyPath(objectProperty(snapshot, 'edges'), ['graph', 'edges']) &&
+    spreads.length === 1 &&
+    isExactCall(spreads[0]?.expression, 'buildIndexes', [
+      (argument) => isIdentifierNamed(argument, 'nodes'),
+      (argument) => isIdentifierNamed(argument, 'graph'),
+    ])
+  );
+};
+
+const validatesAssemblyIndexes = (owner: FunctionLikeDeclaration): boolean => {
+  if (!owner.body || !ts.isParenthesizedExpression(owner.body)) {
+    return false;
+  }
+  const returned = owner.body.expression;
+  const outgoingIndex = objectProperty(returned, 'outgoingIndex');
+  const incomingIndex = objectProperty(returned, 'incomingIndex');
+  const exactIndexMap = (node: Node | undefined, direction: 'incoming' | 'outgoing'): boolean => {
+    if (
+      !node ||
+      !ts.isCallExpression(node) ||
+      !ts.isPropertyAccessExpression(node.expression) ||
+      !isIdentifierNamed(node.expression.expression, 'nodes') ||
+      node.expression.name.text !== 'map' ||
+      node.arguments.length !== 1
+    ) {
+      return false;
+    }
+    const mapper = node.arguments[0];
+    const nodeParameter = mapper && ts.isArrowFunction(mapper) ? mapper.parameters[0] : undefined;
+    const offsetParameter = mapper && ts.isArrowFunction(mapper) ? mapper.parameters[1] : undefined;
+    if (
+      !mapper ||
+      !ts.isArrowFunction(mapper) ||
+      mapper.parameters.length !== 2 ||
+      !nodeParameter ||
+      !ts.isIdentifier(nodeParameter.name) ||
+      !offsetParameter ||
+      !ts.isIdentifier(offsetParameter.name) ||
+      !ts.isParenthesizedExpression(mapper.body) ||
+      !ts.isObjectLiteralExpression(mapper.body.expression)
+    ) {
+      return false;
+    }
+    const nodeName = nodeParameter.name.text;
+    const offsetName = offsetParameter.name.text;
+    const edges = objectProperty(mapper.body.expression, 'edges');
+    return (
+      exactPropertyPath(objectProperty(mapper.body.expression, 'key'), [nodeName, 'key']) &&
+      edges !== undefined &&
+      ts.isBinaryExpression(edges) &&
+      edges.operatorToken.kind === SyntaxKind.QuestionQuestionToken &&
+      ts.isElementAccessExpression(edges.left) &&
+      exactPropertyPath(edges.left.expression, ['graph', 'kernel', `${direction}EdgeOffsets`]) &&
+      isIdentifierNamed(edges.left.argumentExpression, offsetName) &&
+      ts.isArrayLiteralExpression(edges.right) &&
+      edges.right.elements.length === 0
+    );
+  };
+  return (
+    returned !== undefined &&
+    ts.isObjectLiteralExpression(returned) &&
+    exactIndexMap(outgoingIndex, 'outgoing') &&
+    exactIndexMap(incomingIndex, 'incoming')
   );
 };
 
@@ -827,6 +1059,211 @@ const validateAcceptedFileShapes = (
   }
 };
 
+const compactSource = (value: string): string => value.replaceAll(/\s+/gu, '');
+
+const COMPILER_SEMANTIC_CONTRACTS = [
+  {
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    name: 'normalizeCase',
+    required: [
+      "entry.when.op==='equals'?{op:'equals',value:normalizeJsonScalar(entry.when.value)}",
+      "op:'oneOf',values:entry.when.values.map(normalizeJsonScalar).sort(scalarComparator)",
+    ],
+  },
+  {
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    name: 'normalizePipelineNode',
+    required: [
+      "case'task':return{kind:'task',key:node.key,outcomes:{...node.outcomes}}",
+      'fact:node.fact,cases:node.cases.map(normalizeCase).sort((left,right)=>compareUnicodeCodePoints(left.name,right.name)||compareUnicodeCodePoints(left.to,right.to)',
+      'default:node.default?{...node.default}:null',
+      'join:node.join,branches:node.branches.map((branch)=>({...branch})).sort((left,right)=>compareUnicodeCodePoints(left.name,right.name)||compareUnicodeCodePoints(left.entry,right.entry)',
+      'candidates:[...node.candidates].sort(compareUnicodeCodePoints),policy:{...node.policy},outcomes:{...node.outcomes}',
+      'resolutions:node.resolutions.map((resolution)=>({...resolution})).sort((left,right)=>compareUnicodeCodePoints(left.resolution,right.resolution)||compareUnicodeCodePoints(left.to,right.to',
+      "case'terminal':return{kind:'terminal',key:node.key,outcome:node.outcome.normalize('NFC')}",
+    ],
+  },
+  {
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    name: 'edgesForNode',
+    required: [
+      "from:node.key,outcome,to,role:'activation',fork:null,branch:null",
+      'Object.entries(node.outcomes).map(([outcome,to])=>edge(outcome,to))',
+      'node.cases.map((entry)=>edge(entry.name,entry.to))',
+      'node.default?[edge(node.default.name,node.default.to)]:[]',
+      "...edge('forked',branch.entry),fork:node.key,branch:branch.name",
+      "{...edge('forked',node.join),fork:node.key}",
+      "case'terminal':return[]",
+    ],
+  },
+  {
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    name: 'edgeComparator',
+    required: [
+      "compareUnicodeCodePoints(left.from,right.from)||compareUnicodeCodePoints(left.outcome,right.outcome)||compareUnicodeCodePoints(left.to,right.to)||compareUnicodeCodePoints(left.role,right.role)||compareUnicodeCodePoints(left.fork??'',right.fork??'')||compareUnicodeCodePoints(left.branch??'',right.branch??'')",
+    ],
+  },
+  {
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    name: 'projectPipelineEdges',
+    required: ['edges:nodes.flatMap(edgesForNode).sort(edgeComparator)'],
+  },
+  {
+    path: 'src/definition/compilation/preflight-fork-regions.ts',
+    name: 'preflightForkRegions',
+    required: [
+      'constnodeByKey=newMap(nodes.map((node)=>[node.key,node]))',
+      'constnodeOffsets=newMap(nodeKeys.map((key,offset)=>[key,offset]))',
+      'constbarrierNodeOffset=nodeOffsets.get(join.key)',
+      'entryNodeOffset:nodeOffsets.get(branch.entry),exitNodeOffset:nodeOffsets.get(branch.exit)',
+      'constqueryIndex=queryIsKnown?queries.length:undefined',
+      'if(queryIsKnown){queries.push({barrierNodeOffset,branches:queryBranches.map((branch)=>({entryNodeOffset:branch.entryNodeOffset!,exitNodeOffset:branch.exitNodeOffset!',
+    ],
+  },
+  {
+    path: 'src/definition/compilation/validate-definition-graph.ts',
+    name: 'validateDefinitionGraph',
+    required: [
+      'validateReferences(entry,nodes,projectedEdges,sourceIndexes,faults)',
+      'constedges:MutableCompiledEdge[]=projectedEdges.map((edge)=>({...edge}))',
+      'constnodeKeys=nodes.map((node)=>node.key)',
+      'constknownKeys=newSet(nodeKeys)',
+      'knownKeys.has(edge.from)&&knownKeys.has(edge.to)',
+      'edge:Object.freeze({from:edge.from,outcome:edge.outcome,to:edge.to}),semanticOffset',
+      'constinducedEdges=Object.freeze(induced.map(({edge})=>edge))',
+      'constinducedSemanticOffsets=Object.freeze(induced.map(({semanticOffset})=>semanticOffset))',
+      'buildGraphKernel({nodeKeys,edges:inducedEdges})',
+      'collectBarrierRegionOwnership(kernel,graphOrder,preflight.queries)',
+    ],
+  },
+  {
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    name: 'edgeIsPermitted',
+    required: [
+      'constfromOwner=owners.get(edge.from)',
+      'consttoOwner=owners.get(edge.to)',
+      'fromOwner!==undefined&&edge.from===exits.get(fromOwner)&&edge.to===join.key',
+      'edge.from===fork.key&&toOwner!==undefined',
+      'fromOwner!==undefined&&fromOwner===toOwner',
+      'edge.from===fork.key&&edge.to===join.key',
+      'fromOwner===undefined&&toOwner===undefined',
+      'permittedExit||permittedEntry||permittedInternal||directBarrier',
+    ],
+  },
+  {
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    name: 'classifyBranchReadiness',
+    required: [],
+  },
+  {
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    name: 'classifyForkRegions',
+    required: [
+      'constresult=fork.queryIndex===undefined?undefined:graph.ownership[fork.queryIndex]',
+      'classifyBranchReadiness(fork,branch,members,graph,nodeByKey,sourceIndexes,faults)',
+      'graph.edges.length===graph.inducedEdges.length',
+      'graph.inducedSemanticOffsets[offset]===offset',
+      'graph.inducedEdges[offset]?.from===edge.from',
+      'graph.inducedEdges[offset]?.outcome===edge.outcome',
+      'graph.inducedEdges[offset]?.to===edge.to',
+      "if(faults.length===0&&!identical){faults.push({code:'DEF_TYPE',path:'/nodes'",
+    ],
+  },
+  {
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    name: 'deepFreeze',
+    required: [
+      "typeofvalue!=='object'||value===null||Object.isFrozen(value)",
+      'for(constkeyofReflect.ownKeys(value))',
+      "if(descriptor&&'value'indescriptor){deepFreeze(descriptor.value);}",
+      'returnObject.freeze(value)',
+    ],
+  },
+  {
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    name: 'buildIndexes',
+    required: ['nodeIndex:nodes.map((node,index)=>({key:node.key,node:index}))'],
+  },
+  {
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    name: 'assembleCompiledPipeline',
+    required: [
+      'schemaVersion:1,entry,facts:sortedFacts,nodes',
+      'topologicalOrder:graph.topologicalOrder,forkRegions',
+    ],
+  },
+] as const;
+
+const COMPILER_AST_SEMANTIC_CONTRACTS = [
+  {
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    name: 'normalizePipelineNode',
+    validates: validatesHumanGateNormalization,
+  },
+  {
+    path: 'src/definition/compilation/project-pipeline-edges.ts',
+    name: 'edgesForNode',
+    validates: validatesHumanGateProjection,
+  },
+  {
+    path: 'src/definition/compilation/preflight-fork-regions.ts',
+    name: 'preflightForkRegions',
+    validates: validatesPreflightQuery,
+  },
+  {
+    path: 'src/definition/compilation/classify-fork-regions.ts',
+    name: 'classifyBranchReadiness',
+    validates: validatesReadinessAssignments,
+  },
+] as const;
+
+const validateCompilerLeafSemantics = (
+  modules: readonly ParsedModule[],
+  violations: ArchitectureViolation[],
+): void => {
+  for (const contract of COMPILER_SEMANTIC_CONTRACTS) {
+    const module = modules.find((candidate) => candidate.path === contract.path);
+    const owner = findFunction(modules, contract.path, contract.name);
+    if (!module || !owner) {
+      add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
+      continue;
+    }
+    const source = compactSource(owner.getText());
+    if (contract.required.some((required) => !source.includes(compactSource(required)))) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, owner);
+    }
+  }
+  for (const contract of COMPILER_AST_SEMANTIC_CONTRACTS) {
+    const module = modules.find((candidate) => candidate.path === contract.path);
+    const owner = findFunction(modules, contract.path, contract.name);
+    if (!module || !owner) {
+      add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
+      continue;
+    }
+    if (!contract.validates(owner)) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, owner);
+    }
+  }
+  const assemblyModule = modules.find(
+    (candidate) => candidate.path === 'src/definition/compilation/assemble-compiled-pipeline.ts',
+  );
+  const assembler = findFunction(
+    modules,
+    'src/definition/compilation/assemble-compiled-pipeline.ts',
+    'assembleCompiledPipeline',
+  );
+  const indexBuilder = findFunction(
+    modules,
+    'src/definition/compilation/assemble-compiled-pipeline.ts',
+    'buildIndexes',
+  );
+  if (!assemblyModule || !assembler || !indexBuilder) {
+    add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', assemblyModule);
+  } else if (!validatesAssemblyPromotion(assembler) || !validatesAssemblyIndexes(indexBuilder)) {
+    add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', assemblyModule, assembler);
+  }
+};
+
 const validateTrackedImports = (
   modules: readonly ParsedModule[],
   violations: ArchitectureViolation[],
@@ -978,56 +1415,91 @@ const validateCompiler = (
   call: BuilderCall | undefined,
   violations: ArchitectureViolation[],
 ): void => {
-  const module = modules.find((entry) => entry.path === 'src/definition/compile-pipeline.ts');
-  const owner = call?.owner;
-  if (!module || !call || !owner) {
-    add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', module);
+  const facadeModule = modules.find((entry) => entry.path === 'src/definition/compile-pipeline.ts');
+  const graphModule = modules.find(
+    (entry) => entry.path === 'src/definition/compilation/validate-definition-graph.ts',
+  );
+  const facade = findFunction(modules, 'src/definition/compile-pipeline.ts', 'compilePipeline');
+  const graphOwner = call?.owner;
+  if (!facadeModule || !graphModule || !facade || !call || !graphOwner) {
+    add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', facadeModule ?? graphModule);
     return;
   }
-  const portableCall = earlierDirectCall(owner, call.call, 'inspectPortableValueSet');
-  const portableStatement = portableCall ? topLevelStatement(owner, portableCall) : undefined;
-  const ownerStatements: readonly Node[] =
-    owner.body && ts.isBlock(owner.body) ? owner.body.statements : [];
-  const portableIndex = portableStatement ? ownerStatements.indexOf(portableStatement) : -1;
-  const portableGuard = portableIndex >= 0 ? ownerStatements[portableIndex + 1] : undefined;
-  if (
-    !isDirectTopLevelCall(owner, call.call) ||
-    !portableCall ||
-    !portableCall.parent ||
-    !ts.isVariableDeclaration(portableCall.parent) ||
-    !ts.isIdentifier(portableCall.parent.name) ||
-    portableCall.parent.name.text !== 'portable' ||
-    !isPositiveLengthGuard(portableGuard, ['portable', 'issues', 'length']) ||
-    !earlierDirectCall(owner, call.call, 'validateReferences')
-  ) {
-    add(violations, 'GRAPH_KERNEL_TRUST_DOMINANCE', module, call.call);
+
+  const facadeCalls = [
+    'validateDefinition',
+    'projectPipelineEdges',
+    'preflightForkRegions',
+    'validateDefinitionGraph',
+    'classifyForkRegions',
+    'assembleCompiledPipeline',
+  ].map((name) => directCalls(facade, name)[0]);
+  const positions = facadeCalls.map((candidate) => candidate?.getStart() ?? -1);
+  const exactCallChain =
+    facadeCalls.every(
+      (candidate, index) =>
+        candidate !== undefined &&
+        directCalls(
+          facade,
+          [
+            'validateDefinition',
+            'projectPipelineEdges',
+            'preflightForkRegions',
+            'validateDefinitionGraph',
+            'classifyForkRegions',
+            'assembleCompiledPipeline',
+          ][index]!,
+        ).length === 1 &&
+        isDirectTopLevelCall(facade, candidate),
+    ) && positions.every((position, index) => index === 0 || position > positions[index - 1]!);
+  const facadeText = facade.getText();
+  const classificationGraph = objectProperty(facadeCalls[4]?.arguments[0], 'graph');
+  const assemblyGraph = objectProperty(facadeCalls[5]?.arguments[0], 'graph');
+  const exactDataFlow =
+    identifierReferences(facade, 'normalizePipelineNode').length === 1 &&
+    facadeText.includes('const projectedGraph = projectPipelineEdges(copiedNodes)') &&
+    facadeText.includes(
+      'preflightForkRegions(copiedNodes, nodeKeys, sourceIndexes, sourceNodes, faults)',
+    ) &&
+    facadeText.includes('edges: projectedGraph.edges') &&
+    facadeText.includes('const classifiedRegions = classifyForkRegions({') &&
+    classificationGraph !== undefined &&
+    ts.isIdentifier(classificationGraph) &&
+    classificationGraph.text === 'graph' &&
+    assemblyGraph !== undefined &&
+    ts.isIdentifier(assemblyGraph) &&
+    assemblyGraph.text === 'graph';
+  if (!exactCallChain || !exactDataFlow) {
+    add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', facadeModule, facade);
   }
+  const validationCall = facadeCalls[0];
+  const validationStatement = validationCall
+    ? topLevelStatement(facade, validationCall)
+    : undefined;
+  const facadeStatements: readonly Node[] =
+    facade.body && ts.isBlock(facade.body) ? facade.body.statements : [];
+  const validationIndex = validationStatement ? facadeStatements.indexOf(validationStatement) : -1;
+  const validationGuard = validationIndex >= 0 ? facadeStatements[validationIndex + 1] : undefined;
+  if (
+    !isTerminatingGuard(validationGuard) ||
+    validationGuard.expression.getText() !== '!validation.canCompile'
+  ) {
+    add(violations, 'GRAPH_KERNEL_TRUST_DOMINANCE', facadeModule, validationGuard ?? facade);
+  }
+
+  const ownerStatements: readonly Node[] =
+    graphOwner.body && ts.isBlock(graphOwner.body) ? graphOwner.body.statements : [];
   const input = call.call.arguments[0];
   const nodeKeys = objectProperty(input, 'nodeKeys');
   const builderEdges = objectProperty(input, 'edges');
-  const nodeKeysDeclaration = localConst(owner, 'nodeKeys');
-  const preliminaryEdges = localConst(owner, 'preliminaryEdges');
-  const preflight = directCalls(owner, 'preflightForkRegions')[0];
-  const edgesDeclaration = localConst(owner, 'edges');
-  const knownKeys = localConst(owner, 'knownKeys');
-  const induced = localConst(owner, 'induced');
-  const inducedEdges = localConst(owner, 'inducedEdges');
-  const inducedSemanticOffsets = localConst(owner, 'inducedSemanticOffsets');
-  const ownership = directCalls(owner, 'collectBarrierRegionOwnership')[0];
-  const builderStatement = topLevelStatement(owner, call.call);
+  const edgesDeclaration = localConst(graphOwner, 'edges');
+  const knownKeys = localConst(graphOwner, 'knownKeys');
+  const induced = localConst(graphOwner, 'induced');
+  const inducedEdges = localConst(graphOwner, 'inducedEdges');
+  const inducedSemanticOffsets = localConst(graphOwner, 'inducedSemanticOffsets');
+  const ownership = directCalls(graphOwner, 'collectBarrierRegionOwnership')[0];
+  const builderStatement = topLevelStatement(graphOwner, call.call);
   const builderIndex = builderStatement ? ownerStatements.indexOf(builderStatement) : -1;
-  const hasPreGraphFaultExit = ownerStatements
-    .slice(0, builderIndex < 0 ? 0 : builderIndex)
-    .some((statement) => isPositiveLengthGuard(statement, ['faults', 'length']));
-  const hasPostGraphFaultExit = ownerStatements
-    .slice(builderIndex + 1)
-    .some((statement) => isPositiveLengthGuard(statement, ['faults', 'length']));
-  const offsetIdentity = localConst(owner, 'edgeOffsetsAreIdentical');
-  const offsetGuard = offsetIdentity
-    ? ownerStatements[
-        ownerStatements.indexOf(topLevelStatement(owner, offsetIdentity) ?? owner) + 1
-      ]
-    : undefined;
   const inputIsExact =
     input !== undefined &&
     ts.isObjectLiteralExpression(input) &&
@@ -1037,50 +1509,43 @@ const validateCompiler = (
     builderEdges !== undefined &&
     ts.isIdentifier(builderEdges) &&
     builderEdges.text === 'inducedEdges';
-  const nodesAreCanonical =
-    nodeKeysDeclaration?.initializer !== undefined &&
-    ts.isCallExpression(nodeKeysDeclaration.initializer) &&
-    ts.isPropertyAccessExpression(nodeKeysDeclaration.initializer.expression) &&
-    nodeKeysDeclaration.initializer.expression.name.text === 'map';
   const inducedBindingsExist =
-    preliminaryEdges !== undefined &&
     edgesDeclaration !== undefined &&
     knownKeys !== undefined &&
     induced !== undefined &&
     inducedEdges !== undefined &&
     inducedSemanticOffsets !== undefined;
-  const preflightIsDirect = preflight !== undefined && isDirectTopLevelCall(owner, preflight);
+  const inducedEndpointProvenance = graphOwner
+    .getText()
+    .includes('knownKeys.has(edge.from) && knownKeys.has(edge.to)');
   const ownershipIsDirect =
     ownership !== undefined &&
-    isDirectTopLevelCall(owner, ownership) &&
+    isDirectTopLevelCall(graphOwner, ownership) &&
     ownership.getStart() > call.call.getStart();
-  const finalGateIsExact =
-    hasPostGraphFaultExit &&
-    offsetIdentity !== undefined &&
-    isTerminatingGuard(offsetGuard) &&
-    ts.isPrefixUnaryExpression(offsetGuard.expression) &&
-    offsetGuard.expression.operator === SyntaxKind.ExclamationToken &&
-    ts.isIdentifier(offsetGuard.expression.operand) &&
-    offsetGuard.expression.operand.text === 'edgeOffsetsAreIdentical' &&
-    exactCompilerOffsetIdentity(offsetIdentity);
+  const sizeGuardDominates =
+    builderIndex > 0 &&
+    ownerStatements
+      .slice(0, builderIndex)
+      .some(
+        (statement) =>
+          isTerminatingGuard(statement) &&
+          statement.expression.getText().includes('nodeKeys.length') &&
+          statement.expression.getText().includes('inducedEdges.length'),
+      );
   for (const [proven, node] of [
     [inputIsExact, call.call],
-    [nodesAreCanonical, nodeKeysDeclaration ?? call.call],
     [inducedBindingsExist, induced ?? call.call],
-    [preflightIsDirect, preflight ?? call.call],
+    [inducedEndpointProvenance, induced ?? call.call],
     [ownershipIsDirect, ownership ?? call.call],
-    [finalGateIsExact, offsetGuard ?? call.call],
+    [sizeGuardDominates, builderStatement ?? call.call],
   ] as const) {
     if (!proven) {
-      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', graphModule, node);
     }
   }
-  if (hasPreGraphFaultExit) {
-    add(violations, 'GRAPH_KERNEL_TRUST_DOMINANCE', module, call.call);
-  }
   for (const forbidden of ['buildEdgeBuckets', 'collectSemanticRegionMembers']) {
-    if (identifierReferences(module.sourceFile, forbidden).length > 0) {
-      add(violations, 'GRAPH_KERNEL_REBUILD', module, module.sourceFile);
+    if (modules.some((module) => identifierReferences(module.sourceFile, forbidden).length > 0)) {
+      add(violations, 'GRAPH_KERNEL_REBUILD', graphModule, graphModule.sourceFile);
     }
   }
   const mutatingMethods = new Set([
@@ -1094,7 +1559,7 @@ const validateCompiler = (
     'splice',
     'unshift',
   ]);
-  for (const node of descendants(owner)) {
+  for (const node of descendants(graphOwner)) {
     if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
@@ -1103,26 +1568,30 @@ const validateCompiler = (
         node.expression.expression.text === 'inducedSemanticOffsets') &&
       mutatingMethods.has(node.expression.name.text)
     ) {
-      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', graphModule, node);
     }
   }
-  for (const node of descendants(module.sourceFile)) {
-    if (
-      ts.isBinaryExpression(node) &&
-      node.operatorToken.kind === SyntaxKind.EqualsToken &&
-      ts.isPropertyAccessExpression(node.left) &&
-      (node.left.name.text === 'from' ||
-        node.left.name.text === 'to' ||
-        node.left.name.text === 'outcome')
-    ) {
-      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', module, node);
+  for (const definitionModule of modules.filter((module) =>
+    module.path.startsWith('src/definition/'),
+  )) {
+    for (const node of descendants(definitionModule.sourceFile)) {
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === SyntaxKind.EqualsToken &&
+        ts.isPropertyAccessExpression(node.left) &&
+        (node.left.name.text === 'from' ||
+          node.left.name.text === 'to' ||
+          node.left.name.text === 'outcome')
+      ) {
+        add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', definitionModule, node);
+      }
     }
   }
   const kernelName = nameOf(call.declaration?.name);
   if (!kernelName) {
     return;
   }
-  const kernelDeclaration = descendants(owner).find(
+  const kernelDeclaration = descendants(graphOwner).find(
     (node): node is VariableDeclaration =>
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
@@ -1130,7 +1599,30 @@ const validateCompiler = (
       initializerText(node) === `${kernelName}.kernel`,
   );
   if (!kernelDeclaration || !isConstDeclaration(kernelDeclaration)) {
-    add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', module, call.call);
+    add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', graphModule, call.call);
+  }
+  const classificationModule = modules.find(
+    (entry) => entry.path === 'src/definition/compilation/classify-fork-regions.ts',
+  );
+  const classification = findFunction(
+    modules,
+    'src/definition/compilation/classify-fork-regions.ts',
+    'classifyForkRegions',
+  );
+  if (
+    !classificationModule ||
+    !classification ||
+    !classification.getText().includes('graph.inducedSemanticOffsets[offset] === offset &&') ||
+    !classification.getText().includes('graph.inducedEdges[offset]?.from === edge.from &&') ||
+    !classification.getText().includes('graph.inducedEdges[offset]?.outcome === edge.outcome &&') ||
+    !classification.getText().includes('graph.inducedEdges[offset]?.to === edge.to')
+  ) {
+    add(
+      violations,
+      'GRAPH_KERNEL_INPUT_PROVENANCE',
+      classificationModule,
+      classification ?? classificationModule?.sourceFile,
+    );
   }
 };
 
@@ -1433,6 +1925,109 @@ const validateSemanticResolution = (
         violations.push({ code: 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', path, line });
       }
     }
+
+    const modules = project.program
+      .getSourceFileNames()
+      .filter((path) => normalizedPath(relative(rootDirectory, path)).startsWith('src/'))
+      .map((path) => ({
+        path: normalizedPath(relative(rootDirectory, path)),
+        sourceFile: project.program.getSourceFile(path),
+      }))
+      .filter((module): module is ParsedModule => module.sourceFile !== undefined);
+    const facadeModule = modules.find(
+      (module) => module.path === 'src/definition/compile-pipeline.ts',
+    );
+    const facade = findFunction(modules, 'src/definition/compile-pipeline.ts', 'compilePipeline');
+    const callTargets = [
+      ['src/definition/validation/validate-definition.ts', 'validateDefinition'],
+      ['src/definition/compilation/project-pipeline-edges.ts', 'projectPipelineEdges'],
+      ['src/definition/compilation/preflight-fork-regions.ts', 'preflightForkRegions'],
+      ['src/definition/compilation/validate-definition-graph.ts', 'validateDefinitionGraph'],
+      ['src/definition/compilation/classify-fork-regions.ts', 'classifyForkRegions'],
+      ['src/definition/compilation/assemble-compiled-pipeline.ts', 'assembleCompiledPipeline'],
+    ] as const;
+    if (!facadeModule || !facade) {
+      add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', facadeModule);
+      return;
+    }
+    const calls = callTargets.map(([path, name]) => {
+      const target = findFunction(modules, path, name);
+      return target ? resolvedCalls(project.checker, facade, target) : [];
+    });
+    const positions = calls.map((ownedCalls) => ownedCalls[0]?.getStart() ?? -1);
+    if (
+      calls.some(
+        (ownedCalls) =>
+          ownedCalls.length !== 1 ||
+          ownedCalls[0] === undefined ||
+          !isDirectTopLevelCall(facade, ownedCalls[0]),
+      ) ||
+      positions.some((position, index) => index > 0 && position <= positions[index - 1]!)
+    ) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', facadeModule, facade);
+    }
+
+    const normalizer = findFunction(
+      modules,
+      'src/definition/compilation/normalize-pipeline-node.ts',
+      'normalizePipelineNode',
+    );
+    const normalizerIdentifier = normalizer ? functionIdentifier(normalizer) : undefined;
+    const normalizerSymbol = normalizerIdentifier
+      ? resolvedSymbolId(project.checker, normalizerIdentifier)
+      : undefined;
+    const normalizationReferences =
+      normalizerSymbol === undefined
+        ? []
+        : descendants(facade).filter(
+            (node): node is Identifier =>
+              ts.isIdentifier(node) && resolvedSymbolId(project.checker, node) === normalizerSymbol,
+          );
+    if (
+      normalizationReferences.length !== 1 ||
+      !normalizationReferences[0] ||
+      !ts.isCallExpression(normalizationReferences[0].parent) ||
+      !ts.isPropertyAccessExpression(normalizationReferences[0].parent.expression) ||
+      normalizationReferences[0].parent.expression.name.text !== 'map' ||
+      normalizationReferences[0].parent.arguments[0] !== normalizationReferences[0]
+    ) {
+      add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', facadeModule, facade);
+    }
+
+    const graphModule = modules.find(
+      (module) => module.path === 'src/definition/compilation/validate-definition-graph.ts',
+    );
+    const graphOwner = findFunction(
+      modules,
+      'src/definition/compilation/validate-definition-graph.ts',
+      'validateDefinitionGraph',
+    );
+    const referenceOwner = findFunction(
+      modules,
+      'src/definition/compilation/validate-definition-graph.ts',
+      'validateReferences',
+    );
+    const referenceCalls =
+      graphOwner && referenceOwner
+        ? resolvedCalls(project.checker, graphOwner, referenceOwner)
+        : [];
+    if (
+      !graphModule ||
+      !graphOwner ||
+      referenceCalls.length !== 1 ||
+      !referenceCalls[0] ||
+      !isDirectTopLevelCall(graphOwner, referenceCalls[0]) ||
+      graphOwner.body === undefined ||
+      !ts.isBlock(graphOwner.body) ||
+      topLevelStatement(graphOwner, referenceCalls[0]) !== graphOwner.body.statements[0]
+    ) {
+      add(
+        violations,
+        'GRAPH_KERNEL_TRUST_DOMINANCE',
+        graphModule,
+        referenceCalls[0] ?? graphOwner ?? graphModule?.sourceFile,
+      );
+    }
   } catch {
     violations.push({ code: 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', path: 'src', line: 1 });
   } finally {
@@ -1500,11 +2095,14 @@ export const validateGraphKernelFlow = (
     validateAcceptedFileShapes(modules, violations);
     validateAcceptedOwnerShapes(modules, violations);
     validateTrackedImports(modules, violations);
+    validateCompilerLeafSemantics(modules, violations);
     const calls = validateBuilderReferences(modules, violations);
     validateBuilderCalls(calls, violations);
     validateCompiler(
       modules,
-      calls.find((call) => call.module.path === 'src/definition/compile-pipeline.ts'),
+      calls.find(
+        (call) => call.module.path === 'src/definition/compilation/validate-definition-graph.ts',
+      ),
       violations,
     );
     validateInternalValidator(

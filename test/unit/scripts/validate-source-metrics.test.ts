@@ -21,13 +21,6 @@ const callable = (opening: string, closing: string, lines: number): MetricSource
 const bodyless = (opening: string, closing: string): MetricSource =>
   sourceWithLines([opening, ...Array.from({ length: 79 }, () => '  // signature'), closing]);
 
-test('keeps PR4-0 production scope empty without a grandfather list', () => {
-  expect(sourceMetricScope([sourceWithLines(['void 0;'])], 'PR4-0')).toEqual([]);
-  expect(() =>
-    validateSourceMetrics([sourceWithLines(Array.from({ length: 251 }, () => 'void 0;'))], []),
-  ).not.toThrow();
-});
-
 test('rejects duplicate and unknown production scope paths before filtering', () => {
   const source = sourceWithLines(['void 0;']);
   expect(() => validateSourceMetrics([source], [path, path])).toThrowError(
@@ -38,7 +31,7 @@ test('rejects duplicate and unknown production scope paths before filtering', ()
   );
 });
 
-test('derives the future PR4a scope from every definition production leaf', () => {
+test('derives the complete PR4a scope from every definition production leaf', () => {
   const modules: readonly MetricSource[] = [
     sourceWithLines(['void 0;']),
     { path: 'src/definition/index.ts', source: 'export {};\n' },
