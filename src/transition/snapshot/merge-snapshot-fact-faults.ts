@@ -21,13 +21,15 @@ const originalPath = (
   path: string,
   indexes: Readonly<Record<Collections, readonly number[]>>,
 ): string => {
-  const match = /^\/(values|nodes|candidateVerdicts|gateResolutions)\/(\d+)(.*)$/u.exec(path);
-  const collection = collectionName(match?.[1]);
-  if (!match || !collection) {
+  const members = path.split('/');
+  const collection = collectionName(members[1]);
+  const projectedIndex = Number(members[2]);
+  if (!collection || !Number.isSafeInteger(projectedIndex) || projectedIndex < 0) {
     return path;
   }
-  const projectedIndex = Number(match[2]);
-  return `/${collection}/${indexes[collection][projectedIndex] ?? projectedIndex}${match[3]}`;
+  const suffix = members.slice(3).join('/');
+  const base = `/${collection}/${indexes[collection][projectedIndex] ?? projectedIndex}`;
+  return suffix.length ? `${base}/${suffix}` : base;
 };
 
 const collectionName = (value: string | undefined): Collections | undefined =>

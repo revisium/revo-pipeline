@@ -399,6 +399,11 @@ try {
       import: './dist/index.js',
     },
   });
+  assert.equal(
+    await readFile(join(installedPackage, 'dist/spec/pipeline-occurrence-key.d.ts'), 'utf8'),
+    'export type PipelineOccurrenceKey = string;\n//# sourceMappingURL=pipeline-occurrence-key.d.ts.map',
+    'The packed occurrence-key declaration must retain the exact accepted string alias.',
+  );
   await linkPackage(join(root, 'node_modules'), consumerNodeModules, '@types/node');
 
   await writeFile(

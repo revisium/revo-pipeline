@@ -406,6 +406,93 @@ assert.match(
   /canonicalizeWorkingState\(state, context\);\s*return assemblePipelineReduction/u,
   'Reducer orchestration must canonicalize working state immediately before assembly.',
 );
+const reducerSrpDependencies = new Map<string, readonly string[]>([
+  [
+    'src/transition/command/classify-initialization-replay.ts',
+    [
+      '../../spec/index.js',
+      '../reduction/reduction-diagnostic-collector.js',
+      '../snapshot/snapshot-inspection.js',
+    ],
+  ],
+  [
+    'src/transition/command/classify-recorded-command.ts',
+    ['../../spec/index.js', '../snapshot/snapshot-inspection.js'],
+  ],
+  [
+    'src/transition/command/inspect-command-envelope.ts',
+    ['../capture-reducer-input.js', '../reduction/reduction-diagnostic-collector.js'],
+  ],
+  [
+    'src/transition/command/validate-command-target.ts',
+    [
+      '../../spec/index.js',
+      '../context/decision-context.js',
+      '../reduction/reduction-diagnostic-collector.js',
+      '../snapshot/snapshot-inspection.js',
+    ],
+  ],
+  [
+    'src/transition/reduction/apply-working-decision.ts',
+    [
+      '../../errors/index.js',
+      '../context/decision-context.js',
+      './apply-activation-decision.js',
+      './apply-selection-decision.js',
+      './apply-terminal-decision.js',
+      './reduction-diagnostic-collector.js',
+      './working-pipeline-state.js',
+    ],
+  ],
+  [
+    'src/transition/reduction/decide-working-pipeline.ts',
+    [
+      '../../errors/index.js',
+      '../context/decision-context.js',
+      '../decide-validated.js',
+      '../evaluation/validate-fact-causality.js',
+      '../facts/decision-fault-collector.js',
+      '../facts/validate-pipeline-facts.js',
+      './project-working-facts.js',
+      './reduction-diagnostic-collector.js',
+      './working-pipeline-state.js',
+    ],
+  ],
+  [
+    'src/transition/snapshot/validate-task-value-source.ts',
+    ['../../spec/index.js', '../reduction/reduction-diagnostic-collector.js'],
+  ],
+  [
+    'src/transition/snapshot/validate-gate-value-source.ts',
+    [
+      '../../spec/index.js',
+      '../reduction/reduction-diagnostic-collector.js',
+      './snapshot-inspection.js',
+    ],
+  ],
+  [
+    'src/transition/snapshot/validate-snapshot-phase.ts',
+    [
+      '../../errors/index.js',
+      '../reduction/reduction-diagnostic-collector.js',
+      './snapshot-inspection.js',
+    ],
+  ],
+]);
+assert.deepEqual(
+  sourceModules
+    .map((module) => module.path)
+    .filter((path) => reducerSrpDependencies.has(path))
+    .sort(),
+  [...reducerSrpDependencies.keys()].sort(),
+  'Reducer SRP helper inventory drift.',
+);
+for (const [path, expected] of reducerSrpDependencies) {
+  const dependencies = [...sourceOf(path).matchAll(/\bfrom\s+['"](\.[^'"]+)['"]/gu)]
+    .map((match) => match[1]!)
+    .sort();
+  assert.deepEqual(dependencies, [...expected].sort(), `Reducer SRP helper DAG drift: ${path}`);
+}
 
 const compiledIntegrityPaths = sourceModules
   .map((module) => module.path)

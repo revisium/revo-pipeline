@@ -2,6 +2,8 @@ import type { PipelineSnapshotNode, PipelineValueRecord } from '../../spec/index
 import type { DecisionContext } from '../context/decision-context.js';
 import type { ReductionDiagnosticCollector } from '../reduction/reduction-diagnostic-collector.js';
 import type { SnapshotInspection } from './snapshot-inspection.js';
+import { validateGateValueSource } from './validate-gate-value-source.js';
+import { validateTaskValueSource } from './validate-task-value-source.js';
 
 export const validateSnapshotProvenance = (
   inspection: SnapshotInspection,
@@ -67,51 +69,11 @@ const validateValueSource = (
     );
     return;
   }
-  if (!sourceNode) {
-    faults.add('SNAPSHOT_PREMATURE', `${path}/source`, 'Snapshot value source is not completed.');
+  if (source.kind === 'taskOutcome') {
+    validateTaskValueSource(sourceNode, path, faults);
     return;
   }
-  if (source.kind === 'taskOutcome') {
-    if (sourceNode.node.state !== 'terminal') {
-      faults.add('SNAPSHOT_PREMATURE', `${path}/source`, 'Snapshot task source is not completed.');
-      return;
-    }
-    if (sourceNode.node.outcome !== 'completed') {
-      faults.add(
-        'SNAPSHOT_OUTCOME',
-        `/snapshot/nodes/${sourceNode.index}/outcome`,
-        'Task source outcome is invalid.',
-      );
-    }
-  }
-  if (source.kind === 'humanGateResolution') {
-    const resolution = snapshot.gateResolutions.find(
-      (item) => item.occurrence.nodeKey === source.occurrence.nodeKey,
-    );
-    if (!resolution) {
-      faults.add('SNAPSHOT_RESOLUTION', `${path}/source`, 'Gate source resolution is missing.');
-    } else if (
-      sourceNode.node.state === 'retired' &&
-      (snapshot.phase !== 'terminal' ||
-        sourceNode.node.terminal.occurrence.nodeKey !== snapshot.terminal.occurrence.nodeKey ||
-        sourceNode.node.terminal.outcome !== snapshot.terminal.outcome)
-    ) {
-      faults.add(
-        'SNAPSHOT_PHASE',
-        `/snapshot/nodes/${sourceNode.index}`,
-        'Retired gate source is invalid.',
-      );
-    } else if (
-      sourceNode.node.state === 'terminal' &&
-      sourceNode.node.outcome !== resolution.resolution
-    ) {
-      faults.add(
-        'SNAPSHOT_OUTCOME',
-        `/snapshot/nodes/${sourceNode.index}/outcome`,
-        'Gate source outcome is invalid.',
-      );
-    }
-  }
+  validateGateValueSource(sourceNode, source.occurrence.nodeKey, path, snapshot, faults);
 };
 
 const inspectEvidence = (

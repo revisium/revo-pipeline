@@ -1,9 +1,9 @@
 import { isValidKey, isValidSemanticName } from '../../policy/index.js';
 import type { PipelineCommand, PipelineValueFact } from '../../spec/index.js';
-import { captureReducerInput } from '../capture-reducer-input.js';
 import type { DecisionContext } from '../context/decision-context.js';
 import type { ReductionDiagnosticCollector } from '../reduction/reduction-diagnostic-collector.js';
 import type { CommandInspection } from './command-inspection.js';
+import { inspectCommandEnvelope } from './inspect-command-envelope.js';
 import { inspectCommandValues } from './inspect-command-values.js';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -16,43 +16,11 @@ export const inspectPipelineCommand = (
   context: DecisionContext,
   faults: ReductionDiagnosticCollector,
 ): CommandInspection | undefined => {
-  const value = captureReducerInput(input, '/command', faults);
-  if (value === undefined || faults.hasFaults) {
+  const envelope = inspectCommandEnvelope(input, faults);
+  if (!envelope || faults.hasFaults) {
     return undefined;
   }
-  if (
-    !isRecord(value) ||
-    value['schemaVersion'] !== 1 ||
-    !['init', 'taskOutcome', 'consensusVerdict', 'humanGateResolution'].includes(
-      String(value['kind']),
-    )
-  ) {
-    faults.add('COMMAND_SCHEMA', '/command', 'Pipeline command shape is invalid.');
-    return undefined;
-  }
-  const kind = value['kind'];
-  const fields =
-    kind === 'init'
-      ? ['kind', 'schemaVersion', 'values']
-      : kind === 'taskOutcome'
-        ? ['kind', 'occurrence', 'outcome', 'schemaVersion', 'values']
-        : kind === 'consensusVerdict'
-          ? ['candidate', 'kind', 'occurrence', 'schemaVersion', 'verdict']
-          : ['kind', 'occurrence', 'resolution', 'schemaVersion', 'values'];
-  if (!exact(value, fields)) {
-    faults.add('COMMAND_SCHEMA', '/command', 'Pipeline command fields are invalid.');
-    return undefined;
-  }
-  const needsValues = kind === 'init' || kind === 'taskOutcome' || kind === 'humanGateResolution';
-  if (needsValues && !Array.isArray(value['values'])) {
-    faults.add('COMMAND_SCHEMA', '/command/values', 'Pipeline command values are invalid.');
-    return undefined;
-  }
-  const values = needsValues && Array.isArray(value['values']) ? value['values'] : [];
-  if (values.length > 128) {
-    faults.add('COMMAND_LIMIT', '/command/values', 'Command value limit exceeded.');
-    return undefined;
-  }
+  const { kind, value, values } = envelope;
   const normalized = inspectCommandValues(values, context, faults);
   if (kind === 'taskOutcome' && value['outcome'] !== 'completed' && normalized.length > 0) {
     faults.add(

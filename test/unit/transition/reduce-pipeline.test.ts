@@ -241,6 +241,21 @@ describe('reducePipeline', () => {
     ).toMatchObject({ ok: false, faults: [{ code: 'COMMAND_TYPE' }] });
   });
 
+  test('preserves the exact shape diagnostic for an unknown command kind', () => {
+    const command: PipelineCommand = { schemaVersion: 1, kind: 'init', values: [] };
+    Object.defineProperty(command, 'kind', { enumerable: true, value: 'unknown' });
+    expect(reducePipeline(pipeline(), initial(), command)).toEqual({
+      ok: false,
+      faults: [
+        {
+          code: 'COMMAND_SCHEMA',
+          path: '/command',
+          message: 'Pipeline command shape is invalid.',
+        },
+      ],
+    });
+  });
+
   test('rejects value production for a non-completed task outcome', () => {
     const initialized = reducePipeline(pipeline(), initial(), {
       schemaVersion: 1,
@@ -721,11 +736,19 @@ describe('reducePipeline', () => {
     const command: PipelineCommand = { schemaVersion: 1, kind: 'init', values: [] };
     Reflect.deleteProperty(command, 'kind');
     const reduced = reducePipeline(twoFactPipeline(), snapshot, command);
-    expect(reduced).toMatchObject({
+    expect(reduced).toEqual({
       ok: false,
       faults: [
-        { code: 'SNAPSHOT_SCHEMA', path: '/snapshot' },
-        { code: 'COMMAND_SCHEMA', path: '/command' },
+        {
+          code: 'SNAPSHOT_SCHEMA',
+          path: '/snapshot',
+          message: 'Pipeline snapshot shape is invalid.',
+        },
+        {
+          code: 'COMMAND_SCHEMA',
+          path: '/command',
+          message: 'Pipeline command shape is invalid.',
+        },
       ],
     });
   });

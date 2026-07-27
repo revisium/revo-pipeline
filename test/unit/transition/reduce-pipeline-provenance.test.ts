@@ -72,16 +72,28 @@ describe('reducePipeline value provenance prerequisites', () => {
       fact: { key: 'value', value: 'recorded' },
       source: { kind: 'taskOutcome' as const, occurrence },
     };
-    expect(reducePipeline(pipeline, { ...active, values: [value] }, replayInit)).toMatchObject({
+    expect(reducePipeline(pipeline, { ...active, values: [value] }, replayInit)).toEqual({
       ok: false,
-      faults: [{ code: 'SNAPSHOT_PREMATURE', path: '/snapshot/values/0/source' }],
+      faults: [
+        {
+          code: 'SNAPSHOT_PREMATURE',
+          path: '/snapshot/values/0/source',
+          message: 'Snapshot task source is not completed.',
+        },
+      ],
     });
-    expect(
-      reducePipeline(pipeline, { ...active, values: [value], nodes: [] }, replayInit),
-    ).toMatchObject({
-      ok: false,
-      faults: [{ code: 'SNAPSHOT_PREMATURE', path: '/snapshot/values/0/source' }],
-    });
+    expect(reducePipeline(pipeline, { ...active, values: [value], nodes: [] }, replayInit)).toEqual(
+      {
+        ok: false,
+        faults: [
+          {
+            code: 'SNAPSHOT_PREMATURE',
+            path: '/snapshot/values/0/source',
+            message: 'Snapshot value source is not completed.',
+          },
+        ],
+      },
+    );
     expect(
       reducePipeline(
         pipeline,

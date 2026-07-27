@@ -20,11 +20,19 @@ export const deriveForkRelation = (
   }
   const entry = branch.entry === nodeKey;
   const exit = branch.exit === nodeKey;
+  let role: 'entryExit' | 'entry' | 'exit' | 'member' = 'member';
+  if (entry && exit) {
+    role = 'entryExit';
+  } else if (entry) {
+    role = 'entry';
+  } else if (exit) {
+    role = 'exit';
+  }
   return {
     kind: 'branch',
     forkNodeKey: region.fork,
     joinNodeKey: region.join,
     branch: branch.name,
-    role: entry && exit ? 'entryExit' : entry ? 'entry' : exit ? 'exit' : 'member',
+    role,
   };
 };

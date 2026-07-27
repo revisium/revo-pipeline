@@ -49,29 +49,25 @@ export const canonicalizePipelineSnapshot = (
     snapshot: canonical,
     sourceIndexes: {
       values: values.map(
-        (record) =>
-          inspection.sourceIndexes.values[
-            snapshot.values.findIndex((candidate) => candidate === record)
-          ] ?? -1,
+        (record) => inspection.sourceIndexes.values[referenceIndex(snapshot.values, record)] ?? -1,
       ),
       nodes: nodes.map(
-        (record) =>
-          inspection.sourceIndexes.nodes[
-            snapshot.nodes.findIndex((candidate) => candidate === record)
-          ] ?? -1,
+        (record) => inspection.sourceIndexes.nodes[referenceIndex(snapshot.nodes, record)] ?? -1,
       ),
       candidateVerdicts: candidateVerdicts.map(
         (record) =>
           inspection.sourceIndexes.candidateVerdicts[
-            snapshot.candidateVerdicts.findIndex((candidate) => candidate === record)
+            referenceIndex(snapshot.candidateVerdicts, record)
           ] ?? -1,
       ),
       gateResolutions: gateResolutions.map(
         (record) =>
           inspection.sourceIndexes.gateResolutions[
-            snapshot.gateResolutions.findIndex((candidate) => candidate === record)
+            referenceIndex(snapshot.gateResolutions, record)
           ] ?? -1,
       ),
     },
   };
 };
+
+const referenceIndex = <T>(values: readonly T[], value: T): number => values.lastIndexOf(value);
