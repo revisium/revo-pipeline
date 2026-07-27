@@ -1109,14 +1109,14 @@ test.each([
   },
   {
     name: 'reorders action and wait precedence',
-    path: 'src/transition/decide-pipeline.ts',
+    path: 'src/transition/decide-validated.ts',
     code: 'GRAPH_KERNEL_IDENTITY_FLOW',
     from:
-      '    findFirstAction(facts, context) ??\n' +
-      "    findFirstWait(facts, context) ?? { kind: 'noop', reason: 'quiescent' }",
+      '    : (findFirstAction(facts, context) ??\n' +
+      "        findFirstWait(facts, context) ?? { kind: 'noop', reason: 'quiescent' });",
     to:
-      '    findFirstWait(facts, context) ??\n' +
-      "    findFirstAction(facts, context) ?? { kind: 'noop', reason: 'quiescent' }",
+      '    : (findFirstWait(facts, context) ??\n' +
+      "        findFirstAction(facts, context) ?? { kind: 'noop', reason: 'quiescent' });",
   },
   {
     name: 'uses locale ordering for fork targets',
@@ -1316,21 +1316,21 @@ test.each([
   },
   {
     name: 'passes distinct context to terminal scan',
-    path: 'src/transition/decide-pipeline.ts',
+    path: 'src/transition/decide-validated.ts',
     code: 'GRAPH_KERNEL_IDENTITY_FLOW',
     from: 'findReachedTerminals(facts, context)',
     to: 'findReachedTerminals(facts, buildDecisionContext(compiled))',
   },
   {
     name: 'passes distinct context to action scan',
-    path: 'src/transition/decide-pipeline.ts',
+    path: 'src/transition/decide-validated.ts',
     code: 'GRAPH_KERNEL_IDENTITY_FLOW',
     from: 'findFirstAction(facts, context)',
     to: 'findFirstAction(facts, buildDecisionContext(compiled))',
   },
   {
     name: 'passes distinct context to wait scan',
-    path: 'src/transition/decide-pipeline.ts',
+    path: 'src/transition/decide-validated.ts',
     code: 'GRAPH_KERNEL_IDENTITY_FLOW',
     from: 'findFirstWait(facts, context)',
     to: 'findFirstWait(facts, buildDecisionContext(compiled))',
@@ -1411,7 +1411,7 @@ test.each([
   },
   {
     name: 'promotes action before terminal',
-    path: 'src/transition/decide-pipeline.ts',
+    path: 'src/transition/decide-validated.ts',
     code: 'GRAPH_KERNEL_IDENTITY_FLOW',
     from: '  const terminal = terminals[0];',
     to:

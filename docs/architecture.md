@@ -8,10 +8,11 @@ facts.
 PipelineDefinition --compilePipeline--> CompiledPipeline
 unknown JSON --decodeCompiledPipeline--> CompiledPipelineDecoding
 CompiledPipeline + PipelineFacts --decidePipeline--> PipelineDecision
+CompiledPipeline + PipelineSnapshot + PipelineCommand --reducePipeline--> PipelineReduction
 ```
 
 The Accepted MVP API is shipped from the single curated root: `definePipeline`,
-`compilePipeline`, `decidePipeline`, `decodeCompiledPipeline`, and exactly 66 readonly contract types. Internal
+`compilePipeline`, `decidePipeline`, `decodeCompiledPipeline`, `reducePipeline`, and exactly 86 readonly contract types. Internal
 policy, graph, compiled-data validation, and decoder helpers are not exported.
 Fork/join readiness, consensus, and human-gate decisions are calculated exclusively
 from compiled topology and the supplied portable fact snapshot.
@@ -29,10 +30,20 @@ model/profile/prompt/workspace/provider binding, or host lifecycle. It never acc
 reads durable state, maps it to portable facts, atomically applies a decision, and reloads
 after conflicts. That host work is deliberately outside this package.
 
-The diagnostic decoder and its sole private inspector are shipped. The Accepted pure
-reducer remains unimplemented. PR7 may add `reducePipeline`
-and twenty reducer types, reaching exactly five root values and 86 types. Acceptance is
-not shipment: the current root remains exactly four values and 66 types.
+The diagnostic decoder and pure reducer are shipped. Reduction adds twenty readonly
+contract types, reaching exactly five root values and 86 types.
+Compiled input admits at most 128 distinct fact keys, so a valid public reduction can
+reach but cannot exceed 128 source-owned values without first colliding with an existing
+owner. A live pre-mutation prospective-count guard remains mandatory and is protected by
+an AST proof against bypass, decoys, and off-by-one drift.
+Command precedence is recorded identity replay/conflict, then target lifecycle, then
+prospective source ownership and value-count bounds. Consequently an omitted target
+reports `COMMAND_STATE` even when its proposed value collides, while an already recorded
+identity retains replay/conflict precedence.
+A terminal task or gate necessarily carries its recorded command identity, so replay or
+conflict remains observable before lifecycle; completed tasks cannot be retired by
+terminal closure. Omitted future task/gate targets and a retired unresolved gate are the
+publicly reachable `COMMAND_STATE` cross-source collision cases.
 
 One reducer occurrence is one complete finite DAG traversal. Occurrence keys isolate
 independent executions; bounded interior rework is compile-time, forward-only unrolling

@@ -17,6 +17,7 @@ test('ships exactly the accepted explicit source and runtime root manifest', asy
     'decidePipeline',
     'decodeCompiledPipeline',
     'definePipeline',
+    'reducePipeline',
   ]);
 });
 

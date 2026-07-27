@@ -1,18 +1,19 @@
 # @revisium/revo-pipeline
 
-Portable pipeline definitions, deterministic compilation, and pure semantic decisions
-for Revo.
+Portable pipeline definitions, deterministic compilation, pure semantic decisions, and
+pure snapshot reduction for Revo.
 
 The MVP root API is implemented and package-ready, but this `0.0.0` package is not
 published. It exports exactly `definePipeline`, `compilePipeline`, `decidePipeline`,
-`decodeCompiledPipeline`, and
-the 66 Accepted readonly contract types, including safe unknown-JSON decoding. No default export, alias, subpath,
+`decodeCompiledPipeline`, `reducePipeline`, and
+the 86 Accepted readonly contract types, including safe unknown-JSON decoding. No default export, alias, subpath,
 policy helper, graph helper, or runtime dependency is public.
 
 ```text
 PipelineDefinition --compilePipeline--> CompiledPipeline
 unknown JSON --decodeCompiledPipeline--> CompiledPipelineDecoding
 CompiledPipeline + PipelineFacts --decidePipeline--> PipelineDecision
+CompiledPipeline + PipelineSnapshot + PipelineCommand --reducePipeline--> PipelineReduction
 ```
 
 `definePipeline` preserves literal inference. Compilation produces recursively frozen,
@@ -27,6 +28,7 @@ import {
   decidePipeline,
   decodeCompiledPipeline,
   definePipeline,
+  reducePipeline,
 } from '@revisium/revo-pipeline';
 
 const definition = definePipeline({
@@ -58,6 +60,17 @@ if (!decoding.ok) {
   throw new Error(decoding.faults.map((fault) => fault.message).join('\n'));
 }
 const pipeline = decoding.pipeline;
+const snapshot = {
+  schemaVersion: 1 as const,
+  occurrenceKey: 'example',
+  phase: 'uninitialized' as const,
+  values: [] as const,
+  nodes: [] as const,
+  candidateVerdicts: [] as const,
+  gateResolutions: [] as const,
+  terminal: null,
+};
+reducePipeline(pipeline, snapshot, { schemaVersion: 1, kind: 'init', values: [] });
 const emptyFacts = { values: [], nodes: [], candidateVerdicts: [], gateResolutions: [] };
 
 decidePipeline(pipeline, emptyFacts);
@@ -92,8 +105,9 @@ retries, resume, authorization, queues, agents, scripts, and atomic application 
 returned decision. `@revisium/revo-run` can consume the public `CompiledPipeline`,
 `PipelineFacts`, and `PipelineDecision` types through a one-way dependency.
 
-The diagnostic decoder is shipped and is the safe boundary for unknown JSON. The
-Accepted pure snapshot reducer remains unimplemented for PR7.
+The diagnostic decoder is the safe boundary for unknown compiled JSON. The pure reducer
+inspects hostile snapshot and command inputs, applies or replays one compound command,
+and drains deterministic decisions to a wait or terminal without owning persistence.
 
 See the Accepted [definition contract](./docs/specs/pipeline-definition-v1.spec.md),
 [transition contract](./docs/specs/pipeline-transition-v1.spec.md),
@@ -113,6 +127,6 @@ corepack pnpm verify
 
 `verify` covers formatting, strict TypeScript, type-aware linting, unit/coverage and
 architecture proof, declarations/build, and one exact packed tarball reused for
-contents, publint, ATTW, isolated ESM/strict TypeScript consumers, all 66 public types,
+contents, publint, ATTW, isolated ESM/strict TypeScript consumers, all 86 public types,
 and runtime/type deep-import denial. Publishing, tagging, releasing, or merging requires
 separate approval.

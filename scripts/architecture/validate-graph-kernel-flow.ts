@@ -1741,7 +1741,8 @@ const validateDecisionFlow = (
     compactSource(transitionBarrel.sourceFile.text) !==
       compactSource(
         "export { decidePipeline } from './decide-pipeline.js';\n" +
-          "export { decodeCompiledPipeline } from './decode-compiled-pipeline.js';",
+          "export { decodeCompiledPipeline } from './decode-compiled-pipeline.js';\n" +
+          "export { reducePipeline } from './reduce-pipeline.js';",
       ) ||
     privateBarrel
   ) {
@@ -1769,9 +1770,7 @@ const validateDecisionFlow = (
   for (const [consumer, contextArgument] of [
     ['validatePipelineFacts', 1],
     ['validateFactCausality', 1],
-    ['findReachedTerminals', 1],
-    ['findFirstAction', 1],
-    ['findFirstWait', 1],
+    ['decideValidated', 1],
   ] as const) {
     const calls = directCalls(decide, consumer);
     if (calls.length !== 1 || calls[0]?.arguments[contextArgument]?.getText() !== 'context') {
@@ -3743,21 +3742,7 @@ const validateSemanticResolution = (
         'validateFactCausality',
         'GRAPH_KERNEL_IDENTITY_FLOW',
       ],
-      [
-        'src/transition/evaluation/find-reached-terminals.ts',
-        'findReachedTerminals',
-        'GRAPH_KERNEL_IDENTITY_FLOW',
-      ],
-      [
-        'src/transition/evaluation/find-first-action.ts',
-        'findFirstAction',
-        'GRAPH_KERNEL_IDENTITY_FLOW',
-      ],
-      [
-        'src/transition/evaluation/find-first-wait.ts',
-        'findFirstWait',
-        'GRAPH_KERNEL_IDENTITY_FLOW',
-      ],
+      ['src/transition/decide-validated.ts', 'decideValidated', 'GRAPH_KERNEL_IDENTITY_FLOW'],
     ] as const;
     const decisionResolvedCalls = decisionTargets.map(([path, name]) => {
       const target = findFunction(modules, path, name);
@@ -3806,10 +3791,6 @@ const validateSemanticResolution = (
         ? decisionOwner.body.statements
         : undefined;
     const decisionGuard = decisionStatements?.[1];
-    const terminalPromotion = decisionStatements?.find(
-      (statement): statement is IfStatement =>
-        ts.isIfStatement(statement) && exactPropertyPath(statement.expression, ['terminal']),
-    );
     const finalReturn = decisionStatements?.at(-1);
     if (
       !decisionStatements ||
@@ -3823,12 +3804,63 @@ const validateSemanticResolution = (
       decisionGuard.expression.operator !== SyntaxKind.ExclamationToken ||
       !exactPropertyPath(decisionGuard.expression.operand, ['compiled', 'ok']) ||
       topLevelStatement(decisionOwner, contextCall) !== decisionStatements[2] ||
-      !terminalPromotion ||
       !finalReturn ||
       !ts.isReturnStatement(finalReturn) ||
-      terminalPromotion.getStart() >= finalReturn.getStart()
+      !finalReturn.expression ||
+      !ts.isCallExpression(finalReturn.expression) ||
+      finalReturn.expression.expression.getText() !== 'decideValidated'
     ) {
       add(violations, 'GRAPH_KERNEL_TRUST_DOMINANCE', decisionModule, decisionOwner);
+    }
+
+    const seamPath = 'src/transition/decide-validated.ts';
+    const seamModule = modules.find((module) => module.path === seamPath);
+    const seamOwner = findFunction(modules, seamPath, 'decideValidated');
+    const seamFacts = seamOwner?.parameters[0]?.name;
+    const seamContext = seamOwner?.parameters[1]?.name;
+    const seamFactsSymbol =
+      seamFacts && ts.isIdentifier(seamFacts)
+        ? resolvedSymbolId(project.checker, seamFacts)
+        : undefined;
+    const seamContextSymbol =
+      seamContext && ts.isIdentifier(seamContext)
+        ? resolvedSymbolId(project.checker, seamContext)
+        : undefined;
+    const seamTargets = [
+      ['src/transition/evaluation/find-reached-terminals.ts', 'findReachedTerminals'],
+      ['src/transition/evaluation/find-first-action.ts', 'findFirstAction'],
+      ['src/transition/evaluation/find-first-wait.ts', 'findFirstWait'],
+    ] as const;
+    const seamCalls = seamTargets.map(([path, name]) => {
+      const target = findFunction(modules, path, name);
+      return seamOwner && target ? resolvedCalls(project.checker, seamOwner, target) : [];
+    });
+    const seamCallValid = (call: CallExpression | undefined): boolean => {
+      const [factsArgument, contextArgument] = call?.arguments ?? [];
+      return (
+        factsArgument !== undefined &&
+        contextArgument !== undefined &&
+        ts.isIdentifier(factsArgument) &&
+        ts.isIdentifier(contextArgument) &&
+        seamFactsSymbol !== undefined &&
+        seamContextSymbol !== undefined &&
+        resolvedSymbolId(project.checker, factsArgument) === seamFactsSymbol &&
+        resolvedSymbolId(project.checker, contextArgument) === seamContextSymbol
+      );
+    };
+    const seamPositions = seamCalls.map(
+      (resolvedSeamCalls) => resolvedSeamCalls[0]?.getStart() ?? -1,
+    );
+    if (
+      !seamModule ||
+      !seamOwner ||
+      seamCalls.some(
+        (resolvedSeamCalls) =>
+          resolvedSeamCalls.length !== 1 || !seamCallValid(resolvedSeamCalls[0]),
+      ) ||
+      seamPositions.some((position, index) => index > 0 && position <= seamPositions[index - 1]!)
+    ) {
+      add(violations, 'GRAPH_KERNEL_IDENTITY_FLOW', seamModule, seamOwner);
     }
 
     const builderPath = 'src/transition/context/build-decision-context.ts';

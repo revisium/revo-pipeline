@@ -260,21 +260,30 @@ decision appliers -> working state + fork-relation derivation
 assembly -> working state + diagnostic collector
 ```
 
+Command application is an exact four-leaf partition behind
+`apply-pipeline-command.ts`: `apply-initialization.ts`, `apply-task-outcome.ts`,
+`apply-consensus-verdict.ts`, and `apply-human-gate-resolution.ts`. Decision application
+is an exact three-leaf partition behind `drain-pipeline.ts`:
+`apply-activation-decision.ts`, `apply-selection-decision.ts`, and
+`apply-terminal-decision.ts`. The executable architecture inventory and direct-import
+DAG probe fail closed on additions, removals, consolidation, or dependency drift.
+`canonicalize-working-state.ts` is the sole working-state ordering leaf and is called by
+the reducer immediately before assembly; the reducer façade does not own collection
+sorting or candidate-order policy.
+
 The inspector MUST NOT depend on public adapters. `decideValidated` MUST NOT depend on
 snapshot, command, reducer, effects, or persistence. Snapshot inspection MUST NOT depend
 on command/reduction; command inspection MUST NOT depend on application; appliers MUST
 NOT depend on drain/assembly. Private leaves MUST NOT import a barrel or root, and type
 and value cycles remain forbidden.
 
-The current root allowlist remains exactly `definePipeline`, `compilePipeline`,
-`decidePipeline` and 63 types. PR6 may additionally expose
-`decodeCompiledPipeline`, `CompiledPipelineDecoding`, `DecodeFault`, and
-`DecodeFaultCode`. PR7 may additionally expose `reducePipeline` and exactly the twenty
-reducer types in the reducer specification. Inspection results, validated contexts,
+The shipped root allowlist is exactly `definePipeline`, `compilePipeline`,
+`decidePipeline`, `decodeCompiledPipeline`, `reducePipeline`, and 86 types, including
+exactly the twenty reducer types in the reducer specification. Inspection results, validated contexts,
 fact-path maps, working state, diagnostic collectors, `decideValidated`, and host DTOs
 MUST remain private.
 
-The exact planned new public type manifest is:
+The exact decoder-and-reducer public type addition manifest is:
 
 ```text
 CompiledPipelineDecoding

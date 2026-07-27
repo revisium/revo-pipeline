@@ -1,5 +1,5 @@
 export { compilePipeline, definePipeline } from './definition/index.js';
-export { decidePipeline, decodeCompiledPipeline } from './transition/index.js';
+export { decidePipeline, decodeCompiledPipeline, reducePipeline } from './transition/index.js';
 export type {
   ActivateDecision,
   ActivationCause,
@@ -43,6 +43,23 @@ export type {
   PipelineDefinition,
   PipelineFacts,
   PipelineNode,
+  PipelineCandidateVerdictRecord,
+  PipelineCommand,
+  PipelineCommandApplication,
+  PipelineEffect,
+  PipelineEffectBatch,
+  PipelineForkRelation,
+  PipelineGateResolutionRecord,
+  PipelineNodeOccurrence,
+  PipelineOccurrenceKey,
+  PipelineReductionStatus,
+  PipelineRetirement,
+  PipelineSnapshot,
+  PipelineSnapshotNode,
+  PipelineTerminal,
+  PipelineValueRecord,
+  PipelineValueSource,
+  PipelineWait,
   PipelineValueFact,
   QuorumConsensusPolicy,
   ResolutionName,
@@ -68,5 +85,8 @@ export type {
   DefinitionFaultCode,
   PipelineCompilation,
   PipelineDecision,
+  PipelineReduction,
+  PipelineReductionFault,
+  PipelineReductionFaultCode,
   RejectDecision,
 } from './errors/index.js';
