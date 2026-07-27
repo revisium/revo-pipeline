@@ -5,15 +5,30 @@ import {
   PIPELINE_LIMITS,
 } from '../../policy/index.js';
 import type { CompiledInspectionFaultCollector } from './compiled-inspection-fault-collector.js';
+import { inspectCompiledBranchFallback } from './inspect-compiled-branch-fallback.js';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const scalarType = (value: unknown): string =>
-  value === null ? 'null' : typeof value === 'boolean' ? 'boolean' : typeof value;
+const scalarType = (value: unknown): string => {
+  if (value === null) {
+    return 'null';
+  }
+  return typeof value;
+};
 
 const schema = (path: string, message: string, faults: CompiledInspectionFaultCollector): void =>
   faults.add({ code: 'DECODE_SCHEMA', path, message });
+
+const predicateValues = (value: Record<string, unknown>): readonly unknown[] | undefined => {
+  if (Object.keys(value).length !== 2) {
+    return undefined;
+  }
+  if (value['op'] === 'equals') {
+    return 'value' in value ? [value['value']] : undefined;
+  }
+  return Array.isArray(value['values']) ? value['values'] : undefined;
+};
 
 const inspectWhen = (
   value: unknown,
@@ -25,14 +40,7 @@ const inspectWhen = (
     schema(path, 'Compiled branch predicate is invalid.', faults);
     return undefined;
   }
-  const values =
-    value['op'] === 'equals'
-      ? Object.keys(value).length === 2 && 'value' in value
-        ? [value['value']]
-        : undefined
-      : Object.keys(value).length === 2 && Array.isArray(value['values'])
-        ? value['values']
-        : undefined;
+  const values = predicateValues(value);
   if (
     !values ||
     values.length === 0 ||
@@ -44,7 +52,7 @@ const inspectWhen = (
     schema(path, 'Compiled branch predicate values are invalid.', faults);
     return undefined;
   }
-  return values as readonly unknown[];
+  return values;
 };
 
 const identity = (value: unknown): string => {
@@ -78,76 +86,114 @@ const scalarCompare = (left: unknown, right: unknown): number => {
     : 0;
 };
 
+interface CaseInspectionState {
+  readonly domains: Set<string>;
+  readonly names: Set<string>;
+  previousName: string | undefined;
+}
+
+const inspectCaseOrder = (
+  name: unknown,
+  to: unknown,
+  casePath: string,
+  state: CaseInspectionState,
+  faults: CompiledInspectionFaultCollector,
+): void => {
+  if (typeof name !== 'string' || typeof to !== 'string') {
+    return;
+  }
+  if (state.names.has(name)) {
+    faults.add({
+      code: 'DECODE_REFERENCE',
+      path: `${casePath}/name`,
+      message: 'Compiled branch case name is duplicated.',
+    });
+  } else if (
+    state.previousName !== undefined &&
+    compareUnicodeCodePoints(state.previousName, name) > 0
+  ) {
+    faults.add({
+      code: 'DECODE_CANONICAL',
+      path: casePath,
+      message: 'Compiled branch cases are not in canonical order.',
+    });
+  }
+  state.names.add(name);
+  state.previousName = name;
+};
+
+const inspectCaseValues = (
+  entry: Record<string, unknown>,
+  factType: string | undefined,
+  whenPath: string,
+  state: CaseInspectionState,
+  faults: CompiledInspectionFaultCollector,
+): void => {
+  const values = inspectWhen(entry['when'], factType, whenPath, faults);
+  if (!values) {
+    return;
+  }
+  const identities = values.map(identity);
+  if (
+    new Set(identities).size !== identities.length ||
+    identities.some((domain) => state.domains.has(domain))
+  ) {
+    schema(whenPath, 'Compiled branch predicate domains must be disjoint.', faults);
+  }
+  const exceedsLimit = values.length > PIPELINE_LIMITS.definition.predicateValuesPerCase;
+  const unordered =
+    isRecord(entry['when']) &&
+    entry['when']['op'] === 'oneOf' &&
+    values.some(
+      (value, valueIndex) => valueIndex > 0 && scalarCompare(values[valueIndex - 1], value) > 0,
+    );
+  if (exceedsLimit || unordered) {
+    faults.add({
+      code: exceedsLimit ? 'DECODE_LIMIT' : 'DECODE_CANONICAL',
+      path: whenPath,
+      message: 'Compiled branch predicate values are not canonical.',
+    });
+  }
+  identities.forEach((domain) => state.domains.add(domain));
+};
+
+const inspectCase = (
+  entry: unknown,
+  index: number,
+  factType: string | undefined,
+  path: string,
+  state: CaseInspectionState,
+  faults: CompiledInspectionFaultCollector,
+): void => {
+  if (!isRecord(entry)) {
+    return;
+  }
+  const casePath = `${path}/cases/${index}`;
+  const name = entry['name'];
+  const to = entry['to'];
+  if (!isValidSemanticName(name)) {
+    schema(`${casePath}/name`, 'Compiled branch case name is invalid.', faults);
+  }
+  if (!isValidKey(to)) {
+    schema(`${casePath}/to`, 'Compiled branch case target is invalid.', faults);
+  }
+  inspectCaseOrder(name, to, casePath, state, faults);
+  inspectCaseValues(entry, factType, `${casePath}/when`, state, faults);
+};
+
 const inspectCases = (
   cases: readonly unknown[],
   factType: string | undefined,
   path: string,
   faults: CompiledInspectionFaultCollector,
 ): { readonly domains: ReadonlySet<string>; readonly names: ReadonlySet<string> } => {
-  const domains = new Set<string>();
-  const names = new Set<string>();
-  let previousName: string | undefined;
-  cases.forEach((entry, index) => {
-    if (isRecord(entry)) {
-      const casePath = `${path}/cases/${index}`;
-      const name = entry['name'];
-      const to = entry['to'];
-      if (!isValidSemanticName(name)) {
-        schema(`${casePath}/name`, 'Compiled branch case name is invalid.', faults);
-      }
-      if (!isValidKey(to)) {
-        schema(`${casePath}/to`, 'Compiled branch case target is invalid.', faults);
-      }
-      if (typeof name === 'string' && typeof to === 'string') {
-        if (names.has(name)) {
-          faults.add({
-            code: 'DECODE_REFERENCE',
-            path: `${casePath}/name`,
-            message: 'Compiled branch case name is duplicated.',
-          });
-        } else if (previousName !== undefined && compareUnicodeCodePoints(previousName, name) > 0) {
-          faults.add({
-            code: 'DECODE_CANONICAL',
-            path: casePath,
-            message: 'Compiled branch cases are not in canonical order.',
-          });
-        }
-        names.add(name);
-        previousName = name;
-      }
-      const whenPath = `${path}/cases/${index}/when`;
-      const values = inspectWhen(entry['when'], factType, whenPath, faults);
-      if (values) {
-        const identities = values.map(identity);
-        if (
-          new Set(identities).size !== identities.length ||
-          identities.some((domain) => domains.has(domain))
-        ) {
-          schema(whenPath, 'Compiled branch predicate domains must be disjoint.', faults);
-        }
-        if (
-          values.length > PIPELINE_LIMITS.definition.predicateValuesPerCase ||
-          (isRecord(entry['when']) &&
-            entry['when']['op'] === 'oneOf' &&
-            values.some(
-              (value, valueIndex) =>
-                valueIndex > 0 && scalarCompare(values[valueIndex - 1], value) > 0,
-            ))
-        ) {
-          faults.add({
-            code:
-              values.length > PIPELINE_LIMITS.definition.predicateValuesPerCase
-                ? 'DECODE_LIMIT'
-                : 'DECODE_CANONICAL',
-            path: whenPath,
-            message: 'Compiled branch predicate values are not canonical.',
-          });
-        }
-        identities.forEach((domain) => domains.add(domain));
-      }
-    }
-  });
-  return { domains, names };
+  const state: CaseInspectionState = {
+    domains: new Set<string>(),
+    names: new Set<string>(),
+    previousName: undefined,
+  };
+  cases.forEach((entry, index) => inspectCase(entry, index, factType, path, state, faults));
+  return state;
 };
 
 export const inspectCompiledBranchSchema = (
@@ -171,34 +217,5 @@ export const inspectCompiledBranchSchema = (
     });
   }
   const { domains, names } = inspectCases(cases, factType, path, faults);
-  const fallback = node['default'];
-  if (
-    fallback !== null &&
-    (!isRecord(fallback) ||
-      Object.keys(fallback).length !== 2 ||
-      !('name' in fallback) ||
-      !('to' in fallback))
-  ) {
-    schema(`${path}/default`, 'Compiled branch default is invalid.', faults);
-  } else if (isRecord(fallback)) {
-    const fallbackName = fallback['name'];
-    if (!isValidSemanticName(fallbackName) || names.has(fallbackName)) {
-      schema(`${path}/default/name`, 'Compiled branch default name is invalid.', faults);
-    }
-    if (!isValidKey(fallback['to'])) {
-      schema(`${path}/default/to`, 'Compiled branch default target is invalid.', faults);
-    }
-  }
-  if (factType === 'null' || factType === 'boolean') {
-    const fullyCovered =
-      (factType === 'null' && domains.has('null:')) ||
-      (factType === 'boolean' && domains.has('boolean:true') && domains.has('boolean:false'));
-    if ((fullyCovered && fallback !== null) || (!fullyCovered && fallback === null)) {
-      schema(
-        `${path}/default`,
-        'Compiled branch default does not match predicate coverage.',
-        faults,
-      );
-    }
-  }
+  inspectCompiledBranchFallback(node['default'], names, factType, domains, path, faults);
 };

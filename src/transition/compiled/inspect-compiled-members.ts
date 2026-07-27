@@ -6,31 +6,7 @@ import { inspectCompiledFacts } from './inspect-compiled-facts.js';
 import { inspectCompiledIndexes } from './inspect-compiled-indexes.js';
 import { inspectCompiledNodeMembers } from './inspect-compiled-node-members.js';
 import { inspectCompiledRegions } from './inspect-compiled-regions.js';
-
-const ROOT_FIELDS = [
-  'edges',
-  'entry',
-  'facts',
-  'forkRegions',
-  'incomingIndex',
-  'nodeIndex',
-  'nodes',
-  'outgoingIndex',
-  'schemaVersion',
-  'topologicalOrder',
-] as const;
-
-const COLLECTION_FIELDS = [
-  'edges',
-  'facts',
-  'forkRegions',
-  'incomingIndex',
-  'nodeIndex',
-  'nodes',
-  'outgoingIndex',
-  'topologicalOrder',
-] as const;
-const ROOT_FIELD_SET: ReadonlySet<string> = new Set(ROOT_FIELDS);
+import { inspectCompiledRootMembers } from './inspect-compiled-root-members.js';
 
 const NODE_KINDS = new Set([
   'branch',
@@ -47,38 +23,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const schema = (faults: CompiledInspectionFaultCollector, path: string, message: string): void =>
   faults.add({ code: 'DECODE_SCHEMA', path, message });
-
-const inspectRootShape = (
-  value: Record<string, unknown>,
-  faults: CompiledInspectionFaultCollector,
-): void => {
-  const keys = new Set(Object.keys(value));
-  for (const field of ROOT_FIELDS) {
-    if (!keys.has(field)) {
-      schema(faults, `/${field}`, 'Required compiled pipeline field is missing.');
-    }
-  }
-  for (const key of keys) {
-    if (!ROOT_FIELD_SET.has(key)) {
-      schema(
-        faults,
-        `/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`,
-        'Compiled pipeline field is not allowed.',
-      );
-    }
-  }
-  if (keys.has('schemaVersion') && value['schemaVersion'] !== 1) {
-    schema(faults, '/schemaVersion', 'Compiled pipeline schemaVersion must be 1.');
-  }
-  if (keys.has('entry') && typeof value['entry'] !== 'string') {
-    schema(faults, '/entry', 'Compiled pipeline entry must be a string.');
-  }
-  for (const field of COLLECTION_FIELDS) {
-    if (keys.has(field) && !Array.isArray(value[field])) {
-      schema(faults, `/${field}`, 'Compiled pipeline field must be an array.');
-    }
-  }
-};
 
 const inspectNodes = (
   nodes: readonly unknown[],
@@ -175,19 +119,7 @@ export const inspectCompiledMembers = (
   if (!isRecord(value)) {
     return false;
   }
-  inspectRootShape(value, faults);
-  const available = {
-    edges: Array.isArray(value['edges']) ? value['edges'] : undefined,
-    facts: Array.isArray(value['facts']) ? value['facts'] : undefined,
-    forkRegions: Array.isArray(value['forkRegions']) ? value['forkRegions'] : undefined,
-    incomingIndex: Array.isArray(value['incomingIndex']) ? value['incomingIndex'] : undefined,
-    nodeIndex: Array.isArray(value['nodeIndex']) ? value['nodeIndex'] : undefined,
-    nodes: Array.isArray(value['nodes']) ? value['nodes'] : undefined,
-    outgoingIndex: Array.isArray(value['outgoingIndex']) ? value['outgoingIndex'] : undefined,
-    topologicalOrder: Array.isArray(value['topologicalOrder'])
-      ? value['topologicalOrder']
-      : undefined,
-  };
+  const available = inspectCompiledRootMembers(value, undefined, faults);
   const factDeclarations = available.facts
     ? inspectCompiledFacts(available.facts, faults)
     : undefined;
@@ -208,28 +140,6 @@ export const inspectCompiledMembers = (
     faults,
   );
   inspectCompiledRegions(available.forkRegions, nodeKeys, faults);
-  if (available.topologicalOrder) {
-    available.topologicalOrder.forEach((key, index) => {
-      if (typeof key !== 'string') {
-        schema(faults, `/topologicalOrder/${index}`, 'Compiled topology key must be a string.');
-      } else if (nodeKeys !== undefined && !nodeKeys.has(key)) {
-        faults.add({
-          code: 'DECODE_REFERENCE',
-          path: `/topologicalOrder/${index}`,
-          message: 'Compiled topology key does not reference a node.',
-        });
-      }
-    });
-  }
-  const entry = value['entry'];
-  if (typeof entry === 'string' && !isValidKey(entry)) {
-    schema(faults, '/entry', 'Compiled pipeline entry is invalid.');
-  } else if (typeof entry === 'string' && nodeKeys !== undefined && !nodeKeys.has(entry)) {
-    faults.add({
-      code: 'DECODE_REFERENCE',
-      path: '/entry',
-      message: 'Compiled pipeline entry does not reference a node.',
-    });
-  }
+  inspectCompiledRootMembers(value, nodeKeys, faults, true);
   return !faults.hasFaults;
 };

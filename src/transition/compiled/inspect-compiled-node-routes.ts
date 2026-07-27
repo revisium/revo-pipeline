@@ -95,6 +95,79 @@ const namedRoutes = (
   });
 };
 
+const inspectBranchRoutes = (
+  node: Record<string, unknown>,
+  path: string,
+  nodeKeys: ReadonlySet<string> | undefined,
+  factDeclarations: FactDeclarations | undefined,
+  faults: CompiledInspectionFaultCollector,
+): void => {
+  inspectCompiledBranchSchema(node, path, factDeclarations?.types, faults);
+  if (!isValidKey(node['fact'])) {
+    faults.add({
+      code: 'DECODE_SCHEMA',
+      path: `${path}/fact`,
+      message: 'Compiled branch fact is invalid.',
+    });
+  } else if (factDeclarations?.complete === true && !factDeclarations.keys.has(node['fact'])) {
+    faults.add({
+      code: 'DECODE_REFERENCE',
+      path: `${path}/fact`,
+      message: 'Compiled branch fact is not declared.',
+    });
+  }
+  namedRoutes(
+    node['cases'],
+    `${path}/cases`,
+    'name',
+    ['name', 'to', 'when'],
+    nodeKeys,
+    faults,
+    false,
+  );
+  if (node['default'] !== null && isRecord(node['default'])) {
+    reference(node['default']['to'], `${path}/default/to`, nodeKeys, faults);
+  }
+};
+
+const inspectForkRoutes = (
+  node: Record<string, unknown>,
+  path: string,
+  nodeKeys: ReadonlySet<string> | undefined,
+  faults: CompiledInspectionFaultCollector,
+): void => {
+  reference(node['join'], `${path}/join`, nodeKeys, faults);
+  namedRoutes(
+    node['branches'],
+    `${path}/branches`,
+    'name',
+    ['entry', 'exit', 'name'],
+    nodeKeys,
+    faults,
+  );
+  if (!Array.isArray(node['branches'])) {
+    return;
+  }
+  if (node['branches'].length < 2) {
+    faults.add({
+      code: 'DECODE_SCHEMA',
+      path: `${path}/branches`,
+      message: 'Compiled fork must declare at least two branches.',
+    });
+  } else if (node['branches'].length > PIPELINE_LIMITS.definition.forkBranchesPerNode) {
+    faults.add({
+      code: 'DECODE_LIMIT',
+      path: `${path}/branches`,
+      message: 'Compiled fork branch count is outside bounds.',
+    });
+  }
+  node['branches'].forEach((branch, index) => {
+    if (isRecord(branch)) {
+      reference(branch['exit'], `${path}/branches/${index}/exit`, nodeKeys, faults);
+    }
+  });
+};
+
 export const inspectCompiledNodeRoutes = (
   node: Record<string, unknown>,
   path: string,
@@ -103,63 +176,10 @@ export const inspectCompiledNodeRoutes = (
   faults: CompiledInspectionFaultCollector,
 ): void => {
   if (node['kind'] === 'branch') {
-    inspectCompiledBranchSchema(node, path, factDeclarations?.types, faults);
-    if (!isValidKey(node['fact'])) {
-      faults.add({
-        code: 'DECODE_SCHEMA',
-        path: `${path}/fact`,
-        message: 'Compiled branch fact is invalid.',
-      });
-    } else if (factDeclarations?.complete === true && !factDeclarations.keys.has(node['fact'])) {
-      faults.add({
-        code: 'DECODE_REFERENCE',
-        path: `${path}/fact`,
-        message: 'Compiled branch fact is not declared.',
-      });
-    }
-    namedRoutes(
-      node['cases'],
-      `${path}/cases`,
-      'name',
-      ['name', 'to', 'when'],
-      nodeKeys,
-      faults,
-      false,
-    );
-    if (node['default'] !== null && isRecord(node['default'])) {
-      reference(node['default']['to'], `${path}/default/to`, nodeKeys, faults);
-    }
+    inspectBranchRoutes(node, path, nodeKeys, factDeclarations, faults);
   }
   if (node['kind'] === 'fork') {
-    reference(node['join'], `${path}/join`, nodeKeys, faults);
-    namedRoutes(
-      node['branches'],
-      `${path}/branches`,
-      'name',
-      ['entry', 'exit', 'name'],
-      nodeKeys,
-      faults,
-    );
-    if (Array.isArray(node['branches'])) {
-      if (node['branches'].length < 2) {
-        faults.add({
-          code: 'DECODE_SCHEMA',
-          path: `${path}/branches`,
-          message: 'Compiled fork must declare at least two branches.',
-        });
-      } else if (node['branches'].length > PIPELINE_LIMITS.definition.forkBranchesPerNode) {
-        faults.add({
-          code: 'DECODE_LIMIT',
-          path: `${path}/branches`,
-          message: 'Compiled fork branch count is outside bounds.',
-        });
-      }
-      node['branches'].forEach((branch, index) => {
-        if (isRecord(branch)) {
-          reference(branch['exit'], `${path}/branches/${index}/exit`, nodeKeys, faults);
-        }
-      });
-    }
+    inspectForkRoutes(node, path, nodeKeys, faults);
   }
   if (node['kind'] === 'humanGate') {
     namedRoutes(

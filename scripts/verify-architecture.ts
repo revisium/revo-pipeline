@@ -325,6 +325,7 @@ assert.deepEqual(
     'src/transition/compiled/compiled-inspection.ts',
     'src/transition/compiled/derive-expected-compiled-semantics.ts',
     'src/transition/compiled/expected-compiled-semantics.ts',
+    'src/transition/compiled/inspect-compiled-branch-fallback.ts',
     'src/transition/compiled/inspect-compiled-branch-schema.ts',
     'src/transition/compiled/inspect-compiled-edges.ts',
     'src/transition/compiled/inspect-compiled-facts.ts',
@@ -335,6 +336,7 @@ assert.deepEqual(
     'src/transition/compiled/inspect-compiled-node-routes.ts',
     'src/transition/compiled/inspect-compiled-outcomes.ts',
     'src/transition/compiled/inspect-compiled-regions.ts',
+    'src/transition/compiled/inspect-compiled-root-members.ts',
     'src/transition/compiled/snapshot-compiled-input.ts',
     'src/transition/compiled/verify-serialized-indexes.ts',
     'src/transition/compiled/verify-serialized-topology.ts',
@@ -360,7 +362,12 @@ const compiledIntegrityDependencies = new Map<string, readonly string[]>([
       './inspect-compiled-indexes.js',
       './inspect-compiled-node-members.js',
       './inspect-compiled-regions.js',
+      './inspect-compiled-root-members.js',
     ],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-branch-fallback.ts',
+    ['./compiled-inspection-fault-collector.js'],
   ],
   [
     'src/transition/compiled/inspect-compiled-indexes.ts',
@@ -377,7 +384,7 @@ const compiledIntegrityDependencies = new Map<string, readonly string[]>([
   ],
   [
     'src/transition/compiled/inspect-compiled-branch-schema.ts',
-    ['./compiled-inspection-fault-collector.js'],
+    ['./compiled-inspection-fault-collector.js', './inspect-compiled-branch-fallback.js'],
   ],
   [
     'src/transition/compiled/inspect-compiled-edges.ts',
@@ -401,6 +408,10 @@ const compiledIntegrityDependencies = new Map<string, readonly string[]>([
   ],
   [
     'src/transition/compiled/inspect-compiled-regions.ts',
+    ['./compiled-inspection-fault-collector.js'],
+  ],
+  [
+    'src/transition/compiled/inspect-compiled-root-members.ts',
     ['./compiled-inspection-fault-collector.js'],
   ],
   [

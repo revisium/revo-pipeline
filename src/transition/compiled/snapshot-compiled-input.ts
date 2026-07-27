@@ -181,7 +181,7 @@ const captureObject = (
     return add(context, 'DECODE_TYPE', path, 'Compiled pipeline object has a symbol key.');
   }
   const keys = ownKeys.filter((key): key is string => typeof key === 'string');
-  return captureDescriptors(value, keys.sort(compareUnicodeCodePoints), path, depth, context);
+  return captureDescriptors(value, keys.toSorted(compareUnicodeCodePoints), path, depth, context);
 };
 
 const captureValue = (

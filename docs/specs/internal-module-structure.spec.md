@@ -64,10 +64,12 @@ transition/compiled/
   compiled-capture-limit.ts
   snapshot-compiled-input.ts
   inspect-compiled-members.ts
+  inspect-compiled-root-members.ts
   inspect-compiled-node-members.ts
   inspect-compiled-node-policy.ts
   inspect-compiled-node-routes.ts
   inspect-compiled-branch-schema.ts
+  inspect-compiled-branch-fallback.ts
   inspect-compiled-edges.ts
   inspect-compiled-facts.ts
   inspect-compiled-indexes.ts
@@ -92,10 +94,12 @@ inspect-compiled-pipeline
      -> compiled-capture-limit
   -> compiled-inspection-fault-collector -> compiled-inspection-fault
   -> inspect-compiled-members
+     -> inspect-compiled-root-members
      -> inspect-compiled-node-members
         -> inspect-compiled-node-policy
         -> inspect-compiled-node-routes
-        -> inspect-compiled-branch-schema
+           -> inspect-compiled-branch-schema
+              -> inspect-compiled-branch-fallback
         -> inspect-compiled-outcomes
      -> inspect-compiled-edges
      -> inspect-compiled-facts

@@ -12,6 +12,57 @@ const architecture = read('docs/architecture.md');
 const index = read('docs/specs/README.md');
 const adr = read('docs/adr/0002-portable-decoding-and-reduction.md');
 
+const compiledIntegrityModuleMap = `transition/decode-compiled-pipeline.ts
+transition/inspect-compiled-pipeline.ts
+transition/compiled/
+  compiled-inspection-fault.ts
+  compiled-inspection-fault-collector.ts
+  compiled-inspection.ts
+  compiled-capture-limit.ts
+  snapshot-compiled-input.ts
+  inspect-compiled-members.ts
+  inspect-compiled-root-members.ts
+  inspect-compiled-node-members.ts
+  inspect-compiled-node-policy.ts
+  inspect-compiled-node-routes.ts
+  inspect-compiled-branch-schema.ts
+  inspect-compiled-branch-fallback.ts
+  inspect-compiled-edges.ts
+  inspect-compiled-facts.ts
+  inspect-compiled-indexes.ts
+  inspect-compiled-outcomes.ts
+  inspect-compiled-regions.ts
+  expected-compiled-semantics.ts
+  derive-expected-compiled-semantics.ts
+  compare-serialized-graph.ts
+  verify-serialized-topology.ts
+  verify-serialized-indexes.ts`;
+
+const compiledIntegrityDag = `decode-compiled-pipeline / decide-pipeline
+  -> inspect-compiled-pipeline
+inspect-compiled-pipeline
+  -> snapshot-compiled-input
+     -> compiled-capture-limit
+  -> compiled-inspection-fault-collector -> compiled-inspection-fault
+  -> inspect-compiled-members
+     -> inspect-compiled-root-members
+     -> inspect-compiled-node-members
+        -> inspect-compiled-node-policy
+        -> inspect-compiled-node-routes
+           -> inspect-compiled-branch-schema
+              -> inspect-compiled-branch-fallback
+        -> inspect-compiled-outcomes
+     -> inspect-compiled-edges
+     -> inspect-compiled-facts
+     -> inspect-compiled-indexes
+     -> inspect-compiled-regions
+  -> derive-expected-compiled-semantics -> expected-compiled-semantics
+  -> compare-serialized-graph -> expected-compiled-semantics
+  -> graph barrel
+  -> verify-serialized-topology
+  -> verify-serialized-indexes
+  -> compiled-inspection`;
+
 const fencedBlockAfter = (document: string, marker: string, language: string): string => {
   const block = document
     .split(marker)[1]
@@ -65,6 +116,19 @@ const tableRowsAfter = (document: string, marker: string): readonly (readonly st
 };
 
 describe('Accepted decoder and reducer target', () => {
+  test('pins the exact hostile compiled module inventory and direct-import DAG', () => {
+    expect(
+      fencedBlockAfter(
+        modules,
+        'The hostile compiled-integrity boundary MUST have exactly this private module map:',
+        'text',
+      ),
+    ).toBe(compiledIntegrityModuleMap);
+    expect(fencedBlockAfter(modules, 'and follow this\ndirect-import DAG:', 'text')).toBe(
+      compiledIntegrityDag,
+    );
+  });
+
   test('indexes accepted, explicitly unimplemented contracts and their ADR', () => {
     expect(index).toContain('[Pipeline decoding v1](./pipeline-decoding-v1.spec.md)');
     expect(index).toContain('[Pipeline reducer v1](./pipeline-reducer-v1.spec.md)');
