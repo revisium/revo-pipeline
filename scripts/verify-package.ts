@@ -11,6 +11,7 @@ import {
   type PackageArtifact,
   type PackageArtifactAccess,
 } from './package/package-command-runner.js';
+import { PACKAGE_CONSUMER_CASES } from './package/package-consumer-catalog.js';
 import {
   ALIAS_TYPE_CONSUMER_SOURCE,
   DEFAULT_TYPE_CONSUMER_SOURCE,
@@ -22,6 +23,7 @@ import {
   TYPE_CONSUMER_SOURCE,
   permissionFixtureSource,
 } from './package/package-consumer-fixtures.js';
+import { extractDocumentationExamples } from './package/package-documentation-examples.js';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -56,25 +58,6 @@ const expectedPackagePaths = (sourceModules: readonly SourceModule[]): readonly 
     return [`${output}.d.ts`, `${output}.d.ts.map`, `${output}.js`, `${output}.js.map`];
   });
   return ['LICENSE', 'README.md', 'package.json', ...compilerEmissions].sort();
-};
-
-const executableExample = async (root: string, marker: string): Promise<string> => {
-  const documentPath = marker === 'readme-working-root' ? 'README.md' : 'docs/examples/consumer.md';
-  const document = await readFile(join(root, documentPath), 'utf8');
-  const markerText = `<!-- package-example:${marker} -->`;
-  const markerCount = document.split(markerText).length - 1;
-  assert.equal(markerCount, 1, `${documentPath} must contain exactly one ${markerText} marker.`);
-  assert.equal(
-    document.match(/^```ts$/gm)?.length,
-    1,
-    `${documentPath} must contain exactly one executable TypeScript fence.`,
-  );
-  const fence = document
-    .slice(document.indexOf(markerText) + markerText.length)
-    .match(/^\s*```ts\n([\s\S]*?)\n```/);
-  const source = fence?.[1];
-  assert.ok(source, `${documentPath} must contain one TypeScript fence after ${markerText}.`);
-  return source;
 };
 
 const namedExports = (source: string): readonly string[] =>
@@ -198,8 +181,7 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
 
   let expectedPaths: readonly string[] = [];
   let sourceRootDeclaration = '';
-  let readmeConsumer = '';
-  let expandedConsumer = '';
+  let documentationSources = new Map<string, string>();
   let artifact: PackageArtifact | undefined;
   let access: PackageArtifactAccess | undefined;
 
@@ -208,8 +190,21 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
       const sourceModules = await collectSourceModules(root, join(root, 'src'));
       expectedPaths = expectedPackagePaths(sourceModules);
       sourceRootDeclaration = await readFile(join(root, 'src/index.ts'), 'utf8');
-      readmeConsumer = await executableExample(root, 'readme-working-root');
-      expandedConsumer = await executableExample(root, 'expanded-consumer');
+      const documentation = await Promise.all(
+        PACKAGE_CONSUMER_CASES.flatMap((entry) =>
+          entry.documentation
+            ? [
+                readFile(join(root, entry.documentation.documentPath), 'utf8').then((content) => ({
+                  path: entry.documentation?.documentPath ?? '',
+                  content,
+                })),
+              ]
+            : [],
+        ),
+      );
+      documentationSources = new Map(
+        extractDocumentationExamples(documentation).map(({ caseId, source }) => [caseId, source]),
+      );
       const sourceManifest: unknown = JSON.parse(
         await readFile(join(root, 'package.json'), 'utf8'),
       );
@@ -292,8 +287,18 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
         'host-shaped',
         HOST_SHAPED_CONSUMER_SOURCE,
       );
-      const readme = preparedAccess.createTypeConsumer('readme-example', readmeConsumer);
-      const expanded = preparedAccess.createTypeConsumer('expanded-example', expandedConsumer);
+      const taskBranchTerminal = preparedAccess.createTypeConsumer(
+        'task-branch-terminal',
+        documentationSources.get('task-branch-terminal') ?? '',
+      );
+      const forkJoinConsensusTerminal = preparedAccess.createTypeConsumer(
+        'fork-join-consensus-terminal',
+        documentationSources.get('fork-join-consensus-terminal') ?? '',
+      );
+      const humanGateTerminalReplay = preparedAccess.createTypeConsumer(
+        'human-gate-terminal-replay',
+        documentationSources.get('human-gate-terminal-replay') ?? '',
+      );
       const decisionGrowth = preparedAccess.createTypeConsumer(
         'decision-growth',
         TYPE_CONSUMER_SOURCE,
@@ -318,14 +323,15 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
 
       runner.typeScript(preparedAccess, positive);
       runner.typeScript(preparedAccess, hostShaped);
-      runner.typeScript(preparedAccess, readme);
-      runner.typeScript(preparedAccess, expanded);
-      runner.typeScript(preparedAccess, decisionGrowth, 'TS2345');
-      runner.typeScript(preparedAccess, reductionGrowth, 'TS2345');
-      runner.typeScript(preparedAccess, privateType, 'TS2307');
-      runner.typeScript(preparedAccess, defaultType, 'TS1192');
-      runner.typeScript(preparedAccess, aliasType, 'TS2305');
-      runner.typeScript(preparedAccess, subpathType, 'TS2307');
+      runner.typeScript(preparedAccess, taskBranchTerminal);
+      runner.typeScript(preparedAccess, forkJoinConsensusTerminal);
+      runner.typeScript(preparedAccess, humanGateTerminalReplay);
+      runner.typeScript(preparedAccess, decisionGrowth);
+      runner.typeScript(preparedAccess, reductionGrowth);
+      runner.typeScript(preparedAccess, privateType);
+      runner.typeScript(preparedAccess, defaultType);
+      runner.typeScript(preparedAccess, aliasType);
+      runner.typeScript(preparedAccess, subpathType);
     },
     runtimeConsumer: () => {
       const preparedAccess = access;
@@ -337,10 +343,20 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
         'private-runtime',
         PRIVATE_RUNTIME_CONSUMER_SOURCE,
       );
-      const typedRuntime = preparedAccess.createRuntimeConsumer('typed', '');
+      const typedRuntime = preparedAccess.createRuntimeConsumer('positive', '');
       const hostRuntime = preparedAccess.createRuntimeConsumer('host-shaped', '');
-      const readmeRuntime = preparedAccess.createRuntimeConsumer('readme-example', '');
-      const expandedRuntime = preparedAccess.createRuntimeConsumer('expanded-example', '');
+      const taskBranchTerminalRuntime = preparedAccess.createRuntimeConsumer(
+        'task-branch-terminal',
+        '',
+      );
+      const forkJoinConsensusTerminalRuntime = preparedAccess.createRuntimeConsumer(
+        'fork-join-consensus-terminal',
+        '',
+      );
+      const humanGateTerminalReplayRuntime = preparedAccess.createRuntimeConsumer(
+        'human-gate-terminal-replay',
+        '',
+      );
       const permissionRead = preparedAccess.createRuntimeConsumer(
         'permission-read',
         permissionFixtureSource('permission-read'),
@@ -359,11 +375,12 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
       );
 
       runner.executeConsumer(preparedAccess, runtime);
-      runner.executeConsumer(preparedAccess, privateRuntime, 'ERR_PACKAGE_PATH_NOT_EXPORTED');
+      runner.executeConsumer(preparedAccess, privateRuntime);
       runner.executeConsumer(preparedAccess, typedRuntime);
       runner.executeConsumer(preparedAccess, hostRuntime);
-      runner.executeConsumer(preparedAccess, readmeRuntime);
-      runner.executeConsumer(preparedAccess, expandedRuntime);
+      runner.executeConsumer(preparedAccess, taskBranchTerminalRuntime);
+      runner.executeConsumer(preparedAccess, forkJoinConsensusTerminalRuntime);
+      runner.executeConsumer(preparedAccess, humanGateTerminalReplayRuntime);
       runner.executeConsumer(preparedAccess, permissionRead);
       runner.executeConsumer(preparedAccess, permissionWrite);
       runner.executeConsumer(preparedAccess, permissionChild);

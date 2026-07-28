@@ -9,7 +9,6 @@ import {
   expectedPackageEntryUrl,
   inspectTypeClosure,
   materializeTypeClosure,
-  mutateExhaustivenessDeclaration,
   packageArchivePath,
   packageArchiveDirectory,
   packageCachePath,
@@ -17,36 +16,28 @@ import {
   permissionFixturePaths,
   readTreeFile,
   runtimeFixturePath,
+  prepareExhaustivenessDeclaration,
+  restoreExhaustivenessDeclaration,
   writeOutsideSentinel,
   writeTreeFile,
   type PackageArtifactTree,
   type PackageArtifactTreeRegistration,
+  type PreparedDeclarationMutation,
 } from './package-artifact-tree.js';
+import {
+  assertConsumerComplete,
+  authorizeConsumerEvent,
+  commitConsumerEvent,
+  consumerExpectedDiagnostic,
+  consumerRuntimeCase,
+  consumerTypeCase,
+  initialConsumerCompletionState,
+  poisonConsumerCompletion,
+  type ConsumerAuthorization,
+  type ConsumerCaseId,
+  type ConsumerCompletionState,
+} from './package-consumer-catalog.js';
 import { planTypeClosure } from './package-type-closure.js';
-
-export type TypeConsumerKind =
-  | 'positive'
-  | 'private'
-  | 'default'
-  | 'alias'
-  | 'subpath'
-  | 'host-shaped'
-  | 'readme-example'
-  | 'expanded-example'
-  | 'decision-growth'
-  | 'reduction-growth';
-
-export type RuntimeConsumerKind =
-  | 'runtime'
-  | 'private-runtime'
-  | 'typed'
-  | 'host-shaped'
-  | 'readme-example'
-  | 'expanded-example'
-  | 'permission-read'
-  | 'permission-write'
-  | 'permission-child'
-  | 'permission-worker';
 
 const artifactBrand: unique symbol = Symbol('PackageArtifact');
 const accessBrand: unique symbol = Symbol('PackageArtifactAccess');
@@ -69,12 +60,12 @@ export interface PackageArtifact {
 
 export interface OwnedTypeConsumer {
   readonly [typeFixtureBrand]: true;
-  readonly kind: TypeConsumerKind;
+  readonly caseId: ConsumerCaseId;
 }
 
 export interface OwnedRuntimeConsumer {
   readonly [runtimeFixtureBrand]: true;
-  readonly kind: RuntimeConsumerKind;
+  readonly caseId: ConsumerCaseId;
 }
 
 export interface PackedFileRecord {
@@ -90,8 +81,8 @@ export interface PackageArtifactAccess {
   readPackedFileManifest(): readonly string[];
   readDeclarationManifest(): readonly PackedFileRecord[];
   readTypeClosureManifest(): readonly string[];
-  createTypeConsumer(kind: TypeConsumerKind, source: string): OwnedTypeConsumer;
-  createRuntimeConsumer(kind: RuntimeConsumerKind, source: string): OwnedRuntimeConsumer;
+  createTypeConsumer(caseId: ConsumerCaseId, source: string): OwnedTypeConsumer;
+  createRuntimeConsumer(caseId: ConsumerCaseId, source: string): OwnedRuntimeConsumer;
   assertPackageRootResolution(): void;
   assertDeniedPackageResolution(
     specifier: '@revisium/revo-pipeline/dist/index.js' | '@revisium/revo-pipeline/transition',
@@ -104,16 +95,8 @@ export interface PackageCommandRunner {
   attw(artifact: PackageArtifact): void;
   extract(artifact: PackageArtifact): void;
   prepareArtifact(artifact: PackageArtifact): PackageArtifactAccess;
-  typeScript(
-    access: PackageArtifactAccess,
-    fixture: OwnedTypeConsumer,
-    expectedDiagnostic?: string,
-  ): void;
-  executeConsumer(
-    access: PackageArtifactAccess,
-    fixture: OwnedRuntimeConsumer,
-    expectedDiagnostic?: string,
-  ): void;
+  typeScript(access: PackageArtifactAccess, fixture: unknown): void;
+  executeConsumer(access: PackageArtifactAccess, fixture: unknown): void;
   assertComplete(access: PackageArtifactAccess): void;
   dispose(): void;
 }
@@ -131,6 +114,12 @@ interface Command {
 }
 
 export type PackageCommandExecutor = (command: CommandCapability, details: Command) => unknown;
+
+export interface PackageRunnerTestSeams {
+  readonly prepareDeclaration?: typeof prepareExhaustivenessDeclaration;
+  readonly restoreDeclaration?: typeof restoreExhaustivenessDeclaration;
+  readonly commitEvent?: typeof commitConsumerEvent;
+}
 
 const productionExecutor: PackageCommandExecutor = (_capability, command) =>
   execFileSync(command.executable, command.arguments, {
@@ -151,40 +140,6 @@ interface RuntimeLaunch {
   readonly entrypoint: string;
 }
 
-const TYPE_PATHS: Readonly<Record<TypeConsumerKind, string>> = {
-  positive: 'consumer.ts',
-  private: 'private-consumer.ts',
-  default: 'default-consumer.ts',
-  alias: 'alias-consumer.ts',
-  subpath: 'subpath-consumer.ts',
-  'host-shaped': 'host-shaped-consumer.ts',
-  'readme-example': 'examples/readme-working-root.ts',
-  'expanded-example': 'examples/expanded-consumer.ts',
-  'decision-growth': 'decision-growth.ts',
-  'reduction-growth': 'reduction-growth.ts',
-};
-
-const RUNTIME_PATHS: Readonly<Record<RuntimeConsumerKind, string>> = {
-  runtime: 'consumer.mjs',
-  'private-runtime': 'private-runtime.mjs',
-  typed: 'out/consumer.js',
-  'host-shaped': 'out/host-shaped-consumer.js',
-  'readme-example': 'out/examples/readme-working-root.js',
-  'expanded-example': 'out/examples/expanded-consumer.js',
-  'permission-read': 'permission-read.mjs',
-  'permission-write': 'permission-write.mjs',
-  'permission-child': 'permission-child.mjs',
-  'permission-worker': 'permission-worker.mjs',
-};
-
-const REQUIRED_CAPABILITIES: readonly Exclude<CommandCapability, 'pack'>[] = [
-  'publint',
-  'attw',
-  'extract',
-  'typeScript',
-  'consumer',
-];
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
@@ -200,17 +155,26 @@ const outputText = (value: unknown): string =>
 const failureOutput = (error: unknown): string =>
   isRecord(error) ? `${outputText(error['stdout'])}${outputText(error['stderr'])}` : String(error);
 
-class PackageArtifactReader {
+class PackageArtifactAccessOwner {
   readonly access: PackageArtifactAccess;
   readonly #tree: PackageArtifactTree;
   readonly #artifact: PackageArtifact;
   readonly #typeFixtures = new WeakSet<object>();
   readonly #runtimeFixtures = new WeakSet<object>();
+  readonly #typeCaseIds = new WeakMap<object, ConsumerCaseId>();
+  readonly #runtimeCaseIds = new WeakMap<object, ConsumerCaseId>();
   readonly #typePaths = new WeakMap<object, string>();
   readonly #runtimePaths = new WeakMap<object, string>();
   readonly #closureManifest: readonly string[];
 
-  constructor(tree: PackageArtifactTree, artifact: PackageArtifact) {
+  constructor(
+    tree: PackageArtifactTree,
+    artifact: PackageArtifact,
+    createType: (caseId: ConsumerCaseId, source: string) => OwnedTypeConsumer,
+    createRuntime: (caseId: ConsumerCaseId, source: string) => OwnedRuntimeConsumer,
+    readonly prepareDeclaration: typeof prepareExhaustivenessDeclaration,
+    readonly restoreDeclaration: typeof restoreExhaustivenessDeclaration,
+  ) {
     this.#tree = tree;
     this.#artifact = artifact;
     const inspection = inspectTypeClosure(tree);
@@ -226,8 +190,8 @@ class PackageArtifactReader {
       readPackedFileManifest: () => this.readPackedFileManifest(),
       readDeclarationManifest: () => this.readDeclarationManifest(),
       readTypeClosureManifest: () => this.#closureManifest,
-      createTypeConsumer: (kind, source) => this.createTypeConsumer(kind, source),
-      createRuntimeConsumer: (kind, source) => this.createRuntimeConsumer(kind, source),
+      createTypeConsumer: createType,
+      createRuntimeConsumer: createRuntime,
       assertPackageRootResolution: () => assertPackageResolution(this.#tree),
       assertDeniedPackageResolution: (specifier) =>
         assertPackageResolution(this.#tree, specifier.slice('@revisium/revo-pipeline'.length)),
@@ -273,11 +237,15 @@ class PackageArtifactReader {
     ]);
   }
 
-  createTypeConsumer(kind: TypeConsumerKind, source: string): OwnedTypeConsumer {
-    writeTreeFile(this.#tree, TYPE_PATHS[kind], source);
+  writeTypeConsumer(caseId: ConsumerCaseId, source: string): OwnedTypeConsumer {
+    const type = consumerTypeCase(caseId);
+    if (!type) {
+      throw new Error('[package-consumer-case]');
+    }
+    writeTreeFile(this.#tree, type.sourcePath, source);
     const configuration = writeTreeFile(
       this.#tree,
-      `tsconfig.${kind}.json`,
+      type.configurationPath,
       `${JSON.stringify(
         {
           compilerOptions: {
@@ -294,7 +262,7 @@ class PackageArtifactReader {
             skipLibCheck: false,
             types: ['node'],
           },
-          include: [TYPE_PATHS[kind]],
+          include: [type.sourcePath],
         },
         undefined,
         2,
@@ -302,17 +270,22 @@ class PackageArtifactReader {
     );
     const fixture: OwnedTypeConsumer = Object.freeze({
       [typeFixtureBrand]: true as const,
-      kind,
+      caseId,
     });
     this.#typeFixtures.add(fixture);
+    this.#typeCaseIds.set(fixture, caseId);
     this.#typePaths.set(fixture, configuration);
     return fixture;
   }
 
-  createRuntimeConsumer(kind: RuntimeConsumerKind, source: string): OwnedRuntimeConsumer {
-    const relativePath = RUNTIME_PATHS[kind];
+  writeRuntimeConsumer(caseId: ConsumerCaseId, source: string): OwnedRuntimeConsumer {
+    const runtime = consumerRuntimeCase(caseId);
+    if (!runtime) {
+      throw new Error('[package-consumer-case]');
+    }
+    const relativePath = runtime.entryPath;
     let entrypoint = runtimeFixturePath(this.#tree, relativePath);
-    if (kind.startsWith('permission-')) {
+    if (caseId.startsWith('permission-')) {
       const permissionPaths = permissionFixturePaths(this.#tree);
       entrypoint = writeTreeFile(
         this.#tree,
@@ -331,15 +304,16 @@ class PackageArtifactReader {
     }
     const fixture: OwnedRuntimeConsumer = Object.freeze({
       [runtimeFixtureBrand]: true as const,
-      kind,
+      caseId,
     });
     this.#runtimeFixtures.add(fixture);
+    this.#runtimeCaseIds.set(fixture, caseId);
     this.#runtimePaths.set(fixture, entrypoint);
     return fixture;
   }
 
-  configurationPath(fixture: OwnedTypeConsumer): string {
-    if (!this.#typeFixtures.has(fixture)) {
+  configurationPath(fixture: unknown): string {
+    if (!isRecord(fixture) || !this.#typeFixtures.has(fixture)) {
       throw new Error('[package-artifact-identity]');
     }
     const path = this.#typePaths.get(fixture);
@@ -349,18 +323,43 @@ class PackageArtifactReader {
     return path;
   }
 
-  prepareTypeScript(fixture: OwnedTypeConsumer): (() => void) | undefined {
-    if (!this.#typeFixtures.has(fixture)) {
+  typeCaseId(fixture: unknown): ConsumerCaseId {
+    if (!isRecord(fixture) || !this.#typeFixtures.has(fixture)) {
       throw new Error('[package-artifact-identity]');
     }
-    if (fixture.kind !== 'decision-growth' && fixture.kind !== 'reduction-growth') {
-      return undefined;
+    const caseId = this.#typeCaseIds.get(fixture);
+    if (!caseId) {
+      throw new Error('[package-artifact-identity]');
     }
-    return mutateExhaustivenessDeclaration(this.#tree, fixture.kind);
+    return caseId;
   }
 
-  runtimeLaunch(fixture: OwnedRuntimeConsumer): RuntimeLaunch {
-    if (!this.#runtimeFixtures.has(fixture)) {
+  runtimeCaseId(fixture: unknown): ConsumerCaseId {
+    if (!isRecord(fixture) || !this.#runtimeFixtures.has(fixture)) {
+      throw new Error('[package-artifact-identity]');
+    }
+    const caseId = this.#runtimeCaseIds.get(fixture);
+    if (!caseId) {
+      throw new Error('[package-artifact-identity]');
+    }
+    return caseId;
+  }
+
+  prepareTypeScript(fixture: unknown): PreparedDeclarationMutation | undefined {
+    const type = consumerTypeCase(this.typeCaseId(fixture));
+    if (!type?.mutation) {
+      return undefined;
+    }
+    return this.prepareDeclaration(this.#tree, type.mutation);
+  }
+
+  restoreTypeScript(prepared: PreparedDeclarationMutation): void {
+    this.restoreDeclaration(this.#tree, prepared);
+  }
+
+  runtimeLaunch(fixture: unknown): RuntimeLaunch {
+    this.runtimeCaseId(fixture);
+    if (!isRecord(fixture)) {
       throw new Error('[package-artifact-identity]');
     }
     const entrypoint = this.#runtimePaths.get(fixture);
@@ -377,6 +376,7 @@ class PackageArtifactReader {
 const createRunner = (
   executor: PackageCommandExecutor,
   registration: PackageArtifactTreeRegistration,
+  seams: PackageRunnerTestSeams = {},
 ): PackageCommandRunner => {
   const { owner, tree } = registration;
   let state: 'not-packed' | 'packed' | 'complete' | 'disposed' = 'not-packed';
@@ -384,9 +384,12 @@ const createRunner = (
   let artifact: PackageArtifact | undefined;
   let cleanupError: Error | undefined;
   const artifacts = new WeakMap<object, ArtifactDetails>();
-  const readers = new WeakMap<object, PackageArtifactReader>();
-  const accesses = new WeakMap<object, PackageArtifactReader>();
-  const ledger = new Set<Exclude<CommandCapability, 'pack'>>();
+  const readers = new WeakMap<object, PackageArtifactAccessOwner>();
+  const accesses = new WeakMap<object, PackageArtifactAccessOwner>();
+  let completionState: ConsumerCompletionState = initialConsumerCompletionState();
+  const prepareDeclaration = seams.prepareDeclaration ?? prepareExhaustivenessDeclaration;
+  const restoreDeclaration = seams.restoreDeclaration ?? restoreExhaustivenessDeclaration;
+  const commitEvent = seams.commitEvent ?? commitConsumerEvent;
 
   const requireActive = (): void => {
     if (state === 'disposed') {
@@ -407,7 +410,7 @@ const createRunner = (
     }
     return details;
   };
-  const requireAccess = (candidate: PackageArtifactAccess): PackageArtifactReader => {
+  const requireAccess = (candidate: PackageArtifactAccess): PackageArtifactAccessOwner => {
     requireActive();
     const reader = accesses.get(candidate);
     if (!reader || readers.get(artifact ?? {}) !== reader) {
@@ -415,12 +418,32 @@ const createRunner = (
     }
     return reader;
   };
-  const run = (capability: CommandCapability, command: Command): unknown => {
-    const result = executor(capability, command);
-    if (capability !== 'pack') {
-      ledger.add(capability);
+  const run = (capability: CommandCapability, command: Command): unknown =>
+    executor(capability, command);
+  const failConsumer = (error: unknown): never => {
+    completionState = poisonConsumerCompletion(
+      completionState,
+      '[package-consumer-operation-failed]',
+    );
+    throw error;
+  };
+  const authorization = (
+    caseId: ConsumerCaseId,
+    phase: 'createType' | 'createRuntime',
+  ): ConsumerAuthorization => {
+    const result = authorizeConsumerEvent(completionState, caseId, phase);
+    completionState = result.state;
+    if (!result.ok) {
+      throw new Error(result.fault.message);
     }
-    return result;
+    return result.value;
+  };
+  const commit = (event: ConsumerAuthorization): void => {
+    const result = commitEvent(completionState, event);
+    completionState = result.state;
+    if (!result.ok) {
+      throw new Error(result.fault.message);
+    }
   };
 
   return Object.freeze({
@@ -508,50 +531,142 @@ const createRunner = (
       if (!details.extracted || readers.has(candidate)) {
         throw new Error('[package-artifact-identity]');
       }
-      const reader = new PackageArtifactReader(tree, candidate);
+      let reader: PackageArtifactAccessOwner;
+      const createType = (caseId: ConsumerCaseId, source: string): OwnedTypeConsumer => {
+        const event = authorization(caseId, 'createType');
+        try {
+          const fixture = reader.writeTypeConsumer(caseId, source);
+          commit(event);
+          return fixture;
+        } catch (error: unknown) {
+          return failConsumer(error);
+        }
+      };
+      const createRuntime = (caseId: ConsumerCaseId, source: string): OwnedRuntimeConsumer => {
+        const event = authorization(caseId, 'createRuntime');
+        try {
+          const fixture = reader.writeRuntimeConsumer(caseId, source);
+          commit(event);
+          return fixture;
+        } catch (error: unknown) {
+          return failConsumer(error);
+        }
+      };
+      reader = new PackageArtifactAccessOwner(
+        tree,
+        candidate,
+        createType,
+        createRuntime,
+        prepareDeclaration,
+        restoreDeclaration,
+      );
       readers.set(candidate, reader);
       accesses.set(reader.access, reader);
       return reader.access;
     },
-    typeScript(
-      candidate: PackageArtifactAccess,
-      fixture: OwnedTypeConsumer,
-      expectedDiagnostic?: string,
-    ): void {
-      const reader = requireAccess(candidate);
-      const restore = reader.prepareTypeScript(fixture);
-      let failure: unknown;
+    typeScript(candidate: PackageArtifactAccess, fixture: unknown): void {
+      let reader: PackageArtifactAccessOwner;
+      let caseId: ConsumerCaseId;
       try {
-        run('typeScript', {
-          executable: packageCompilerPath(tree),
-          arguments: ['-p', reader.configurationPath(fixture)],
-          cwd: tree.root,
-          output: 'capture',
-        });
+        reader = requireAccess(candidate);
+        caseId = reader.typeCaseId(fixture);
       } catch (error: unknown) {
-        failure = error;
-      } finally {
-        restore?.();
+        return failConsumer(error);
       }
-      if (expectedDiagnostic === undefined && failure !== undefined) {
-        throw failure;
+      const authorizationResult = authorizeConsumerEvent(completionState, caseId, 'typeScript');
+      completionState = authorizationResult.state;
+      if (!authorizationResult.ok) {
+        throw new Error(authorizationResult.fault.message);
       }
-      if (
-        expectedDiagnostic !== undefined &&
-        (failure === undefined || !failureOutput(failure).includes(expectedDiagnostic))
-      ) {
-        throw failure ?? new Error(`[package-consumer-diagnostic] Expected ${expectedDiagnostic}`);
+      let prepared: PreparedDeclarationMutation | undefined;
+      let preparationError: unknown;
+      let compilerError: unknown;
+      let compilerExecuted = false;
+      let restoreError: unknown;
+      try {
+        prepared = reader.prepareTypeScript(fixture);
+      } catch (error: unknown) {
+        preparationError = error;
+      }
+      if (preparationError === undefined) {
+        try {
+          compilerExecuted = true;
+          run('typeScript', {
+            executable: packageCompilerPath(tree),
+            arguments: ['-p', reader.configurationPath(fixture)],
+            cwd: tree.root,
+            output: 'capture',
+          });
+        } catch (error: unknown) {
+          compilerError = error;
+        }
+      }
+      if (prepared) {
+        try {
+          reader.restoreTypeScript(prepared);
+        } catch (error: unknown) {
+          restoreError = error;
+        }
+      }
+      const expectedDiagnostic = consumerExpectedDiagnostic(
+        consumerTypeCase(caseId)?.expected ?? 'success',
+      );
+      if (expectedDiagnostic !== undefined) {
+        if (
+          !compilerExecuted ||
+          compilerError === undefined ||
+          !failureOutput(compilerError).includes(expectedDiagnostic)
+        ) {
+          compilerError =
+            compilerError ??
+            new Error(`[package-consumer-diagnostic] Expected ${expectedDiagnostic}`);
+        } else {
+          compilerError = undefined;
+        }
+      }
+      const primaryError = preparationError ?? compilerError;
+      if (primaryError !== undefined || restoreError !== undefined) {
+        completionState = poisonConsumerCompletion(
+          completionState,
+          '[package-consumer-operation-failed]',
+        );
+        if (primaryError !== undefined && restoreError !== undefined) {
+          throw new AggregateError(
+            [primaryError, restoreError],
+            '[package-typescript-and-restore]',
+            {
+              cause: primaryError,
+            },
+          );
+        }
+        if (primaryError !== undefined) {
+          throw primaryError;
+        }
+        throw new Error('[package-typescript-restore]', { cause: restoreError });
+      }
+      const commitResult = commitEvent(completionState, authorizationResult.value);
+      completionState = commitResult.state;
+      if (!commitResult.ok) {
+        throw new Error(commitResult.fault.message);
       }
     },
-    executeConsumer(
-      candidate: PackageArtifactAccess,
-      fixture: OwnedRuntimeConsumer,
-      expectedDiagnostic?: string,
-    ): void {
-      const reader = requireAccess(candidate);
-      const launch = reader.runtimeLaunch(fixture);
+    executeConsumer(candidate: PackageArtifactAccess, fixture: unknown): void {
+      let reader: PackageArtifactAccessOwner;
+      let caseId: ConsumerCaseId;
+      try {
+        reader = requireAccess(candidate);
+        caseId = reader.runtimeCaseId(fixture);
+      } catch (error: unknown) {
+        return failConsumer(error);
+      }
+      const authorizationResult = authorizeConsumerEvent(completionState, caseId, 'executeRuntime');
+      completionState = authorizationResult.state;
+      if (!authorizationResult.ok) {
+        throw new Error(authorizationResult.fault.message);
+      }
       let failure: unknown;
       try {
+        const launch = reader.runtimeLaunch(fixture);
         run('consumer', {
           executable: process.execPath,
           arguments: ['--permission', `--allow-fs-read=${tree.root}`, launch.entrypoint],
@@ -563,24 +678,35 @@ const createRunner = (
       } catch (error: unknown) {
         failure = error;
       }
-      if (expectedDiagnostic === undefined && failure !== undefined) {
-        throw failure;
+      const expectedDiagnostic = consumerExpectedDiagnostic(
+        consumerRuntimeCase(caseId)?.expected ?? 'success',
+      );
+      if (expectedDiagnostic !== undefined) {
+        if (failure === undefined || !failureOutput(failure).includes(expectedDiagnostic)) {
+          failure =
+            failure ?? new Error(`[package-consumer-diagnostic] Expected ${expectedDiagnostic}`);
+        } else {
+          failure = undefined;
+        }
       }
-      if (
-        expectedDiagnostic !== undefined &&
-        (failure === undefined || !failureOutput(failure).includes(expectedDiagnostic))
-      ) {
-        throw failure ?? new Error(`[package-consumer-diagnostic] Expected ${expectedDiagnostic}`);
+      if (failure !== undefined) {
+        return failConsumer(failure);
+      }
+      const commitResult = commitEvent(completionState, authorizationResult.value);
+      completionState = commitResult.state;
+      if (!commitResult.ok) {
+        throw new Error(commitResult.fault.message);
       }
     },
     assertComplete(candidate: PackageArtifactAccess): void {
       requireAccess(candidate);
-      if (
-        packAttempts !== 1 ||
-        !artifact ||
-        !REQUIRED_CAPABILITIES.every((item) => ledger.has(item))
-      ) {
+      if (packAttempts !== 1 || !artifact) {
         throw new Error('[package-runner-incomplete]');
+      }
+      const result = assertConsumerComplete(completionState);
+      completionState = result.state;
+      if (!result.ok) {
+        throw new Error(result.fault.message);
       }
       state = 'complete';
     },
@@ -611,4 +737,5 @@ export const createPackageCommandRunner = (): PackageCommandRunner =>
 export const createPackageCommandRunnerForTest = (
   executor: PackageCommandExecutor,
   registration: PackageArtifactTreeRegistration,
-): PackageCommandRunner => createRunner(executor, registration);
+  seams: PackageRunnerTestSeams = {},
+): PackageCommandRunner => createRunner(executor, registration, seams);

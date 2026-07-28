@@ -437,25 +437,6 @@ import { decidePipeline } from '@revisium/revo-pipeline/transition';
 void decidePipeline;
 `;
 
-export const CONSUMER_FIXTURE_DESCRIPTORS = Object.freeze([
-  Object.freeze({ id: 'runtime', family: 'runtime' }),
-  Object.freeze({ id: 'private-runtime', family: 'runtime' }),
-  Object.freeze({ id: 'positive', family: 'type' }),
-  Object.freeze({ id: 'private', family: 'type' }),
-  Object.freeze({ id: 'default', family: 'type' }),
-  Object.freeze({ id: 'alias', family: 'type' }),
-  Object.freeze({ id: 'subpath', family: 'type' }),
-  Object.freeze({ id: 'host-shaped', family: 'type-runtime' }),
-  Object.freeze({ id: 'readme-example', family: 'docs-type-runtime' }),
-  Object.freeze({ id: 'expanded-example', family: 'docs-type-runtime' }),
-  Object.freeze({ id: 'decision-growth', family: 'type' }),
-  Object.freeze({ id: 'reduction-growth', family: 'type' }),
-  Object.freeze({ id: 'permission-read', family: 'permission' }),
-  Object.freeze({ id: 'permission-write', family: 'permission' }),
-  Object.freeze({ id: 'permission-child', family: 'permission' }),
-  Object.freeze({ id: 'permission-worker', family: 'permission' }),
-] as const);
-
 export type PermissionFixtureKind =
   | 'permission-read'
   | 'permission-write'

@@ -26,6 +26,8 @@ import {
   destinationPathComponentsForTest,
   inspectTypeClosure,
   materializeTypeClosure,
+  prepareExhaustivenessDeclarationForTest,
+  restoreExhaustivenessDeclaration,
   runtimeFixturePath,
   writeTreeFile,
   type PackageArtifactTree,
@@ -259,6 +261,188 @@ test('splits destination components with the supplied platform separator', () =>
     '@scope',
     'package',
   ]);
+});
+
+test('restores exact declaration bytes and rejects reused or foreign handles', () => {
+  const first = createPackageArtifactTreeForTest(process.cwd(), (path) =>
+    rmSync(path, { recursive: true, force: true }),
+  );
+  const second = createPackageArtifactTreeForTest(process.cwd(), (path) =>
+    rmSync(path, { recursive: true, force: true }),
+  );
+  const path = join(first.tree.installedPackageRoot, 'dist/errors/pipeline-decision.d.ts');
+  mkdirSync(dirname(path), { recursive: true });
+  const original = Buffer.from('export type Decision = Alpha | RejectDecision;\\n');
+  writeFileSync(path, original);
+  const operations = {
+    read: (target: string) => readFileSync(target),
+    write: (target: string, content: Buffer) => writeFileSync(target, content),
+  };
+  const prepared = prepareExhaustivenessDeclarationForTest(
+    first.tree,
+    'decision-growth',
+    operations,
+  );
+  expect(readFileSync(path).equals(original)).toBe(false);
+  expect(() => restoreExhaustivenessDeclaration(second.tree, prepared)).toThrow(
+    '[package-artifact-identity]',
+  );
+  restoreExhaustivenessDeclaration(first.tree, prepared);
+  expect(readFileSync(path).equals(original)).toBe(true);
+  expect(() => restoreExhaustivenessDeclaration(first.tree, prepared)).toThrow(
+    '[package-artifact-identity]',
+  );
+  cleanupPackageArtifactTree(first.owner, first.tree);
+  cleanupPackageArtifactTree(second.owner, second.tree);
+});
+
+test('restores a partial preparation write and preserves primary-before-restore ordering', () => {
+  const registration = createPackageArtifactTreeForTest(process.cwd(), (path) =>
+    rmSync(path, { recursive: true, force: true }),
+  );
+  const path = join(registration.tree.installedPackageRoot, 'dist/errors/pipeline-decision.d.ts');
+  mkdirSync(dirname(path), { recursive: true });
+  const original = Buffer.from('export type Decision = Alpha | RejectDecision;\\n');
+  writeFileSync(path, original);
+  let writes = 0;
+  const partial = {
+    read: (target: string) => readFileSync(target),
+    write: (target: string, content: Buffer) => {
+      writes += 1;
+      if (writes === 1) {
+        writeFileSync(target, content.subarray(0, 4));
+        throw new Error('prepare-write');
+      }
+      writeFileSync(target, content);
+    },
+  };
+  expect(() =>
+    prepareExhaustivenessDeclarationForTest(registration.tree, 'decision-growth', partial),
+  ).toThrow('prepare-write');
+  expect(readFileSync(path).equals(original)).toBe(true);
+
+  writes = 0;
+  const both = {
+    read: partial.read,
+    write: (target: string, content: Buffer) => {
+      writes += 1;
+      if (writes === 1) {
+        writeFileSync(target, content.subarray(0, 4));
+        throw new Error('prepare-write');
+      }
+      throw new Error('restore-write');
+    },
+  };
+  let failure: unknown;
+  try {
+    prepareExhaustivenessDeclarationForTest(registration.tree, 'decision-growth', both);
+  } catch (error: unknown) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(AggregateError);
+  if (!(failure instanceof AggregateError)) {
+    throw new Error('expected aggregate failure');
+  }
+  expect(failure.errors.map(String)).toEqual(['Error: prepare-write', 'Error: restore-write']);
+  cleanupPackageArtifactTree(registration.owner, registration.tree);
+});
+
+test('fails initial-read and absent-sentinel partitions before any declaration write', () => {
+  const initialReadFailure = new Error('initial declaration read failed');
+  for (const scenario of [
+    {
+      kind: 'decision-growth' as const,
+      read: () => {
+        throw initialReadFailure;
+      },
+      expected: initialReadFailure,
+    },
+    {
+      kind: 'decision-growth' as const,
+      read: () => Buffer.from('export type Decision = Alpha;'),
+      expected: '[package-artifact-boundary]',
+    },
+    {
+      kind: 'reduction-growth' as const,
+      read: () => Buffer.from('export type Reduction = { status: string };'),
+      expected: '[package-artifact-boundary]',
+    },
+  ]) {
+    const registration = createPackageArtifactTreeForTest(process.cwd(), (path) =>
+      rmSync(path, { recursive: true, force: true }),
+    );
+    let writes = 0;
+    let failure: unknown;
+    try {
+      prepareExhaustivenessDeclarationForTest(registration.tree, scenario.kind, {
+        read: scenario.read,
+        write: () => {
+          writes += 1;
+        },
+      });
+    } catch (error: unknown) {
+      failure = error;
+    }
+    const expectedMessage =
+      scenario.expected instanceof Error ? scenario.expected.message : scenario.expected;
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure instanceof Error ? failure.message : undefined).toBe(expectedMessage);
+    expect(failure === scenario.expected).toBe(scenario.expected instanceof Error);
+    expect(writes).toBe(0);
+    cleanupPackageArtifactTree(registration.owner, registration.tree);
+  }
+});
+
+test('detects mutation and restore verification mismatches', () => {
+  const registration = createPackageArtifactTreeForTest(process.cwd(), (path) =>
+    rmSync(path, { recursive: true, force: true }),
+  );
+  const path = join(registration.tree.installedPackageRoot, 'dist/errors/pipeline-reduction.d.ts');
+  mkdirSync(dirname(path), { recursive: true });
+  const original = Buffer.from('export type Reduction = ({}) | { fallback: true };\\n');
+  writeFileSync(path, original);
+  let reads = 0;
+  const mismatch = {
+    read: (target: string) => {
+      reads += 1;
+      return reads === 2 ? Buffer.from('tampered') : readFileSync(target);
+    },
+    write: (target: string, content: Buffer) => writeFileSync(target, content),
+  };
+  expect(() =>
+    prepareExhaustivenessDeclarationForTest(registration.tree, 'reduction-growth', mismatch),
+  ).toThrow('[package-artifact-boundary]');
+  expect(readFileSync(path).equals(original)).toBe(true);
+
+  const prepared = prepareExhaustivenessDeclarationForTest(registration.tree, 'reduction-growth', {
+    read: (target) => readFileSync(target),
+    write: (target, content) => writeFileSync(target, content),
+  });
+  writeFileSync(path, 'externally changed');
+  restoreExhaustivenessDeclaration(registration.tree, prepared);
+  expect(readFileSync(path).equals(original)).toBe(true);
+
+  let writes = 0;
+  const restoreMismatch = prepareExhaustivenessDeclarationForTest(
+    registration.tree,
+    'reduction-growth',
+    {
+      read: (target) => readFileSync(target),
+      write: (target, content) => {
+        writes += 1;
+        if (writes === 1) {
+          writeFileSync(target, content);
+        }
+      },
+    },
+  );
+  expect(() => restoreExhaustivenessDeclaration(registration.tree, restoreMismatch)).toThrow(
+    '[package-typescript-restore]',
+  );
+  expect(() => restoreExhaustivenessDeclaration(registration.tree, restoreMismatch)).toThrow(
+    '[package-artifact-identity]',
+  );
+  cleanupPackageArtifactTree(registration.owner, registration.tree);
 });
 
 test.each([

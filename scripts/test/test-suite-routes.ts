@@ -10,7 +10,7 @@ export const COVERAGE_TESTS = [
 ] as const;
 
 export const TEST_ROUTE_CHECKPOINT = {
-  coverage: { files: 24, tests: 458 },
-  harness: { files: 10, tests: 477 },
-  total: { files: 34, tests: 935 },
+  coverage: { files: 25, tests: 465 },
+  harness: { files: 12, tests: 520 },
+  total: { files: 37, tests: 985 },
 } as const;
