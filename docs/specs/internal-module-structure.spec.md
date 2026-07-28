@@ -222,6 +222,25 @@ PR4c MUST derive its scope from every TypeScript production leaf under
 PR4a definition scope. This replaces the overlapping PR4b execution scope without weakening
 it. There is no registry, manual subset, exception, or grandfather list.
 
+Graph metrics MUST derive from every TypeScript leaf under `src/graph/**`, excluding only
+barrel files named `index.ts`. Runtime and type-only contract leaves are equally scoped.
+Adding, renaming, or nesting a graph leaf adds it to the enforced 250/80 limits without a
+registry update. The graph scope has no enumerated file allowlist, grandfather record,
+content classifier, virtual TypeScript project, or metric exemption.
+
+Barrier-region ownership is an extraction-only private partition:
+
+```text
+collect ownership -> query validation + topology validation
+                  -> membership collector -> bitset operations + bounded traversal
+                  -> ownership classification
+```
+
+The coordinator remains the sole graph-barrel export for this operation. Its private
+leaves each export one cohesive entity and preserve the existing bounds, result ordering,
+shared-row/fallback choice, operation instrumentation, and ownership semantics. No helper
+is exported through the graph or package root barrel.
+
 Decision evaluation is decomposed into the exact private `context`, `facts`, and
 `evaluation` leaf inventory asserted by the executable architecture harness. Those
 directories have no barrels and leak no exports through the transition or root barrels.

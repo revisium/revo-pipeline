@@ -101,6 +101,67 @@ test('derives the complete PR4c scope from every transition production leaf', ()
   ).toContain('src/transition/new/nested.ts');
 });
 
+test('derives the complete graph scope from every non-barrel TypeScript leaf', () => {
+  const modules: readonly MetricSource[] = [
+    { path: 'src/graph/index.ts', source: 'export {};\n' },
+    { path: 'src/graph/nested/index.ts', source: 'export {};\n' },
+    { path: 'src/graph/graph-kernel.ts', source: 'export type GraphKernel = {};\n' },
+    { path: 'src/graph/collect.ts', source: 'export const collect = () => [];\n' },
+    { path: 'src/graph/deep/nested/reach.ts', source: 'export const reach = () => [];\n' },
+    { path: 'src/graph/readme.md', source: '# ignored\n' },
+    sourceWithLines(['void 0;']),
+  ];
+
+  expect(sourceMetricScope(modules, 'graph')).toEqual([
+    'src/graph/collect.ts',
+    'src/graph/deep/nested/reach.ts',
+    'src/graph/graph-kernel.ts',
+  ]);
+  expect(
+    sourceMetricScope(
+      [...modules, { path: 'src/graph/new-leaf.ts', source: 'export type Next = {};\n' }],
+      'graph',
+    ),
+  ).toContain('src/graph/new-leaf.ts');
+});
+
+test('keeps renamed graph leaves inside the 250/80 enforcement boundaries', () => {
+  const renamedPath = 'src/graph/renamed-runtime-leaf.ts';
+  const graphSource = (lines: readonly string[]): MetricSource => ({
+    path: renamedPath,
+    source: `${lines.join('\n')}\n`,
+  });
+  const scope = (source: MetricSource): readonly string[] => sourceMetricScope([source], 'graph');
+  const fileAtLimit = graphSource([
+    'export const renamed = (): void => {};',
+    ...Array.from({ length: 249 }, () => 'void 0;'),
+  ]);
+  const fileOverLimit = graphSource([
+    'export const renamed = (): void => {};',
+    ...Array.from({ length: 250 }, () => 'void 0;'),
+  ]);
+  const callableAtLimit = graphSource([
+    'export const renamed = () => {',
+    ...Array.from({ length: 78 }, () => '  void 0;'),
+    '};',
+  ]);
+  const callableOverLimit = graphSource([
+    'export const renamed = () => {',
+    ...Array.from({ length: 79 }, () => '  void 0;'),
+    '};',
+  ]);
+
+  expect(scope(fileAtLimit)).toEqual([renamedPath]);
+  expect(() => validateSourceMetrics([fileAtLimit], scope(fileAtLimit))).not.toThrow();
+  expect(() => validateSourceMetrics([fileOverLimit], scope(fileOverLimit))).toThrowError(
+    '[production-leaf-span]',
+  );
+  expect(() => validateSourceMetrics([callableAtLimit], scope(callableAtLimit))).not.toThrow();
+  expect(() => validateSourceMetrics([callableOverLimit], scope(callableOverLimit))).toThrowError(
+    '[production-callable-span]',
+  );
+});
+
 test('enforces the inclusive formatted physical leaf boundary', () => {
   expect(() =>
     validateSourceMetrics([sourceWithLines(Array.from({ length: 250 }, () => 'void 0;'))], [path]),

@@ -12,7 +12,7 @@ export interface MetricSource {
 }
 
 export type SourceMetricRule = 'production-callable-span' | 'production-leaf-span';
-export type SourceMetricPhase = 'PR4a' | 'PR4b' | 'PR4c';
+export type SourceMetricPhase = 'PR4a' | 'PR4b' | 'PR4c' | 'graph';
 
 const MAX_FILE_LINES = 250;
 const MAX_CALLABLE_LINES = 80;
@@ -32,21 +32,26 @@ const isCompiledIntegrityLeaf = (path: string): boolean =>
   path === 'src/transition/decode-compiled-pipeline.ts';
 const isTransitionLeaf = (path: string): boolean =>
   path.startsWith('src/transition/') && path.endsWith('.ts') && path !== 'src/transition/index.ts';
+const isGraphLeaf = (path: string): boolean =>
+  path.startsWith('src/graph/') && path.endsWith('.ts') && !path.endsWith('/index.ts');
 
 export const sourceMetricScope = (
   modules: readonly MetricSource[],
   phase: SourceMetricPhase,
-): readonly string[] =>
-  modules
-    .map((module) => module.path)
+): readonly string[] => {
+  return modules
     .filter(
       phase === 'PR4a'
-        ? isDefinitionLeaf
+        ? (module) => isDefinitionLeaf(module.path)
         : phase === 'PR4b'
-          ? isCompiledIntegrityLeaf
-          : isTransitionLeaf,
+          ? (module) => isCompiledIntegrityLeaf(module.path)
+          : phase === 'PR4c'
+            ? (module) => isTransitionLeaf(module.path)
+            : (module) => isGraphLeaf(module.path),
     )
+    .map((module) => module.path)
     .sort();
+};
 
 const lineCount = (source: string): number => {
   const withoutTerminalNewline = source.replace(/\r?\n$/u, '');
