@@ -161,6 +161,7 @@ validateModuleStructure([...sourceModules, ...testModules, ...architectureModule
 validateSourceMetrics(sourceModules, [
   ...sourceMetricScope(sourceModules, 'PR4a'),
   ...sourceMetricScope(sourceModules, 'PR4c'),
+  ...sourceMetricScope(sourceModules, 'graph'),
 ]);
 assert.deepEqual(validateGraphKernelFlow(root), []);
 validatePackageVerifierFlow(root);
@@ -184,19 +185,25 @@ const graphModulePaths = sourceModules
   .filter((path) => path.startsWith('src/graph/'))
   .sort();
 assert.deepEqual(graphModulePaths, [
+  'src/graph/barrier-region-bitset.ts',
   'src/graph/barrier-region-ownership.ts',
   'src/graph/barrier-region-query.ts',
   'src/graph/build-graph-kernel.ts',
+  'src/graph/classify-barrier-region-ownership.ts',
   'src/graph/collect-barrier-region-ownership.ts',
+  'src/graph/create-barrier-region-membership-collector.ts',
   'src/graph/graph-kernel-build.ts',
   'src/graph/graph-kernel-input.ts',
   'src/graph/graph-kernel.ts',
   'src/graph/graph-operation-kind.ts',
   'src/graph/graph-operation-sink.ts',
   'src/graph/index.ts',
+  'src/graph/is-topological-order.ts',
   'src/graph/reachable-node-offsets.ts',
   'src/graph/reverse-reachable-node-offsets.ts',
   'src/graph/topological-order.ts',
+  'src/graph/traverse-barrier-region.ts',
+  'src/graph/validate-barrier-region-queries.ts',
 ]);
 
 const definitionModulePaths = sourceModules
