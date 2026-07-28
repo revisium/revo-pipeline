@@ -15,23 +15,33 @@ or blocked, never passed.
 corepack pnpm verify
 ```
 
-It covers formatting, strict TypeScript 7, type-aware Oxlint, unit and package tests,
-Vitest v8 coverage, architecture positive/negative proof, ESM/declaration build,
-`publint`, and exact one-tarball ATTW/content/isolated ESM/strict TS/runtime and
-type-level deep-import proof. Foundation coverage includes the owned structural
-architecture validator.
+It covers formatting, strict TypeScript 7, type-aware Oxlint, exhaustive test routing,
+the architecture harness, product/package/characterization tests under one Vitest v8
+coverage run, architecture positive/negative proof, ESM/declaration build, `publint`,
+and exact one-tarball ATTW/content/isolated ESM/strict TS/runtime and type-level
+deep-import proof. Production coverage is the complete `src` boundary; structural
+validators are exercised by their mutant harness and against the exact repository tree
+by the direct architecture gate.
 
-| Capability       | Command                               |
-| ---------------- | ------------------------------------- |
-| Format           | `corepack pnpm format:check`          |
-| Typecheck        | `corepack pnpm typecheck`             |
-| Lint             | `corepack pnpm lint`                  |
-| Tests            | `corepack pnpm test`                  |
-| Characterization | `corepack pnpm test:characterization` |
-| Coverage         | `corepack pnpm test:cov`              |
-| Architecture     | `corepack pnpm verify:architecture`   |
-| Build            | `corepack pnpm build`                 |
-| Package          | `corepack pnpm verify:package`        |
+| Capability              | Command                                 |
+| ----------------------- | --------------------------------------- |
+| Format                  | `corepack pnpm format:check`            |
+| Typecheck               | `corepack pnpm typecheck`               |
+| Lint                    | `corepack pnpm lint`                    |
+| Focused developer tests | `corepack pnpm test`                    |
+| Test routing            | `corepack pnpm verify:test-routing`     |
+| Architecture harness    | `corepack pnpm test:harness`            |
+| Product coverage        | `corepack pnpm test:cov`                |
+| Coverage boundary       | `corepack pnpm verify:product-coverage` |
+| Characterization corpus | `corepack pnpm verify:characterization` |
+| Architecture            | `corepack pnpm verify:architecture`     |
+| Build                   | `corepack pnpm build`                   |
+| Package                 | `corepack pnpm verify:package`          |
+
+The primary gate executes all 34 test files and 935 tests exactly once: 24 files /
+458 tests in the coverage route and 10 files / 477 tests in the architecture harness.
+Standalone unit, package, and characterization commands remain available for focused
+development but are not called again by `verify`.
 
 ## Conditional gates
 

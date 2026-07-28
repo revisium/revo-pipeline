@@ -13,7 +13,10 @@ src/graph/                         bounded topology, reachability and region alg
 src/definition/                    identity helper, validation and deterministic compilation
 src/transition/                    decoding inspector and pure seven-node transition evaluation
 scripts/architecture/              structural source validation
+scripts/test/                      shared mandatory test-route definitions
 scripts/verify-architecture.ts     positive graph and exact negative probes
+scripts/verify-test-routing.ts     fail-closed Vitest discovery inventory
+scripts/verify-product-coverage.ts complete src-only LCOV boundary proof
 scripts/verify-package.ts          one-tarball package/consumer proof
 test/unit/policy/                  portable policy and bound behavior
 test/unit/spec/                    type contract assertions
