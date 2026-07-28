@@ -38,8 +38,8 @@ by the direct architecture gate.
 | Build                   | `corepack pnpm build`                   |
 | Package                 | `corepack pnpm verify:package`          |
 
-The primary gate executes all 34 test files and 935 tests exactly once: 24 files /
-458 tests in the coverage route and 10 files / 477 tests in the architecture harness.
+The primary gate executes all 37 test files and 985 tests exactly once: 25 files /
+465 tests in the coverage route and 12 files / 520 tests in the architecture harness.
 Standalone unit, package, and characterization commands remain available for focused
 development but are not called again by `verify`.
 

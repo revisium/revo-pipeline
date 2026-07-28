@@ -8,166 +8,196 @@
 Portable pipeline definitions, deterministic compilation, pure semantic decisions, and
 pure snapshot reduction for Revo.
 
-The MVP root API is implemented and package-ready, but this `0.0.0` package is not
-published. It exports exactly `definePipeline`, `compilePipeline`, `decidePipeline`,
-`decodeCompiledPipeline`, `reducePipeline`, and
-the 86 Accepted readonly contract types, including safe unknown-JSON decoding. No default export, alias, subpath,
-policy helper, graph helper, or runtime dependency is public.
+This repository artifact implements `@revisium/revo-pipeline` version `0.0.0`.
+Registry publication is a separate authorized release operation; a source checkout,
+README, badge, or package-verification result does not establish registry availability.
+The public root contains exactly five runtime values and 86 Accepted readonly types.
 
-```text
-PipelineDefinition --compilePipeline--> CompiledPipeline
-unknown JSON --decodeCompiledPipeline--> CompiledPipelineDecoding
-CompiledPipeline + PipelineFacts --decidePipeline--> PipelineDecision
-CompiledPipeline + PipelineSnapshot + PipelineCommand --reducePipeline--> PipelineReduction
+## Installation and package use
+
+After the exact version has been independently confirmed in the registry, install it
+with:
+
+```bash
+corepack pnpm add @revisium/revo-pipeline@0.0.0
 ```
 
-`definePipeline` preserves literal inference. Every callable is synchronous,
-deterministic, state-free, non-mutating, and performs no I/O. Successful compiler,
-decoder, and reducer results are package-owned immutable data. Compilation, decoding,
-and reduction can fail: narrow their discriminated `ok` result before reading `pipeline`
-or `faults`. Decisions narrow by `kind`.
+The package requires Node.js `>=24.11.1 <25`. It is strict ESM, has one named-export
+root, bundles TypeScript declarations, has zero runtime dependencies, and denies
+default, alias, subpath, and deep imports.
 
-| Value                    | Input role                                       | Result role                           |
-| ------------------------ | ------------------------------------------------ | ------------------------------------- |
-| `definePipeline`         | readonly definition literal                      | same literal with preserved inference |
-| `compilePipeline`        | `PipelineDefinition`                             | `PipelineCompilation`                 |
-| `decodeCompiledPipeline` | `unknown` serialized data                        | `CompiledPipelineDecoding`            |
-| `decidePipeline`         | compiled pipeline plus complete facts            | `PipelineDecision`                    |
-| `reducePipeline`         | compiled pipeline, settled snapshot, one command | `PipelineReduction`                   |
+## Choosing an API
 
-This is one ESM-only public root with zero runtime dependencies. The type groups belong
-to the Accepted [definition](./docs/specs/pipeline-definition-v1.spec.md),
-[transition](./docs/specs/pipeline-transition-v1.spec.md),
-[decoding](./docs/specs/pipeline-decoding-v1.spec.md), and
-[reducer](./docs/specs/pipeline-reducer-v1.spec.md) contracts.
+| Value                    | Use                                                                                                                                           |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `definePipeline`         | Preserve literal inference for a readonly definition; it returns the same value and does not validate, copy, retain, or freeze it.            |
+| `compilePipeline`        | Validate and canonicalize a definition into a newly owned frozen `CompiledPipeline`, or receive bounded definition faults.                    |
+| `decodeCompiledPipeline` | Validate `unknown` as the exact canonical compiled-v1 representation; it does not repair or recompile input.                                  |
+| `decidePipeline`         | Inspect a compiled pipeline and one complete `PipelineFacts` projection to obtain one pure semantic intent.                                   |
+| `reducePipeline`         | Apply or replay one command in call-local state and drain to a settled wait or terminal, returning a frozen snapshot and atomic effect batch. |
 
-## Working root example
+Narrow compiler, decoder, and reducer results by `ok`; then narrow reducer success by
+`status`. Narrow decisions by `kind`. Use `decidePipeline` for inspection or when the
+consumer deliberately applies individual semantic intents. Use `reducePipeline` as the
+preferred durable-host command-to-settled-state seam. Do not call both to drive the same
+transition.
 
-<!-- package-example:readme-working-root -->
+## Task, branch, and terminal
+
+This low-level example makes omission mean “not activated” and supplies complete facts
+with all four collections.
+
+<!-- package-example:start:task-branch-terminal -->
 
 ```ts
 import assert from 'node:assert/strict';
 import {
   compilePipeline,
   decidePipeline,
-  decodeCompiledPipeline,
   definePipeline,
-  reducePipeline,
   type PipelineFacts,
-  type PipelineSnapshot,
 } from '@revisium/revo-pipeline';
 
-const definition = definePipeline({
-  schemaVersion: 1,
-  entry: 'approval',
-  facts: [],
+const source = {
+  schemaVersion: 1 as const,
+  entry: 'assess',
+  facts: [{ key: 'risk', type: 'string' as const }],
   nodes: [
     {
-      kind: 'humanGate',
-      key: 'approval',
-      subject: 'Approve the change',
-      resolutions: [
-        { resolution: 'approved', to: 'published' },
-        { resolution: 'rejected', to: 'cancelled' },
-      ],
+      kind: 'task' as const,
+      key: 'assess',
+      outcomes: {
+        completed: 'route',
+        failed: 'stopped',
+        cancelled: 'stopped',
+        skipped: 'stopped',
+      },
     },
-    { kind: 'terminal', key: 'published', outcome: 'published' },
-    { kind: 'terminal', key: 'cancelled', outcome: 'cancelled' },
+    {
+      kind: 'branch' as const,
+      key: 'route',
+      fact: 'risk',
+      cases: [{ name: 'publish', when: { op: 'equals' as const, value: 'low' }, to: 'published' }],
+      default: { name: 'reject', to: 'stopped' },
+    },
+    { kind: 'terminal' as const, key: 'published', outcome: 'published' },
+    { kind: 'terminal' as const, key: 'stopped', outcome: 'stopped' },
   ],
-});
-
+};
+const definition = definePipeline(source);
+assert.equal(definition, source);
 const compilation = compilePipeline(definition);
 if (!compilation.ok) {
-  throw new Error(compilation.faults.map((fault) => fault.message).join('\n'));
+  throw new Error(compilation.faults.map(({ code, path }) => `${code} ${path}`).join('\n'));
 }
-
-const serialized: unknown = JSON.parse(JSON.stringify(compilation.pipeline));
-const decoding = decodeCompiledPipeline(serialized);
-if (!decoding.ok) {
-  throw new Error(decoding.faults.map((fault) => fault.message).join('\n'));
-}
-const pipeline = decoding.pipeline;
-const snapshot: PipelineSnapshot = {
-  schemaVersion: 1,
-  occurrenceKey: 'example',
-  phase: 'uninitialized',
-  values: [],
-  nodes: [],
+assert.notEqual(compilation.pipeline, source);
+assert.equal(Object.isFrozen(compilation.pipeline), true);
+const pipeline = compilation.pipeline;
+const facts = (
+  nodes: PipelineFacts['nodes'],
+  values: PipelineFacts['values'] = [],
+): PipelineFacts => ({
+  values,
+  nodes,
   candidateVerdicts: [],
   gateResolutions: [],
-  terminal: null,
-};
-const command = { schemaVersion: 1 as const, kind: 'init' as const, values: [] };
-const initialization = reducePipeline(pipeline, snapshot, command);
-if (!initialization.ok) {
-  throw new Error(initialization.faults.map((fault) => fault.message).join('\n'));
-}
-if (
-  initialization.status !== 'waiting' ||
-  initialization.application !== 'applied' ||
-  initialization.snapshot.phase !== 'active'
-) {
-  throw new Error('Expected initialization to wait after applying its command.');
-}
-const settled = initialization.snapshot;
-assert.deepEqual(initialization.batch, {
-  kind: 'atomic',
-  items: [
-    { kind: 'initialize', occurrenceKey: 'example', values: [] },
-    {
-      kind: 'activateNode',
-      occurrence: { occurrenceKey: 'example', nodeKey: 'approval' },
-      cause: { kind: 'entry' },
-      fork: { kind: 'none' },
-    },
-  ],
 });
-
-const facts: PipelineFacts = {
-  values: [],
-  nodes: [{ key: 'approval', state: 'enabled' }],
-  candidateVerdicts: [],
-  gateResolutions: [],
-};
-const decision = decidePipeline(pipeline, facts);
-if (decision.kind !== 'wait') {
-  throw new Error('Expected the enabled gate to await a resolution.');
-}
-
-const replay = reducePipeline(pipeline, settled, command);
-if (!replay.ok || replay.application !== 'unchanged' || replay.status !== 'waiting') {
-  throw new Error('Expected an exact replay to preserve the settled snapshot.');
-}
-assert.deepEqual(replay.snapshot, settled);
-assert.deepEqual(replay.wait, initialization.wait);
-if (replay.batch.kind !== 'atomic' || replay.batch.items.length !== 0) {
-  throw new Error('Expected an exact replay to emit an empty atomic batch.');
-}
+assert.deepEqual(decidePipeline(pipeline, facts([])), {
+  kind: 'activate',
+  cause: { kind: 'entry' },
+  nodeKeys: ['assess'],
+});
+assert.deepEqual(decidePipeline(pipeline, facts([{ key: 'assess', state: 'enabled' }])), {
+  kind: 'wait',
+  nodeKey: 'assess',
+  reason: 'task-incomplete',
+});
+assert.deepEqual(
+  decidePipeline(
+    pipeline,
+    facts(
+      [{ key: 'assess', state: 'terminal', outcome: 'completed' }],
+      [{ key: 'risk', value: 'low' }],
+    ),
+  ),
+  {
+    kind: 'activate',
+    cause: { kind: 'node', nodeKey: 'assess', outcome: 'completed' },
+    nodeKeys: ['route'],
+  },
+);
+const factsA = facts(
+  [
+    { key: 'assess', state: 'terminal', outcome: 'completed' },
+    { key: 'route', state: 'enabled' },
+  ],
+  [{ key: 'risk', value: 'low' }],
+);
+const factsB: PipelineFacts = JSON.parse(JSON.stringify(factsA)) as PipelineFacts;
+assert.notEqual(factsA, factsB);
+assert.notEqual(factsA.nodes, factsB.nodes);
+assert.deepEqual(factsA, factsB);
+const selection = decidePipeline(pipeline, factsA);
+assert.deepEqual(selection, {
+  kind: 'select',
+  nodeKey: 'route',
+  outcome: 'publish',
+  activate: ['published'],
+});
+assert.deepEqual(selection, decidePipeline(pipeline, factsB));
+assert.deepEqual(
+  decidePipeline(
+    pipeline,
+    facts(
+      [
+        { key: 'assess', state: 'terminal', outcome: 'completed' },
+        { key: 'route', state: 'terminal', outcome: 'publish' },
+        { key: 'published', state: 'enabled' },
+      ],
+      [{ key: 'risk', value: 'low' }],
+    ),
+  ),
+  { kind: 'terminal', nodeKey: 'published', outcome: 'published' },
+);
 ```
 
-The package owns graph semantics for `task`, `branch`, `fork`, `join`, `consensus`,
-`humanGate`, and `terminal`. Fork/join readiness is derived from declared exit facts;
-consensus and gates are derived from supplied verdicts and resolutions. There is no
-hidden arrival, vote, gate, or run state.
+<!-- package-example:end:task-branch-terminal -->
 
-## Boundary and future integration
+The package owns semantics for `task`, `branch`, `fork`, `join`, `consensus`,
+`humanGate`, and `terminal`, but owns no storage, revision, transaction, retry,
+authorization, inbox, queue, clock, worker, or effect application.
 
-This package owns definitions, validation, canonical compilation, graph semantics, and
-pure decisions/reductions from supplied data. A host owns storage, clocks, IDs, attempts,
-leases, CAS, retries, resume, authorization, queues, agents, scripts, and application of
-returned effects. A future host can consume the public root through a one-way dependency;
-this package does not claim compatibility with any legacy orchestrator or persistence model.
+## Documentation
 
-The diagnostic decoder is the safe boundary for unknown compiled JSON. The pure reducer
-inspects hostile snapshot and command inputs, applies or replays one compound command,
-and drains deterministic decisions to a wait or terminal without owning persistence.
+The version links match a released `@revisium/revo-pipeline@0.0.0` artifact only when
+that separately authorized version and `v0.0.0` tag exist; they may be unavailable
+before the tag is created. The current-development links are mutable, may differ from or
+run ahead of a released artifact, and are for current source development and review.
+They are not version-specific contract evidence for an installed package.
 
-See the Accepted [definition contract](./docs/specs/pipeline-definition-v1.spec.md),
-[transition contract](./docs/specs/pipeline-transition-v1.spec.md),
-[decoding contract](./docs/specs/pipeline-decoding-v1.spec.md),
-[reducer contract](./docs/specs/pipeline-reducer-v1.spec.md),
-[module DAG](./docs/specs/internal-module-structure.spec.md), and
-[executable consumer example](./docs/examples/consumer.md).
+| Topic                               | Version 0.0.0 documentation (immutable release target)                                                            | Current development documentation (mutable)                                                                       |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Documentation index                 | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/README.md)                                   | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/README.md)                                   |
+| API reference                       | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/api.md)                                      | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/api.md)                                      |
+| State machine, facts, and decisions | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/state-machine.md)                            | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/state-machine.md)                            |
+| Host integration and CAS            | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/host-integration.md)                         | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/host-integration.md)                         |
+| Scenario index                      | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/examples/README.md)                          | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/examples/README.md)                          |
+| Fork/join/consensus scenario        | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/examples/fork-join-consensus-terminal.md)    | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/examples/fork-join-consensus-terminal.md)    |
+| Human-gate/replay scenario          | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/examples/human-gate-terminal-replay.md)      | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/examples/human-gate-terminal-replay.md)      |
+| Definition specification            | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/specs/pipeline-definition-v1.spec.md)        | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/specs/pipeline-definition-v1.spec.md)        |
+| Transition specification            | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/specs/pipeline-transition-v1.spec.md)        | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/specs/pipeline-transition-v1.spec.md)        |
+| Decoding specification              | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/specs/pipeline-decoding-v1.spec.md)          | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/specs/pipeline-decoding-v1.spec.md)          |
+| Reducer specification               | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/specs/pipeline-reducer-v1.spec.md)           | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/specs/pipeline-reducer-v1.spec.md)           |
+| Package-boundary ADR                | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/adr/0001-package-boundary.md)                | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/adr/0001-package-boundary.md)                |
+| Decoder/reducer ADR                 | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/adr/0002-portable-decoding-and-reduction.md) | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/adr/0002-portable-decoding-and-reduction.md) |
+| Architecture                        | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/architecture.md)                             | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/architecture.md)                             |
+| Testing                             | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/testing.md)                                  | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/testing.md)                                  |
+| Transition traceability             | [version](https://github.com/revisium/revo-pipeline/blob/v0.0.0/docs/transition-test-traceability.md)             | [current](https://github.com/revisium/revo-pipeline/blob/master/docs/transition-test-traceability.md)             |
+
+Working on current source means using the mutable `master` column. After release,
+consumers of `0.0.0` use the immutable column. An unavailable tag or version does not
+prove publication; current-development docs remain source-work guidance, not evidence
+for an installed artifact.
 
 ## Development
 
@@ -178,9 +208,4 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm verify
 ```
 
-`verify` covers formatting, strict TypeScript, type-aware linting, every discovered test
-exactly once across the architecture harness and product coverage routes, complete
-`src`-only LCOV, direct architecture proof, declarations/build, and one exact packed
-tarball reused for contents, publint, ATTW, isolated ESM/strict TypeScript consumers, all
-86 public types, and runtime/type deep-import denial. Publishing, tagging, releasing, or
-merging requires separate approval.
+Publishing, tagging, releasing, or merging requires separate approval.

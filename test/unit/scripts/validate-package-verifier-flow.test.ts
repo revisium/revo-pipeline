@@ -8,32 +8,37 @@ import { validatePackageVerifierFlow } from '../../../scripts/architecture/valid
 
 const FILES = [
   'scripts/verify-package.ts',
+  'scripts/package/package-consumer-catalog.ts',
+  'scripts/package/package-documentation-examples.ts',
   'scripts/package/package-command-runner.ts',
   'scripts/package/package-artifact-tree.ts',
   'scripts/package/package-type-closure.ts',
   'scripts/package/package-consumer-fixtures.ts',
+  'scripts/architecture/validate-module-structure.ts',
 ] as const;
 
 type Candidate = Record<(typeof FILES)[number], string>;
 
 const candidate = async (): Promise<Candidate> => {
-  const [verifier, runner, tree, closure, fixtures] = await Promise.all([
-    readFile(join(process.cwd(), FILES[0]), 'utf8'),
-    readFile(join(process.cwd(), FILES[1]), 'utf8'),
-    readFile(join(process.cwd(), FILES[2]), 'utf8'),
-    readFile(join(process.cwd(), FILES[3]), 'utf8'),
-    readFile(join(process.cwd(), FILES[4]), 'utf8'),
-  ]);
+  const [verifier, catalog, documentation, runner, tree, closure, fixtures, moduleStructure] =
+    await Promise.all(FILES.map((path) => readFile(join(process.cwd(), path), 'utf8')));
   return {
-    'scripts/verify-package.ts': verifier,
-    'scripts/package/package-command-runner.ts': runner,
-    'scripts/package/package-artifact-tree.ts': tree,
-    'scripts/package/package-type-closure.ts': closure,
-    'scripts/package/package-consumer-fixtures.ts': fixtures,
+    'scripts/verify-package.ts': verifier ?? '',
+    'scripts/package/package-consumer-catalog.ts': catalog ?? '',
+    'scripts/package/package-documentation-examples.ts': documentation ?? '',
+    'scripts/package/package-command-runner.ts': runner ?? '',
+    'scripts/package/package-artifact-tree.ts': tree ?? '',
+    'scripts/package/package-type-closure.ts': closure ?? '',
+    'scripts/package/package-consumer-fixtures.ts': fixtures ?? '',
+    'scripts/architecture/validate-module-structure.ts': moduleStructure ?? '',
   };
 };
 
-const validateCandidate = async (sources: Candidate, retiredReader = false): Promise<void> => {
+const validateCandidate = async (
+  sources: Candidate,
+  retiredReader = false,
+  extraPackageFile?: string,
+): Promise<void> => {
   const root = await mkdtemp(join(tmpdir(), 'package-flow-'));
   try {
     await Promise.all(
@@ -44,6 +49,9 @@ const validateCandidate = async (sources: Candidate, retiredReader = false): Pro
     );
     if (retiredReader) {
       await writeFile(join(root, 'scripts/package/package-artifact-reader.ts'), 'export {};\n');
+    }
+    if (extraPackageFile) {
+      await writeFile(join(root, 'scripts/package', extraPackageFile), 'export {};\n');
     }
     validatePackageVerifierFlow(root);
   } finally {
@@ -85,6 +93,74 @@ test('rejects exported reader construction and fixture text in the verifier', as
       'scripts/verify-package.ts': `${sources['scripts/verify-package.ts']}\nconst definition = definePipeline({});`,
     }),
   ).rejects.toThrow('[package-fixture-boundary]');
+});
+
+test('rejects every eighth package leaf, cross-boundary import, and parallel inventory', async () => {
+  const sources = await candidate();
+  await expect(validateCandidate(sources, false, 'package-extra.ts')).rejects.toThrow(
+    '[package-verifier-flow-unproven]',
+  );
+  await expect(
+    validateCandidate({
+      ...sources,
+      'scripts/package/package-consumer-fixtures.ts': `import { PACKAGE_CONSUMER_CASES } from './package-consumer-catalog.js';\n${sources['scripts/package/package-consumer-fixtures.ts']}`,
+    }),
+  ).rejects.toThrow('[package-verifier-flow-unproven]');
+  await expect(
+    validateCandidate({
+      ...sources,
+      'scripts/package/package-consumer-fixtures.ts': `${sources['scripts/package/package-consumer-fixtures.ts']}\nconst CONSUMER_FIXTURE_DESCRIPTORS = [];`,
+    }),
+  ).rejects.toThrow('[package-catalog-boundary]');
+  await expect(
+    validateCandidate({
+      ...sources,
+      'scripts/package/package-artifact-tree.ts': `${sources['scripts/package/package-artifact-tree.ts']}\nconst mutateExhaustivenessDeclaration = true;`,
+    }),
+  ).rejects.toThrow('[package-catalog-boundary]');
+});
+
+test.each([
+  `import catalog from "./package-consumer-catalog.js";`,
+  `import {\n  PACKAGE_CONSUMER_CASES,\n} from "./package-consumer-catalog.js";`,
+  `import * as catalog from './package-consumer-catalog.js';`,
+  `import './package-consumer-catalog.js';`,
+  `import type { ConsumerCase } from "./package-consumer-catalog.js";`,
+  `import catalog = require('./package-consumer-catalog.js');`,
+  `type Catalog = import("./package-consumer-catalog.js");`,
+  `export { PACKAGE_CONSUMER_CASES } from './package-consumer-catalog.js';`,
+  `export * from "./package-consumer-catalog.js";`,
+  `void import('./package-consumer-catalog.js');`,
+  `void require("./package-consumer-catalog.js");`,
+  `void module.require('./package-consumer-catalog.js');`,
+] as const)('rejects unapproved local module loading syntax %#', async (loading) => {
+  const sources = await candidate();
+  await expect(
+    validateCandidate({
+      ...sources,
+      'scripts/package/package-consumer-fixtures.ts': `${loading}\n${sources['scripts/package/package-consumer-fixtures.ts']}`,
+    }),
+  ).rejects.toThrow('[package-verifier-flow-unproven]');
+});
+
+test.each([
+  'reader.typeCaseId(fixture)',
+  'reader.prepareTypeScript(fixture)',
+  'reader.restoreTypeScript(prepared)',
+  'reader.runtimeCaseId(fixture)',
+  'reader.runtimeLaunch(fixture)',
+] as const)('rejects lifecycle proof mutation %s', async (fragment) => {
+  const sources = await candidate();
+  await expect(
+    validateCandidate({
+      ...sources,
+      'scripts/package/package-command-runner.ts': replaceOnce(
+        sources['scripts/package/package-command-runner.ts'],
+        fragment,
+        '/* lifecycle proof removed */',
+      ),
+    }),
+  ).rejects.toThrow('[package-consumer-lifecycle]');
 });
 
 test('rejects missing, conditional, and path-bearing cleanup', async () => {

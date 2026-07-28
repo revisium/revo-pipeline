@@ -16,6 +16,7 @@ import { pathToFileURL } from 'node:url';
 const treeBrand: unique symbol = Symbol('PackageArtifactTree');
 const ownerBrand: unique symbol = Symbol('PackageArtifactTreeOwner');
 const cleanupBrand: unique symbol = Symbol('PackageCleanupRoot');
+const preparedDeclarationBrand: unique symbol = Symbol('PreparedDeclarationMutation');
 
 export interface PackageArtifactTree {
   readonly [treeBrand]: true;
@@ -31,6 +32,15 @@ export interface PackageArtifactTreeOwner {
 export interface PackageArtifactTreeRegistration {
   readonly owner: PackageArtifactTreeOwner;
   readonly tree: PackageArtifactTree;
+}
+
+export interface PreparedDeclarationMutation {
+  readonly [preparedDeclarationBrand]: true;
+}
+
+export interface DeclarationFileOperations {
+  read(path: string): Buffer;
+  write(path: string, content: Buffer): void;
 }
 
 interface CleanupRoot {
@@ -77,6 +87,16 @@ export interface MaterializationPlanEntry {
 }
 
 const registrations = new WeakMap<PackageArtifactTree, TreeRegistration>();
+const preparedDeclarations = new WeakMap<
+  PreparedDeclarationMutation,
+  {
+    readonly tree: PackageArtifactTree;
+    readonly path: string;
+    readonly original: Buffer;
+    readonly operations: DeclarationFileOperations;
+    restored: boolean;
+  }
+>();
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -676,17 +696,21 @@ export const readTreeFile = (tree: PackageArtifactTree, relativePath: string): s
 export const expectedPackageEntryUrl = (tree: PackageArtifactTree): string =>
   pathToFileURL(join(tree.installedPackageRoot, 'dist/index.js')).href;
 
-export const mutateExhaustivenessDeclaration = (
+const declarationMutationPath = (
   tree: PackageArtifactTree,
   kind: 'decision-growth' | 'reduction-growth',
-): (() => void) => {
-  const path = join(
+): string =>
+  join(
     tree.installedPackageRoot,
     kind === 'decision-growth'
       ? 'dist/errors/pipeline-decision.d.ts'
       : 'dist/errors/pipeline-reduction.d.ts',
   );
-  const original = readFileSync(path, 'utf8');
+
+const mutatedDeclaration = (
+  original: string,
+  kind: 'decision-growth' | 'reduction-growth',
+): string => {
   const mutated =
     kind === 'decision-growth'
       ? original.replace(
@@ -700,9 +724,89 @@ export const mutateExhaustivenessDeclaration = (
   if (mutated === original) {
     throw new Error('[package-artifact-boundary]');
   }
-  writeFileSync(path, mutated);
-  return () => writeFileSync(path, original);
+  return mutated;
 };
+
+const restorationMismatch = (primary: unknown): Error =>
+  new Error('[package-typescript-restore]', { cause: primary });
+
+const preparationAndRestorationFailure = (primary: unknown, restore: unknown): AggregateError =>
+  new AggregateError([primary, restore], '[package-typescript-prepare-and-restore]', {
+    cause: primary,
+  });
+
+const restorePreparedDeclaration = (
+  tree: PackageArtifactTree,
+  prepared: PreparedDeclarationMutation,
+): void => {
+  const details = preparedDeclarations.get(prepared);
+  if (!details || details.tree !== tree || details.restored) {
+    throw new Error('[package-artifact-identity]');
+  }
+  details.restored = true;
+  details.operations.write(details.path, details.original);
+  if (!details.operations.read(details.path).equals(details.original)) {
+    throw new Error('[package-typescript-restore]');
+  }
+};
+
+const nodeDeclarationFileOperations: DeclarationFileOperations = Object.freeze({
+  read: (path: string) => readFileSync(path),
+  write: (path: string, content: Buffer) => writeFileSync(path, content),
+});
+
+const prepareDeclaration = (
+  tree: PackageArtifactTree,
+  kind: 'decision-growth' | 'reduction-growth',
+  operations: DeclarationFileOperations,
+): PreparedDeclarationMutation => {
+  const path = declarationMutationPath(tree, kind);
+  let original: Buffer | undefined;
+  let mutationWriteAttempted = false;
+  try {
+    original = operations.read(path);
+    const mutated = Buffer.from(mutatedDeclaration(original.toString('utf8'), kind));
+    mutationWriteAttempted = true;
+    operations.write(path, mutated);
+    if (!operations.read(path).equals(mutated)) {
+      throw new Error('[package-artifact-boundary]');
+    }
+    const prepared: PreparedDeclarationMutation = Object.freeze({
+      [preparedDeclarationBrand]: true as const,
+    });
+    preparedDeclarations.set(prepared, { tree, path, original, operations, restored: false });
+    return prepared;
+  } catch (primary: unknown) {
+    if (!original || !mutationWriteAttempted) {
+      throw primary;
+    }
+    try {
+      operations.write(path, original);
+      if (!operations.read(path).equals(original)) {
+        throw restorationMismatch(primary);
+      }
+    } catch (restore: unknown) {
+      throw preparationAndRestorationFailure(primary, restore);
+    }
+    throw primary;
+  }
+};
+
+export const prepareExhaustivenessDeclaration = (
+  tree: PackageArtifactTree,
+  kind: 'decision-growth' | 'reduction-growth',
+): PreparedDeclarationMutation => prepareDeclaration(tree, kind, nodeDeclarationFileOperations);
+
+export const prepareExhaustivenessDeclarationForTest = (
+  tree: PackageArtifactTree,
+  kind: 'decision-growth' | 'reduction-growth',
+  operations: DeclarationFileOperations,
+): PreparedDeclarationMutation => prepareDeclaration(tree, kind, operations);
+
+export const restoreExhaustivenessDeclaration = (
+  tree: PackageArtifactTree,
+  prepared: PreparedDeclarationMutation,
+): void => restorePreparedDeclaration(tree, prepared);
 
 export const assertPackageResolution = (
   tree: PackageArtifactTree,

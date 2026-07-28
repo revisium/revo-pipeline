@@ -5,17 +5,17 @@ The MVP slices retain table-driven proof at each owning boundary and MUST pass
 
 ## Slice matrix
 
-| Slice | Required proof                                                                                                                   |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | accepted contracts, bootstrap root/package proof, full DAG positive graph, and exact negative probes                             |
-| 2     | every public spec/policy/error type, JSON guards/equality, every limit, stable fault ordering/truncation                         |
-| 3     | compiler normalization, graph/fork regions, canonical indexes, freeze/isolation, round-trip and tamper rejection                 |
-| 4     | entry/task/branch/terminal/noop, causal facts, faults-before-actions, actions-before-waits, terminal precedence                  |
-| 5a    | fork/join activation/readiness edges, regions, causal closure, and all/any/threshold partitions                                  |
-| 5b    | consensus/human-gate algorithms, verdict/resolution prerequisites, bounds, and faults                                            |
-| 6     | hostile unknown-JSON decoding, canonicality, faults, caps, deep ownership, and freezing                                          |
-| 7     | snapshot/command inspection, replay/conflict/lifecycle precedence, all commands, decision drain, and effect/snapshot consistency |
-| 8     | exact five-value/86-type source/declaration/runtime surface and strict exact-tarball consumers with denied imports               |
+| Slice | Required proof                                                                                                                                      |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | accepted contracts, bootstrap root/package proof, full DAG positive graph, and exact negative probes                                                |
+| 2     | every public spec/policy/error type, JSON guards/equality, every limit, stable fault ordering/truncation                                            |
+| 3     | compiler normalization, graph/fork regions, canonical indexes, freeze/isolation, round-trip and tamper rejection                                    |
+| 4     | entry/task/branch/terminal/noop, causal facts, faults-before-actions, actions-before-waits, terminal precedence                                     |
+| 5a    | fork/join activation/readiness edges, regions, causal closure, and all/any/threshold partitions                                                     |
+| 5b    | consensus/human-gate algorithms, verdict/resolution prerequisites, bounds, and faults                                                               |
+| 6     | hostile unknown-JSON decoding, canonicality, faults, caps, deep ownership, and freezing                                                             |
+| 7     | snapshot/command inspection, replay/conflict/lifecycle precedence, all commands, decision drain, and effect/snapshot consistency                    |
+| 8     | exact five-value/86-type source/declaration/runtime surface, all-three documented scenarios, and strict exact-tarball consumers with denied imports |
 
 ## Semantic matrix
 
@@ -54,10 +54,10 @@ commands.
 Before merge, exact-head CI, a real Sonar quality gate with zero valid open issues, and
 zero valid unresolved review threads are REQUIRED.
 
-Vitest aggregate thresholds remain 90% statements, 90% lines, 90% functions, and 80% branches;
-its configured coverage includes source and architecture-script surfaces and emits `lcov`.
-Sonar coverage is intentionally the production `src` surface only. `test` is registered as test
-code, while package and architecture scripts remain mandatory `corepack pnpm verify` checks,
-not Sonar production sources or exclusions. See [transition test traceability](./transition-test-traceability.md) for
-the named-test and graph-invariant evidence behind every normative transition and testing matrix
-row.
+Vitest aggregate thresholds remain 90% statements, 90% lines, 90% functions, and 80%
+branches. V8 coverage and its `lcov` report intentionally cover the production
+`src/**/*.ts` surface only. `test` is registered as test code. Package and architecture
+scripts are exercised by their separate mandatory harness and by
+`corepack pnpm verify`; they are not Sonar production sources or V8 coverage inputs.
+See [transition test traceability](./transition-test-traceability.md) for the named-test
+and graph-invariant evidence behind every normative transition and testing matrix row.

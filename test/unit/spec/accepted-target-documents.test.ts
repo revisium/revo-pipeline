@@ -13,7 +13,9 @@ const index = read('docs/specs/README.md');
 const adr = read('docs/adr/0002-portable-decoding-and-reduction.md');
 const readme = read('README.md');
 const docsIndex = read('docs/README.md');
-const consumer = read('docs/examples/consumer.md');
+const examplesIndex = read('docs/examples/README.md');
+const forkJoinExample = read('docs/examples/fork-join-consensus-terminal.md');
+const humanGateExample = read('docs/examples/human-gate-terminal-replay.md');
 const testing = read('docs/testing.md');
 
 const compiledIntegrityModuleMap = `transition/decode-compiled-pipeline.ts
@@ -121,29 +123,52 @@ const tableRowsAfter = (document: string, marker: string): readonly (readonly st
 
 describe('Accepted decoder and reducer target', () => {
   test('keeps shipped status, final-manifest ownership, and executable examples synchronized', () => {
-    expect(readme).toContain('package-example:readme-working-root');
-    expect(consumer).toContain('package-example:expanded-consumer');
-    expect(readme).toContain('`0.0.0` package is not\npublished');
+    expect(readme).toContain('package-example:start:task-branch-terminal');
+    expect(readme).toContain('package-example:end:task-branch-terminal');
+    expect(forkJoinExample).toContain('package-example:start:fork-join-consensus-terminal');
+    expect(forkJoinExample).toContain('package-example:end:fork-join-consensus-terminal');
+    expect(humanGateExample).toContain('package-example:start:human-gate-terminal-replay');
+    expect(humanGateExample).toContain('package-example:end:human-gate-terminal-replay');
+    expect(examplesIndex).toContain('`definePipeline`, `compilePipeline`, `decidePipeline`');
+    expect(examplesIndex).toContain(
+      '`compilePipeline`, `decodeCompiledPipeline`, `reducePipeline`',
+    );
+    for (const nodeKind of [
+      '`task`',
+      '`branch`',
+      '`fork`',
+      '`join`',
+      '`consensus`',
+      '`humanGate`',
+      '`terminal`',
+    ]) {
+      expect(examplesIndex).toContain(nodeKind);
+    }
+    expect(readme).toContain('Registry publication is a separate authorized release operation');
     expect(readme).toContain('zero runtime dependencies');
-    expect(readme).toContain('Decisions narrow by `kind`');
-    expect(consumer).toContain('decodeCompiledPipeline(serialized)');
-    expect(readme).toContain("initialization.snapshot.phase !== 'active'");
-    expect(consumer).toContain("initialization.snapshot.phase !== 'active'");
-    expect(readme).toContain("kind: 'activateNode'");
-    expect(consumer).toContain("kind: 'activateNode'");
-    expect(consumer).toContain("replay.application !== 'unchanged'");
-    expect(consumer).toContain('replay.batch.items.length !== 0');
+    expect(readme).toContain('Narrow decisions by `kind`');
+    expect(forkJoinExample).toContain('decodeCompiledPipeline(unknownA)');
+    expect(forkJoinExample).toContain("initialized.status !== 'waiting'");
+    expect(forkJoinExample).toContain("'activateNode'");
+    expect(humanGateExample).toContain("replay.application, 'unchanged'");
+    expect(humanGateExample).toContain("{ kind: 'atomic', items: [] }");
     expect(modules).toContain('final five-value/86-type root manifest');
     expect(decoder).toContain('## Shipped example and proof');
     expect(reducer).toContain('- Implementation: Shipped by PR7');
     expect(adr).toContain('The shipped public root contains five values and 86 types.');
-    expect(testing).toContain('90% statements, 90% lines, 90% functions, and 80% branches');
-    expect(testing).toContain('Sonar coverage is intentionally the production `src` surface only.');
+    expect(testing.replace(/\s+/g, ' ')).toContain(
+      '90% statements, 90% lines, 90% functions, and 80% branches',
+    );
+    expect(testing).toContain(
+      'V8 coverage and its `lcov` report intentionally cover the production',
+    );
+    expect(testing).toContain('`src/**/*.ts` surface only.');
     for (const link of [
-      '[Accepted pipeline decoding v1](./specs/pipeline-decoding-v1.spec.md)',
-      '[Accepted pipeline reducer v1](./specs/pipeline-reducer-v1.spec.md)',
+      '[Accepted decoding](./specs/pipeline-decoding-v1.spec.md)',
+      '[Accepted reducer](./specs/pipeline-reducer-v1.spec.md)',
       '[ADR 0002: portable decoding and pure reduction](./adr/0002-portable-decoding-and-reduction.md)',
       '[Transition test traceability](./transition-test-traceability.md)',
+      '[Executable scenarios](./examples/README.md)',
     ]) {
       expect(docsIndex).toContain(link);
     }
@@ -153,9 +178,18 @@ describe('Accepted decoder and reducer target', () => {
       'Until then these are Accepted targets, not shipped exports',
       'This section plans PR6/PR7 ownership without creating files or exports now',
     ]) {
-      expect([readme, consumer, decoder, reducer, modules, adr].join('\n')).not.toContain(
-        stalePhrase,
-      );
+      expect(
+        [
+          readme,
+          examplesIndex,
+          forkJoinExample,
+          humanGateExample,
+          decoder,
+          reducer,
+          modules,
+          adr,
+        ].join('\n'),
+      ).not.toContain(stalePhrase);
     }
   });
 
