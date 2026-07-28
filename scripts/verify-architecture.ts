@@ -9,6 +9,7 @@ import {
   type ArchitectureRule,
   type SourceModule,
 } from './architecture/validate-module-structure.js';
+import { validateReducerBounds } from './architecture/validate-reducer-bounds.js';
 import {
   sourceMetricScope,
   validateSourceMetrics,
@@ -17,6 +18,21 @@ import {
 const root = process.cwd();
 const oxlint = join(root, 'node_modules/.bin/oxlint');
 const config = join(root, '.oxlintrc.architecture.json');
+validateReducerBounds({
+  assembly: await readFile(
+    join(root, 'src/transition/reduction/assemble-pipeline-reduction.ts'),
+    'utf8',
+  ),
+  commandReplay: await readFile(
+    join(root, 'src/transition/command/classify-command-replay.ts'),
+    'utf8',
+  ),
+  drain: await readFile(join(root, 'src/transition/reduction/drain-pipeline.ts'), 'utf8'),
+  effectDelta: await readFile(
+    join(root, 'src/transition/reduction/validate-effect-delta.ts'),
+    'utf8',
+  ),
+});
 
 const collectModules = async (directory: string): Promise<readonly SourceModule[]> => {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -75,11 +91,7 @@ const expectStructureFailure = (module: SourceModule, rule: ArchitectureRule): v
   );
 };
 
-const positiveRootSource =
-  "export { compilePipeline, definePipeline } from './definition/index.js';\n" +
-  "export { decidePipeline, decodeCompiledPipeline } from './transition/index.js';\n" +
-  "export type { ActivateDecision, ActivationCause, AllJoinPolicy, AnyJoinPolicy, BranchCase, BranchDefault, BranchName, BranchNode, BranchPredicate, CandidateKey, CandidateVerdict, CompiledEdge, CompiledEdgeIndexEntry, CompiledEdgeRole, CompiledForkBranch, CompiledForkRegion, CompiledNode, CompiledNodeIndexEntry, CompiledPipeline, ConsensusNode, ConsensusOutcome, ConsensusPolicy, ConsensusRoutes, FactDefinition, FactKey, FactType, ForkBranch, ForkNode, GateResolution, HumanGateNode, HumanGateRoute, JoinNode, JoinOutcome, JoinPolicy, JoinRoutes, JsonScalar, NodeFact, NodeKey, NoopDecision, PipelineDefinition, PipelineFacts, PipelineNode, PipelineValueFact, QuorumConsensusPolicy, ResolutionName, SelectDecision, TaskNode, TaskOutcome, TaskRoutes, TerminalDecision, TerminalNode, ThresholdConsensusPolicy, ThresholdJoinPolicy, UnanimousConsensusPolicy, WaitDecision, WaitReason } from './spec/index.js';\n" +
-  "export type { CompiledPipelineDecoding, DecodeFault, DecodeFaultCode, DecisionFault, DecisionFaultCode, DefinitionFault, DefinitionFaultCode, PipelineCompilation, PipelineDecision, RejectDecision } from './errors/index.js';\n";
+const positiveRootSource = await readFile(join(root, 'src/index.ts'), 'utf8');
 
 const positiveGraph: readonly SourceModule[] = [
   {
@@ -306,6 +318,182 @@ for (const [path, expected] of definitionDependencies) {
   assert.deepEqual(dependencies, [...expected].sort(), `Definition DAG drift: ${path}`);
 }
 
+const reducerApplierPaths = sourceModules
+  .map((module) => module.path)
+  .filter(
+    (path) =>
+      /^src\/transition\/command\/apply-(?:consensus-verdict|human-gate-resolution|initialization|pipeline-command|task-outcome)\.ts$/u.test(
+        path,
+      ) ||
+      /^src\/transition\/reduction\/apply-(?:activation|selection|terminal)-decision\.ts$/u.test(
+        path,
+      ),
+  )
+  .sort();
+assert.deepEqual(
+  reducerApplierPaths,
+  [
+    'src/transition/command/apply-consensus-verdict.ts',
+    'src/transition/command/apply-human-gate-resolution.ts',
+    'src/transition/command/apply-initialization.ts',
+    'src/transition/command/apply-pipeline-command.ts',
+    'src/transition/command/apply-task-outcome.ts',
+    'src/transition/reduction/apply-activation-decision.ts',
+    'src/transition/reduction/apply-selection-decision.ts',
+    'src/transition/reduction/apply-terminal-decision.ts',
+  ],
+  'Reducer command and decision appliers must retain the exact approved leaf map.',
+);
+const reducerApplierDependencies = new Map<string, readonly string[]>([
+  [
+    'src/transition/command/apply-pipeline-command.ts',
+    [
+      './apply-consensus-verdict.js',
+      './apply-human-gate-resolution.js',
+      './apply-initialization.js',
+      './apply-task-outcome.js',
+    ],
+  ],
+  ['src/transition/command/apply-consensus-verdict.ts', []],
+  ['src/transition/command/apply-human-gate-resolution.ts', []],
+  ['src/transition/command/apply-initialization.ts', []],
+  ['src/transition/command/apply-task-outcome.ts', []],
+  [
+    'src/transition/reduction/apply-activation-decision.ts',
+    [
+      './derive-fork-relation.js',
+      './reduction-diagnostic-collector.js',
+      './working-pipeline-state.js',
+    ],
+  ],
+  [
+    'src/transition/reduction/apply-selection-decision.ts',
+    [
+      './apply-activation-decision.js',
+      './reduction-diagnostic-collector.js',
+      './working-pipeline-state.js',
+    ],
+  ],
+  [
+    'src/transition/reduction/apply-terminal-decision.ts',
+    ['./derive-fork-relation.js', './working-pipeline-state.js'],
+  ],
+]);
+for (const [path, expected] of reducerApplierDependencies) {
+  const dependencies = [...sourceOf(path).matchAll(/\bfrom\s+['"](\.[^'"]+)['"]/gu)]
+    .map((match) => match[1]!)
+    .filter((specifier) => !specifier.startsWith('../'))
+    .sort();
+  assert.deepEqual(dependencies, [...expected].sort(), `Reducer applier DAG drift: ${path}`);
+}
+const workingCanonicalizer = sourceModules
+  .map((module) => module.path)
+  .filter((path) => path.endsWith('/canonicalize-working-state.ts'));
+assert.deepEqual(
+  workingCanonicalizer,
+  ['src/transition/reduction/canonicalize-working-state.ts'],
+  'Working-state canonicalization must retain its exact private leaf.',
+);
+assert.deepEqual(
+  [...sourceOf(workingCanonicalizer[0]!).matchAll(/\bfrom\s+['"](\.[^'"]+)['"]/gu)]
+    .map((match) => match[1]!)
+    .sort(),
+  ['../context/decision-context.js', './working-pipeline-state.js'],
+  'Working-state canonicalization DAG drift.',
+);
+assert.match(
+  sourceOf('src/transition/reduce-pipeline.ts'),
+  /canonicalizeWorkingState\(state, context\);\s*return assemblePipelineReduction/u,
+  'Reducer orchestration must canonicalize working state immediately before assembly.',
+);
+const reducerSrpDependencies = new Map<string, readonly string[]>([
+  [
+    'src/transition/command/classify-initialization-replay.ts',
+    [
+      '../../spec/index.js',
+      '../reduction/reduction-diagnostic-collector.js',
+      '../snapshot/snapshot-inspection.js',
+    ],
+  ],
+  [
+    'src/transition/command/classify-recorded-command.ts',
+    ['../../spec/index.js', '../snapshot/snapshot-inspection.js'],
+  ],
+  [
+    'src/transition/command/inspect-command-envelope.ts',
+    ['../capture-reducer-input.js', '../reduction/reduction-diagnostic-collector.js'],
+  ],
+  [
+    'src/transition/command/validate-command-target.ts',
+    [
+      '../../spec/index.js',
+      '../context/decision-context.js',
+      '../reduction/reduction-diagnostic-collector.js',
+      '../snapshot/snapshot-inspection.js',
+    ],
+  ],
+  [
+    'src/transition/reduction/apply-working-decision.ts',
+    [
+      '../../errors/index.js',
+      '../context/decision-context.js',
+      './apply-activation-decision.js',
+      './apply-selection-decision.js',
+      './apply-terminal-decision.js',
+      './reduction-diagnostic-collector.js',
+      './working-pipeline-state.js',
+    ],
+  ],
+  [
+    'src/transition/reduction/decide-working-pipeline.ts',
+    [
+      '../../errors/index.js',
+      '../context/decision-context.js',
+      '../decide-validated.js',
+      '../evaluation/validate-fact-causality.js',
+      '../facts/decision-fault-collector.js',
+      '../facts/validate-pipeline-facts.js',
+      './project-working-facts.js',
+      './reduction-diagnostic-collector.js',
+      './working-pipeline-state.js',
+    ],
+  ],
+  [
+    'src/transition/snapshot/validate-task-value-source.ts',
+    ['../../spec/index.js', '../reduction/reduction-diagnostic-collector.js'],
+  ],
+  [
+    'src/transition/snapshot/validate-gate-value-source.ts',
+    [
+      '../../spec/index.js',
+      '../reduction/reduction-diagnostic-collector.js',
+      './snapshot-inspection.js',
+    ],
+  ],
+  [
+    'src/transition/snapshot/validate-snapshot-phase.ts',
+    [
+      '../../errors/index.js',
+      '../reduction/reduction-diagnostic-collector.js',
+      './snapshot-inspection.js',
+    ],
+  ],
+]);
+assert.deepEqual(
+  sourceModules
+    .map((module) => module.path)
+    .filter((path) => reducerSrpDependencies.has(path))
+    .sort(),
+  [...reducerSrpDependencies.keys()].sort(),
+  'Reducer SRP helper inventory drift.',
+);
+for (const [path, expected] of reducerSrpDependencies) {
+  const dependencies = [...sourceOf(path).matchAll(/\bfrom\s+['"](\.[^'"]+)['"]/gu)]
+    .map((match) => match[1]!)
+    .sort();
+  assert.deepEqual(dependencies, [...expected].sort(), `Reducer SRP helper DAG drift: ${path}`);
+}
+
 const compiledIntegrityPaths = sourceModules
   .map((module) => module.path)
   .filter(
@@ -463,6 +651,7 @@ const decisionLeafPaths = sourceModules
   .filter(
     (path) =>
       path === 'src/transition/decide-pipeline.ts' ||
+      path === 'src/transition/decide-validated.ts' ||
       /^src\/transition\/(?:context|facts|evaluation)\/.+\.ts$/u.test(path),
   )
   .sort();
@@ -470,6 +659,7 @@ assert.deepEqual(decisionLeafPaths, [
   'src/transition/context/build-decision-context.ts',
   'src/transition/context/decision-context.ts',
   'src/transition/decide-pipeline.ts',
+  'src/transition/decide-validated.ts',
   'src/transition/evaluation/find-first-action.ts',
   'src/transition/evaluation/find-first-wait.ts',
   'src/transition/evaluation/find-reached-terminals.ts',
@@ -506,12 +696,21 @@ const decisionDependencies = new Map<string, readonly string[]>([
     [
       './inspect-compiled-pipeline.js',
       './context/build-decision-context.js',
-      './evaluation/find-first-action.js',
-      './evaluation/find-first-wait.js',
-      './evaluation/find-reached-terminals.js',
+      './decide-validated.js',
       './evaluation/validate-fact-causality.js',
       './facts/decision-fault-collector.js',
       './facts/validate-pipeline-facts.js',
+    ],
+  ],
+  [
+    'src/transition/decide-validated.ts',
+    [
+      './context/decision-context.js',
+      './evaluation/find-first-action.js',
+      './evaluation/find-first-wait.js',
+      './evaluation/find-reached-terminals.js',
+      './facts/decision-fault-collector.js',
+      './facts/validated-facts.js',
     ],
   ],
   [
@@ -630,7 +829,8 @@ assert.equal(
   sourceTokens(sourceOf('src/transition/index.ts')),
   sourceTokens(
     "export { decidePipeline } from './decide-pipeline.js';\n" +
-      "export { decodeCompiledPipeline } from './decode-compiled-pipeline.js';\n",
+      "export { decodeCompiledPipeline } from './decode-compiled-pipeline.js';\n" +
+      "export { reducePipeline } from './reduce-pipeline.js';\n",
   ),
   'Transition barrel must not leak private compiled-integrity leaves.',
 );

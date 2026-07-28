@@ -3,6 +3,7 @@ import {
   decidePipeline,
   decodeCompiledPipeline,
   definePipeline,
+  reducePipeline,
   type ActivateDecision,
   type ActivationCause,
   type AllJoinPolicy,
@@ -54,6 +55,26 @@ import {
   type PipelineDefinition,
   type PipelineFacts,
   type PipelineNode,
+  type PipelineCandidateVerdictRecord,
+  type PipelineCommand,
+  type PipelineCommandApplication,
+  type PipelineEffect,
+  type PipelineEffectBatch,
+  type PipelineForkRelation,
+  type PipelineGateResolutionRecord,
+  type PipelineNodeOccurrence,
+  type PipelineOccurrenceKey,
+  type PipelineReduction,
+  type PipelineReductionFault,
+  type PipelineReductionFaultCode,
+  type PipelineReductionStatus,
+  type PipelineRetirement,
+  type PipelineSnapshot,
+  type PipelineSnapshotNode,
+  type PipelineTerminal,
+  type PipelineValueRecord,
+  type PipelineValueSource,
+  type PipelineWait,
   type PipelineValueFact,
   type QuorumConsensusPolicy,
   type RejectDecision,
@@ -138,6 +159,26 @@ export type PublicTypeManifest = readonly [
   NoopDecision,
   RejectDecision,
   PipelineDecision,
+  PipelineCandidateVerdictRecord,
+  PipelineCommand,
+  PipelineCommandApplication,
+  PipelineEffect,
+  PipelineEffectBatch,
+  PipelineForkRelation,
+  PipelineGateResolutionRecord,
+  PipelineNodeOccurrence,
+  PipelineOccurrenceKey,
+  PipelineReduction,
+  PipelineReductionFault,
+  PipelineReductionFaultCode,
+  PipelineReductionStatus,
+  PipelineRetirement,
+  PipelineSnapshot,
+  PipelineSnapshotNode,
+  PipelineTerminal,
+  PipelineValueRecord,
+  PipelineValueSource,
+  PipelineWait,
 ];
 
 const definition = definePipeline({
@@ -161,8 +202,8 @@ const definition = definePipeline({
 
 const literalEntry: 'approval' = definition.entry;
 const literalKind: 'humanGate' = definition.nodes[0].kind;
-const publicTypeCount: PublicTypeManifest['length'] = 66;
-const acceptedPublicTypeCount: 66 = publicTypeCount;
+const publicTypeCount: PublicTypeManifest['length'] = 86;
+const acceptedPublicTypeCount: 86 = publicTypeCount;
 const compilation: PipelineCompilation = compilePipeline(definition);
 const decoding: CompiledPipelineDecoding = decodeCompiledPipeline(
   compilation.ok ? compilation.pipeline : undefined,
@@ -177,6 +218,22 @@ if (compilation.ok) {
   };
   const decision: PipelineDecision = decidePipeline(compilation.pipeline, facts);
   void decision;
+  const snapshot: PipelineSnapshot = {
+    schemaVersion: 1,
+    occurrenceKey: 'example',
+    phase: 'uninitialized',
+    values: [],
+    nodes: [],
+    candidateVerdicts: [],
+    gateResolutions: [],
+    terminal: null,
+  };
+  const reduction: PipelineReduction = reducePipeline(compilation.pipeline, snapshot, {
+    schemaVersion: 1,
+    kind: 'init',
+    values: [],
+  });
+  void reduction;
 }
 
 void literalEntry;

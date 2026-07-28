@@ -8,3 +8,6 @@ export type { RejectDecision } from './reject-decision.js';
 export type { CompiledPipelineDecoding } from './compiled-pipeline-decoding.js';
 export type { DecodeFault } from './decode-fault.js';
 export type { DecodeFaultCode } from './decode-fault-code.js';
+export type { PipelineReduction } from './pipeline-reduction.js';
+export type { PipelineReductionFault } from './pipeline-reduction-fault.js';
+export type { PipelineReductionFaultCode } from './pipeline-reduction-fault-code.js';

@@ -12,7 +12,7 @@ from complete facts and remains compatible.
 
 ## Decision
 
-Add two planned, synchronous root operations in separate implementation slices:
+Add two synchronous root operations in separate implementation slices:
 
 - `decodeCompiledPipeline(input)` diagnostically verifies canonical compiled v1 data and
   returns a newly owned, deeply frozen copy.

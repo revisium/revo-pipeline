@@ -9,5 +9,5 @@
 | [Internal module structure](./internal-module-structure.spec.md) | Accepted |
 
 Acceptance fixes both shipped and planned contracts; it does not imply implementation.
-Definition, transition, and decoding are shipped. Reduction remains the Accepted target for PR7.
-The current root remains exactly four values and 66 types.
+Definition, transition, decoding, and reduction are shipped.
+The current root remains exactly five values and 86 types.

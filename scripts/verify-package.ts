@@ -93,6 +93,7 @@ import {
   decidePipeline,
   decodeCompiledPipeline,
   definePipeline,
+  reducePipeline,
 } from '@revisium/revo-pipeline';
 import * as packageEntry from '@revisium/revo-pipeline';
 
@@ -101,6 +102,7 @@ assert.deepEqual(Object.keys(packageEntry).sort(), [
   'decidePipeline',
   'decodeCompiledPipeline',
   'definePipeline',
+  'reducePipeline',
 ]);
 
 const definition = definePipeline({
@@ -126,6 +128,21 @@ assert.equal(compilation.ok, true);
 if (!compilation.ok) throw new Error('The packed example must compile.');
 const pipeline = JSON.parse(JSON.stringify(compilation.pipeline));
 assert.deepEqual(decodeCompiledPipeline(pipeline), { ok: true, pipeline });
+const snapshot = {
+  schemaVersion: 1,
+  occurrenceKey: 'package-consumer',
+  phase: 'uninitialized',
+  values: [],
+  nodes: [],
+  candidateVerdicts: [],
+  gateResolutions: [],
+  terminal: null,
+};
+assert.equal(reducePipeline(pipeline, snapshot, {
+  schemaVersion: 1,
+  kind: 'init',
+  values: [],
+}).ok, true);
 const emptyFacts = { values: [], nodes: [], candidateVerdicts: [], gateResolutions: [] };
 assert.deepEqual(decidePipeline(pipeline, emptyFacts), {
   kind: 'activate',
@@ -217,6 +234,26 @@ import {
   type PipelineDefinition,
   type PipelineFacts,
   type PipelineNode,
+  type PipelineCandidateVerdictRecord,
+  type PipelineCommand,
+  type PipelineCommandApplication,
+  type PipelineEffect,
+  type PipelineEffectBatch,
+  type PipelineForkRelation,
+  type PipelineGateResolutionRecord,
+  type PipelineNodeOccurrence,
+  type PipelineOccurrenceKey,
+  type PipelineReduction,
+  type PipelineReductionFault,
+  type PipelineReductionFaultCode,
+  type PipelineReductionStatus,
+  type PipelineRetirement,
+  type PipelineSnapshot,
+  type PipelineSnapshotNode,
+  type PipelineTerminal,
+  type PipelineValueRecord,
+  type PipelineValueSource,
+  type PipelineWait,
   type PipelineValueFact,
   type QuorumConsensusPolicy,
   type RejectDecision,
@@ -248,8 +285,13 @@ type PublicTypes = readonly [
   CandidateVerdict, GateResolution, PipelineFacts, ActivationCause, WaitReason,
   DecisionFaultCode, DecisionFault, ActivateDecision, SelectDecision, WaitDecision,
   TerminalDecision, NoopDecision, RejectDecision, PipelineDecision,
+  PipelineCandidateVerdictRecord, PipelineCommand, PipelineCommandApplication,
+  PipelineEffect, PipelineEffectBatch, PipelineForkRelation, PipelineGateResolutionRecord,
+  PipelineNodeOccurrence, PipelineOccurrenceKey, PipelineReduction, PipelineReductionFault,
+  PipelineReductionFaultCode, PipelineReductionStatus, PipelineRetirement, PipelineSnapshot,
+  PipelineSnapshotNode, PipelineTerminal, PipelineValueRecord, PipelineValueSource, PipelineWait,
 ];
-const publicTypeCount: 66 = null as unknown as PublicTypes['length'];
+const publicTypeCount: 86 = null as unknown as PublicTypes['length'];
 
 const definition = definePipeline({
   schemaVersion: 1,
@@ -357,6 +399,11 @@ try {
       import: './dist/index.js',
     },
   });
+  assert.equal(
+    await readFile(join(installedPackage, 'dist/spec/pipeline-occurrence-key.d.ts'), 'utf8'),
+    'export type PipelineOccurrenceKey = string;\n//# sourceMappingURL=pipeline-occurrence-key.d.ts.map',
+    'The packed occurrence-key declaration must retain the exact accepted string alias.',
+  );
   await linkPackage(join(root, 'node_modules'), consumerNodeModules, '@types/node');
 
   await writeFile(
@@ -394,7 +441,7 @@ try {
   });
 
   console.log(
-    `Exact tarball validation passed (${manifest.files.length} files; publint, ATTW, exact contents, ESM, all 66 types, runtime/type deep-import denial).`,
+    `Exact tarball validation passed (${manifest.files.length} files; publint, ATTW, exact contents, ESM, all 86 types, runtime/type deep-import denial).`,
   );
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });

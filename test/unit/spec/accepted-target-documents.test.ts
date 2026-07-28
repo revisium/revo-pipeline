@@ -129,10 +129,10 @@ describe('Accepted decoder and reducer target', () => {
     );
   });
 
-  test('indexes accepted, explicitly unimplemented contracts and their ADR', () => {
+  test('indexes accepted, shipped contracts and their ADR', () => {
     expect(index).toContain('[Pipeline decoding v1](./pipeline-decoding-v1.spec.md)');
     expect(index).toContain('[Pipeline reducer v1](./pipeline-reducer-v1.spec.md)');
-    expect(index).toContain('Reduction remains the Accepted target for PR7');
+    expect(index).toContain('Definition, transition, decoding, and reduction are shipped');
     for (const document of [decoder, reducer, adr]) {
       expect(document).toContain('- Status: Accepted');
     }
@@ -148,9 +148,12 @@ describe('Accepted decoder and reducer target', () => {
     expect(reducer).toContain('mutable\nsession');
   });
 
-  test('keeps planned manifests exact, unique, and equal across owning documents', () => {
+  test('keeps decoder-and-reducer manifests exact, unique, and equal across owning documents', () => {
     const reducerManifest = manifestAfter(reducer, 'The exact new public type manifest is:');
-    const moduleManifest = manifestAfter(modules, 'The exact planned new public type manifest is:');
+    const moduleManifest = manifestAfter(
+      modules,
+      'The exact decoder-and-reducer public type addition manifest is:',
+    );
     expect(reducerManifest).toHaveLength(23);
     expect(new Set(reducerManifest).size).toBe(23);
     expect(moduleManifest).toEqual(reducerManifest);
@@ -162,7 +165,7 @@ describe('Accepted decoder and reducer target', () => {
     expect(reducer).toContain('producing 86 root types');
   });
 
-  test('keeps every planned public discriminant and fault union exact and unique', () => {
+  test('keeps every public discriminant and fault union exact and unique', () => {
     expect(literalFieldValues(decoder, 'CompiledPipelineDecoding', 'ok')).toEqual([]);
     expect(
       [

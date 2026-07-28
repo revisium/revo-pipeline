@@ -8,6 +8,7 @@ const acceptedAliasCriteria = new Map([
   ['acceptedCandidateKeyAlias', 'src/spec/candidate-key.ts'],
   ['acceptedFactKeyAlias', 'src/spec/fact-key.ts'],
   ['acceptedNodeKeyAlias', 'src/spec/node-key.ts'],
+  ['acceptedPipelineOccurrenceKeyAlias', 'src/spec/pipeline-occurrence-key.ts'],
   ['acceptedResolutionNameAlias', 'src/spec/resolution-name.ts'],
 ]);
 
@@ -86,6 +87,15 @@ test('limits Sonar exceptions to reviewed semantic and implementation cases', as
   expect(properties.get('sonar.sources')).toBe('src');
   expect(properties.get('sonar.tests')).toBe('test');
   expect(properties.get('sonar.test.inclusions')).toBe('test/**/*.ts');
+});
+
+test('locks the occurrence-key exception to its exact accepted declaration', async () => {
+  expect(await readFile(join(process.cwd(), 'src/spec/pipeline-occurrence-key.ts'), 'utf8')).toBe(
+    'export type PipelineOccurrenceKey = string;\n',
+  );
+  expect(acceptedAliasCriteria.get('acceptedPipelineOccurrenceKeyAlias')).toBe(
+    'src/spec/pipeline-occurrence-key.ts',
+  );
 });
 
 test('locks temporary Sonar criteria to their exact removal owners', async () => {
