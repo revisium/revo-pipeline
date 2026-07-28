@@ -178,7 +178,7 @@ test('rejects canonical redirection and symlink mutation without invoking remova
   expect(() => cleanupPackageArtifactTree(owner, tree)).toThrow('[package-cleanup]');
   expect(removals).toBe(0);
   expect(readFileSync(join(saved, 'consumer/sentinel'), 'utf8')).toBe('unchanged');
-  rmSync(target);
+  rmSync(target, { recursive: true, force: true });
   rmSync(saved, { recursive: true, force: true });
 });
 
@@ -208,7 +208,7 @@ test.each([
       expect(removals).toBe(0);
       expect(readFileSync(join(saved, 'consumer/sentinel'), 'utf8')).toBe('unchanged');
     } finally {
-      rmSync(target, { force: true });
+      rmSync(target, { recursive: true, force: true });
       rmSync(saved, { recursive: true, force: true });
       rmSync(sibling, { recursive: true, force: true });
     }
