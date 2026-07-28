@@ -204,36 +204,85 @@ const literalEntry: 'approval' = definition.entry;
 const literalKind: 'humanGate' = definition.nodes[0].kind;
 const publicTypeCount: PublicTypeManifest['length'] = 86;
 const acceptedPublicTypeCount: 86 = publicTypeCount;
+const assertNever = (value: never): never => {
+  throw new Error(`Unexpected public union member: ${String(value)}`);
+};
 const compilation: PipelineCompilation = compilePipeline(definition);
 const decoding: CompiledPipelineDecoding = decodeCompiledPipeline(
   compilation.ok ? compilation.pipeline : undefined,
 );
 
 if (compilation.ok) {
-  const facts: PipelineFacts = {
-    values: [],
-    nodes: [{ key: 'approval', state: 'enabled' }],
-    candidateVerdicts: [],
-    gateResolutions: [],
-  };
-  const decision: PipelineDecision = decidePipeline(compilation.pipeline, facts);
-  void decision;
-  const snapshot: PipelineSnapshot = {
-    schemaVersion: 1,
-    occurrenceKey: 'example',
-    phase: 'uninitialized',
-    values: [],
-    nodes: [],
-    candidateVerdicts: [],
-    gateResolutions: [],
-    terminal: null,
-  };
-  const reduction: PipelineReduction = reducePipeline(compilation.pipeline, snapshot, {
-    schemaVersion: 1,
-    kind: 'init',
-    values: [],
-  });
-  void reduction;
+  const decoded: CompiledPipelineDecoding = decodeCompiledPipeline(
+    JSON.parse(JSON.stringify(compilation.pipeline)),
+  );
+  if (!decoded.ok) {
+    const decodeFault = decoded.faults[0];
+    void decodeFault;
+  } else {
+    const facts: PipelineFacts = {
+      values: [],
+      nodes: [{ key: 'approval', state: 'enabled' }],
+      candidateVerdicts: [],
+      gateResolutions: [],
+    };
+    const decision: PipelineDecision = decidePipeline(compilation.pipeline, facts);
+    switch (decision.kind) {
+      case 'activate':
+        void decision.nodeKeys;
+        break;
+      case 'select':
+        void decision.activate;
+        break;
+      case 'wait':
+        void decision.reason;
+        break;
+      case 'terminal':
+        void decision.outcome;
+        break;
+      case 'noop':
+        void decision.reason;
+        break;
+      case 'reject':
+        void decision.faults;
+        break;
+      default:
+        assertNever(decision);
+    }
+    const snapshot: PipelineSnapshot = {
+      schemaVersion: 1,
+      occurrenceKey: 'example',
+      phase: 'uninitialized',
+      values: [],
+      nodes: [],
+      candidateVerdicts: [],
+      gateResolutions: [],
+      terminal: null,
+    };
+    const reduction: PipelineReduction = reducePipeline(compilation.pipeline, snapshot, {
+      schemaVersion: 1,
+      kind: 'init',
+      values: [],
+    });
+    if (!reduction.ok) {
+      const reductionFault = reduction.faults[0];
+      void reductionFault;
+    } else {
+      void reduction.application;
+      void reduction.snapshot;
+      void reduction.batch;
+      switch (reduction.status) {
+        case 'waiting':
+          void reduction.wait;
+          break;
+        case 'terminal':
+          void reduction.terminal;
+          break;
+        default:
+          assertNever(reduction);
+      }
+    }
+  }
 }
 
 void literalEntry;

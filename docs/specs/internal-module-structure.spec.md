@@ -8,8 +8,7 @@ The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**, 
 **MAY** in this document are to be interpreted as described in BCP 14 (RFC 2119 and
 RFC 8174) when, and only when, they appear in all capitals.
 
-Directories MUST be created only with their first accepted behavior. This specification
-does not authorize a bootstrap export.
+Directories are created only with their first accepted behavior.
 
 ## Dependency DAG
 
@@ -33,10 +32,9 @@ definition + transition + spec + errors <- root
 | `transition` | pure facts-to-decision evaluation                                | `spec`, `policy`, `errors`, `graph` |
 
 `graph` MUST NOT import `definition`. `transition` MUST NOT import `definition`; it
-consumes compiled contracts and graph helpers. The root MUST be the only public barrel
-after the later public implementation slice and MUST curate only `definition`,
-`transition`, `spec`, and `errors`. It MUST NOT re-export internal `policy` or `graph`
-helpers. During bootstrap it MUST remain exactly `export {};`.
+consumes compiled contracts and graph helpers. The root is the only public barrel and
+curates only `definition`, `transition`, `spec`, and `errors`. It MUST NOT re-export
+internal `policy` or `graph` helpers.
 
 ## File and import rules
 
@@ -240,10 +238,10 @@ forbidden.
 A DAG rule change MUST update this specification, structural validator, unit partition,
 and positive/negative executable harness in the same change.
 
-## Accepted decoding and reduction target
+## Accepted shipped decoding and reduction ownership
 
-This section plans PR6/PR7 ownership without creating files or exports now. The
-top-level DAG does not change and no new layer or nested barrel is authorized.
+This section records the shipped PR6/PR7 ownership. The top-level DAG does not change
+and no new layer or nested barrel is authorized.
 
 PR6 owns the decoder value, three decoder types, one sole hostile compiled inspector,
 and replacement/refactoring of the compiled-validation façade. PR7 owns the reducer
@@ -277,7 +275,8 @@ on command/reduction; command inspection MUST NOT depend on application; applier
 NOT depend on drain/assembly. Private leaves MUST NOT import a barrel or root, and type
 and value cycles remain forbidden.
 
-The shipped root allowlist is exactly `definePipeline`, `compilePipeline`,
+This specification is the final five-value/86-type root manifest owner. The shipped root
+allowlist is exactly `definePipeline`, `compilePipeline`,
 `decidePipeline`, `decodeCompiledPipeline`, `reducePipeline`, and 86 types, including
 exactly the twenty reducer types in the reducer specification. Inspection results, validated contexts,
 fact-path maps, working state, diagnostic collectors, `decideValidated`, and host DTOs

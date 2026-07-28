@@ -1,45 +1,30 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { dirname, join, relative } from 'node:path';
+import { readFile, readdir } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 
 import {
   validateModuleStructure,
   type SourceModule,
 } from './architecture/validate-module-structure.js';
-
-interface PackFile {
-  readonly path: string;
-}
-
-interface PackManifest {
-  readonly filename: string;
-  readonly files: readonly PackFile[];
-}
+import {
+  createPackageCommandRunner,
+  type PackageArtifact,
+  type PackageArtifactAccess,
+} from './package/package-command-runner.js';
+import {
+  ALIAS_TYPE_CONSUMER_SOURCE,
+  DEFAULT_TYPE_CONSUMER_SOURCE,
+  HOST_SHAPED_CONSUMER_SOURCE,
+  PRIVATE_RUNTIME_CONSUMER_SOURCE,
+  PRIVATE_TYPE_CONSUMER_SOURCE,
+  RUNTIME_CONSUMER_SOURCE,
+  SUBPATH_TYPE_CONSUMER_SOURCE,
+  TYPE_CONSUMER_SOURCE,
+  permissionFixtureSource,
+} from './package/package-consumer-fixtures.js';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
-
-const commandOutputText = (value: unknown): string => {
-  if (typeof value === 'string') {
-    return value;
-  }
-  return Buffer.isBuffer(value) ? value.toString('utf8') : '';
-};
-
-const commandFailureOutput = (error: unknown): string => {
-  if (!isRecord(error)) {
-    return String(error);
-  }
-  return `${commandOutputText(error['stdout'])}${commandOutputText(error['stderr'])}`;
-};
-
-const isPackManifest = (value: unknown): value is PackManifest =>
-  isRecord(value) &&
-  typeof value.filename === 'string' &&
-  Array.isArray(value.files) &&
-  value.files.every((file: unknown) => isRecord(file) && typeof file.path === 'string');
 
 const collectSourceModules = async (
   root: string,
@@ -73,376 +58,327 @@ const expectedPackagePaths = (sourceModules: readonly SourceModule[]): readonly 
   return ['LICENSE', 'README.md', 'package.json', ...compilerEmissions].sort();
 };
 
-const packagePath = (root: string, packageName: string): string =>
-  join(root, ...packageName.split('/'));
-
-const linkPackage = async (
-  sourceNodeModules: string,
-  targetNodeModules: string,
-  packageName: string,
-): Promise<void> => {
-  const target = packagePath(targetNodeModules, packageName);
-  await mkdir(dirname(target), { recursive: true });
-  await symlink(packagePath(sourceNodeModules, packageName), target, 'dir');
-};
-
-const runtimeConsumer = `
-import assert from 'node:assert/strict';
-import {
-  compilePipeline,
-  decidePipeline,
-  decodeCompiledPipeline,
-  definePipeline,
-  reducePipeline,
-} from '@revisium/revo-pipeline';
-import * as packageEntry from '@revisium/revo-pipeline';
-
-assert.deepEqual(Object.keys(packageEntry).sort(), [
-  'compilePipeline',
-  'decidePipeline',
-  'decodeCompiledPipeline',
-  'definePipeline',
-  'reducePipeline',
-]);
-
-const definition = definePipeline({
-  schemaVersion: 1,
-  entry: 'approval',
-  facts: [],
-  nodes: [
-    {
-      kind: 'humanGate',
-      key: 'approval',
-      subject: 'Approve the change',
-      resolutions: [
-        { resolution: 'approved', to: 'published' },
-        { resolution: 'rejected', to: 'cancelled' },
-      ],
-    },
-    { kind: 'terminal', key: 'published', outcome: 'published' },
-    { kind: 'terminal', key: 'cancelled', outcome: 'cancelled' },
-  ],
-});
-const compilation = compilePipeline(definition);
-assert.equal(compilation.ok, true);
-if (!compilation.ok) throw new Error('The packed example must compile.');
-const pipeline = JSON.parse(JSON.stringify(compilation.pipeline));
-assert.deepEqual(decodeCompiledPipeline(pipeline), { ok: true, pipeline });
-const snapshot = {
-  schemaVersion: 1,
-  occurrenceKey: 'package-consumer',
-  phase: 'uninitialized',
-  values: [],
-  nodes: [],
-  candidateVerdicts: [],
-  gateResolutions: [],
-  terminal: null,
-};
-assert.equal(reducePipeline(pipeline, snapshot, {
-  schemaVersion: 1,
-  kind: 'init',
-  values: [],
-}).ok, true);
-const emptyFacts = { values: [], nodes: [], candidateVerdicts: [], gateResolutions: [] };
-assert.deepEqual(decidePipeline(pipeline, emptyFacts), {
-  kind: 'activate',
-  cause: { kind: 'entry' },
-  nodeKeys: ['approval'],
-});
-const unresolvedFacts = {
-  ...emptyFacts,
-  nodes: [{ key: 'approval', state: 'enabled' }],
-};
-assert.deepEqual(decidePipeline(pipeline, unresolvedFacts), {
-  kind: 'wait',
-  nodeKey: 'approval',
-  reason: 'gate-unresolved',
-});
-const resolvedFacts = {
-  ...unresolvedFacts,
-  gateResolutions: [{ nodeKey: 'approval', resolution: 'approved' }],
-};
-const selected = {
-  kind: 'select',
-  nodeKey: 'approval',
-  outcome: 'approved',
-  activate: ['published'],
-};
-assert.deepEqual(decidePipeline(pipeline, resolvedFacts), selected);
-assert.deepEqual(decidePipeline(pipeline, resolvedFacts), selected);
-
-await assert.rejects(
-  import('@revisium/revo-pipeline/dist/index.js'),
-  (error) => error instanceof Error && 'code' in error && error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED',
-);
-`;
-
-const typeConsumer = `
-import {
-  compilePipeline,
-  decidePipeline,
-  decodeCompiledPipeline,
-  definePipeline,
-  type ActivateDecision,
-  type ActivationCause,
-  type AllJoinPolicy,
-  type AnyJoinPolicy,
-  type BranchCase,
-  type BranchDefault,
-  type BranchName,
-  type BranchNode,
-  type BranchPredicate,
-  type CandidateKey,
-  type CandidateVerdict,
-  type CompiledEdge,
-  type CompiledEdgeIndexEntry,
-  type CompiledEdgeRole,
-  type CompiledForkBranch,
-  type CompiledForkRegion,
-  type CompiledNode,
-  type CompiledNodeIndexEntry,
-  type CompiledPipeline,
-  type CompiledPipelineDecoding,
-  type ConsensusNode,
-  type ConsensusOutcome,
-  type ConsensusPolicy,
-  type ConsensusRoutes,
-  type DecisionFault,
-  type DecisionFaultCode,
-  type DecodeFault,
-  type DecodeFaultCode,
-  type DefinitionFault,
-  type DefinitionFaultCode,
-  type FactDefinition,
-  type FactKey,
-  type FactType,
-  type ForkBranch,
-  type ForkNode,
-  type GateResolution,
-  type HumanGateNode,
-  type HumanGateRoute,
-  type JoinNode,
-  type JoinOutcome,
-  type JoinPolicy,
-  type JoinRoutes,
-  type JsonScalar,
-  type NodeFact,
-  type NodeKey,
-  type NoopDecision,
-  type PipelineCompilation,
-  type PipelineDecision,
-  type PipelineDefinition,
-  type PipelineFacts,
-  type PipelineNode,
-  type PipelineCandidateVerdictRecord,
-  type PipelineCommand,
-  type PipelineCommandApplication,
-  type PipelineEffect,
-  type PipelineEffectBatch,
-  type PipelineForkRelation,
-  type PipelineGateResolutionRecord,
-  type PipelineNodeOccurrence,
-  type PipelineOccurrenceKey,
-  type PipelineReduction,
-  type PipelineReductionFault,
-  type PipelineReductionFaultCode,
-  type PipelineReductionStatus,
-  type PipelineRetirement,
-  type PipelineSnapshot,
-  type PipelineSnapshotNode,
-  type PipelineTerminal,
-  type PipelineValueRecord,
-  type PipelineValueSource,
-  type PipelineWait,
-  type PipelineValueFact,
-  type QuorumConsensusPolicy,
-  type RejectDecision,
-  type ResolutionName,
-  type SelectDecision,
-  type TaskNode,
-  type TaskOutcome,
-  type TaskRoutes,
-  type TerminalDecision,
-  type TerminalNode,
-  type ThresholdConsensusPolicy,
-  type ThresholdJoinPolicy,
-  type UnanimousConsensusPolicy,
-  type WaitDecision,
-  type WaitReason,
-} from '@revisium/revo-pipeline';
-
-type PublicTypes = readonly [
-  JsonScalar, NodeKey, FactKey, CandidateKey, BranchName, ResolutionName, TaskOutcome,
-  FactType, FactDefinition, TaskRoutes, BranchPredicate, BranchCase, BranchDefault,
-  ForkBranch, AllJoinPolicy, AnyJoinPolicy, ThresholdJoinPolicy, JoinPolicy, JoinOutcome,
-  JoinRoutes, UnanimousConsensusPolicy, QuorumConsensusPolicy, ThresholdConsensusPolicy,
-  ConsensusPolicy, ConsensusOutcome, ConsensusRoutes, HumanGateRoute, TaskNode, BranchNode,
-  ForkNode, JoinNode, ConsensusNode, HumanGateNode, TerminalNode, PipelineNode,
-  PipelineDefinition, CompiledNode, CompiledEdgeRole, CompiledEdge, CompiledForkBranch,
-  CompiledForkRegion, CompiledNodeIndexEntry, CompiledEdgeIndexEntry, CompiledPipeline,
-  CompiledPipelineDecoding, DecodeFaultCode, DecodeFault,
-  DefinitionFaultCode, DefinitionFault, PipelineCompilation, NodeFact, PipelineValueFact,
-  CandidateVerdict, GateResolution, PipelineFacts, ActivationCause, WaitReason,
-  DecisionFaultCode, DecisionFault, ActivateDecision, SelectDecision, WaitDecision,
-  TerminalDecision, NoopDecision, RejectDecision, PipelineDecision,
-  PipelineCandidateVerdictRecord, PipelineCommand, PipelineCommandApplication,
-  PipelineEffect, PipelineEffectBatch, PipelineForkRelation, PipelineGateResolutionRecord,
-  PipelineNodeOccurrence, PipelineOccurrenceKey, PipelineReduction, PipelineReductionFault,
-  PipelineReductionFaultCode, PipelineReductionStatus, PipelineRetirement, PipelineSnapshot,
-  PipelineSnapshotNode, PipelineTerminal, PipelineValueRecord, PipelineValueSource, PipelineWait,
-];
-const publicTypeCount: 86 = null as unknown as PublicTypes['length'];
-
-const definition = definePipeline({
-  schemaVersion: 1,
-  entry: 'approval',
-  facts: [],
-  nodes: [
-    {
-      kind: 'humanGate',
-      key: 'approval',
-      subject: 'Approve the change',
-      resolutions: [{ resolution: 'approved', to: 'published' }],
-    },
-    { kind: 'terminal', key: 'published', outcome: 'published' },
-  ],
-});
-const literalEntry: 'approval' = definition.entry;
-const literalKind: 'humanGate' = definition.nodes[0].kind;
-const compilation: PipelineCompilation = compilePipeline(definition);
-if (compilation.ok) {
-  const facts: PipelineFacts = {
-    values: [],
-    nodes: [{ key: 'approval', state: 'enabled' }],
-    candidateVerdicts: [],
-    gateResolutions: [],
-  };
-  const decision: PipelineDecision = decidePipeline(compilation.pipeline, facts);
-  void decision;
-}
-void publicTypeCount;
-void literalEntry;
-void literalKind;
-`;
-
-const privateTypeConsumer = `
-import type * as PrivateEntry from '@revisium/revo-pipeline/dist/index.js';
-export type LeakedPrivateEntry = typeof PrivateEntry;
-`;
-
-const consumerTsconfig = {
-  compilerOptions: {
-    target: 'ES2024',
-    lib: ['ES2024'],
-    module: 'NodeNext',
-    moduleResolution: 'NodeNext',
-    moduleDetection: 'force',
-    strict: true,
-    noUncheckedIndexedAccess: true,
-    exactOptionalPropertyTypes: true,
-    noEmit: true,
-    skipLibCheck: false,
-    types: ['node'],
-  },
-  include: ['consumer.ts'],
-};
-
-const root = process.cwd();
-const sourceModules = await collectSourceModules(root, join(root, 'src'));
-const expectedPaths = expectedPackagePaths(sourceModules);
-const temporaryRoot = await mkdtemp(join(tmpdir(), 'revo-pipeline-package-'));
-const packDirectory = join(temporaryRoot, 'package');
-const consumerDirectory = join(temporaryRoot, 'consumer');
-const consumerNodeModules = join(consumerDirectory, 'node_modules');
-
-try {
-  await mkdir(packDirectory);
-  await mkdir(consumerDirectory);
-  const output = execFileSync(
-    'npm',
-    ['pack', '--json', '--ignore-scripts', '--pack-destination', packDirectory],
-    {
-      cwd: root,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        npm_config_cache: join(temporaryRoot, 'npm-cache'),
-        npm_config_loglevel: 'silent',
-      },
-    },
-  );
-  const parsed: unknown = JSON.parse(output);
-  assert.ok(Array.isArray(parsed) && parsed.length === 1);
-  const manifest: unknown = parsed[0];
-  assert.ok(isPackManifest(manifest));
-  assert.deepEqual(
-    manifest.files.map(({ path }) => path).sort(),
-    expectedPaths,
-    'The exact tarball contents must equal source-derived compiler emissions and fixed metadata.',
-  );
-  const tarball = join(packDirectory, manifest.filename);
-
-  execFileSync('publint', [tarball, '--strict'], { cwd: root, stdio: 'inherit' });
-  execFileSync('attw', [tarball, '--profile', 'esm-only'], { cwd: root, stdio: 'inherit' });
-
-  const installedPackage = packagePath(consumerNodeModules, '@revisium/revo-pipeline');
-  await mkdir(installedPackage, { recursive: true });
-  execFileSync('tar', ['-xzf', tarball, '-C', installedPackage, '--strip-components=1']);
-  const packedManifest: unknown = JSON.parse(
-    await readFile(join(installedPackage, 'package.json'), 'utf8'),
-  );
-  assert.ok(isRecord(packedManifest));
-  assert.equal(packedManifest['dependencies'], undefined, 'Runtime dependencies must remain zero.');
-  assert.deepEqual(packedManifest['exports'], {
-    '.': {
-      types: './dist/index.d.ts',
-      import: './dist/index.js',
-    },
-  });
+const executableExample = async (root: string, marker: string): Promise<string> => {
+  const documentPath = marker === 'readme-working-root' ? 'README.md' : 'docs/examples/consumer.md';
+  const document = await readFile(join(root, documentPath), 'utf8');
+  const markerText = `<!-- package-example:${marker} -->`;
+  const markerCount = document.split(markerText).length - 1;
+  assert.equal(markerCount, 1, `${documentPath} must contain exactly one ${markerText} marker.`);
   assert.equal(
-    await readFile(join(installedPackage, 'dist/spec/pipeline-occurrence-key.d.ts'), 'utf8'),
-    'export type PipelineOccurrenceKey = string;\n//# sourceMappingURL=pipeline-occurrence-key.d.ts.map',
-    'The packed occurrence-key declaration must retain the exact accepted string alias.',
+    document.match(/^```ts$/gm)?.length,
+    1,
+    `${documentPath} must contain exactly one executable TypeScript fence.`,
   );
-  await linkPackage(join(root, 'node_modules'), consumerNodeModules, '@types/node');
+  const fence = document
+    .slice(document.indexOf(markerText) + markerText.length)
+    .match(/^\s*```ts\n([\s\S]*?)\n```/);
+  const source = fence?.[1];
+  assert.ok(source, `${documentPath} must contain one TypeScript fence after ${markerText}.`);
+  return source;
+};
 
-  await writeFile(
-    join(consumerDirectory, 'package.json'),
-    `${JSON.stringify({ private: true, type: 'module' }, undefined, 2)}\n`,
-  );
-  await writeFile(join(consumerDirectory, 'consumer.mjs'), runtimeConsumer);
-  await writeFile(join(consumerDirectory, 'consumer.ts'), typeConsumer);
-  await writeFile(join(consumerDirectory, 'private-consumer.ts'), privateTypeConsumer);
-  await writeFile(
-    join(consumerDirectory, 'tsconfig.json'),
-    `${JSON.stringify(consumerTsconfig, undefined, 2)}\n`,
-  );
+const namedExports = (source: string): readonly string[] =>
+  [...source.matchAll(/export(?: type)? \{([\s\S]*?)\} from/g)]
+    .flatMap((match) => match[1]?.split(',') ?? [])
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0)
+    .sort();
 
-  execFileSync(join(root, 'node_modules/.bin/tsc'), ['-p', 'tsconfig.json'], {
-    cwd: consumerDirectory,
-    stdio: 'pipe',
+const assertPackageMetadata = (manifest: Record<string, unknown>): void => {
+  assert.deepEqual(
+    {
+      name: manifest['name'],
+      version: manifest['version'],
+      description: manifest['description'],
+      homepage: manifest['homepage'],
+      bugs: manifest['bugs'],
+      license: manifest['license'],
+      repository: manifest['repository'],
+      files: manifest['files'],
+      type: manifest['type'],
+      sideEffects: manifest['sideEffects'],
+      main: manifest['main'],
+      types: manifest['types'],
+      exports: manifest['exports'],
+      engines: manifest['engines'],
+      packageManager: manifest['packageManager'],
+      publishConfig: manifest['publishConfig'],
+      dependencies: manifest['dependencies'],
+    },
+    {
+      name: '@revisium/revo-pipeline',
+      version: '0.0.0',
+      description: 'Portable pipeline definition, compilation, and transition semantics for Revo.',
+      homepage: 'https://github.com/revisium/revo-pipeline#readme',
+      bugs: { url: 'https://github.com/revisium/revo-pipeline/issues' },
+      license: 'MIT',
+      repository: { type: 'git', url: 'git+https://github.com/revisium/revo-pipeline.git' },
+      files: ['dist', 'README.md', 'LICENSE'],
+      type: 'module',
+      sideEffects: false,
+      main: './dist/index.js',
+      types: './dist/index.d.ts',
+      exports: { '.': { types: './dist/index.d.ts', import: './dist/index.js' } },
+      engines: { node: '>=24.11.1 <25' },
+      packageManager: 'pnpm@11.13.0',
+      publishConfig: { access: 'public', provenance: true },
+      dependencies: undefined,
+    },
+  );
+};
+
+interface DisposablePackageRunner {
+  dispose(): void;
+}
+
+export interface PackageVerificationPhaseSeams {
+  readonly sourcePreparation: () => void | Promise<void>;
+  readonly pack: () => void | Promise<void>;
+  readonly extract: () => void | Promise<void>;
+  readonly prepareAccess: () => void | Promise<void>;
+  readonly metadataAndDeclarations: () => void | Promise<void>;
+  readonly typeCompilation: () => void | Promise<void>;
+  readonly runtimeConsumer: () => void | Promise<void>;
+  readonly assertComplete: () => void | Promise<void>;
+}
+
+export const runPackageVerificationForTest = async <Result>(
+  runner: DisposablePackageRunner,
+  verify: () => Result | Promise<Result>,
+): Promise<Result> => {
+  let primaryError: unknown;
+  let cleanupError: unknown;
+  let outcome: { readonly value: Result } | undefined;
+  try {
+    outcome = { value: await verify() };
+  } catch (error: unknown) {
+    primaryError = error;
+  } finally {
+    try {
+      runner.dispose();
+    } catch (error: unknown) {
+      cleanupError = error;
+    }
+  }
+  if (primaryError !== undefined && cleanupError !== undefined) {
+    throw new AggregateError([primaryError, cleanupError], '[package-verification-and-cleanup]', {
+      cause: primaryError,
+    });
+  }
+  if (primaryError !== undefined) {
+    throw primaryError;
+  }
+  if (cleanupError !== undefined) {
+    throw cleanupError;
+  }
+  if (!outcome) {
+    throw new Error('[package-verification-result]');
+  }
+  return outcome.value;
+};
+
+export const runPackageVerificationPhasesForTest = async (
+  runner: DisposablePackageRunner,
+  phases: PackageVerificationPhaseSeams,
+): Promise<void> =>
+  runPackageVerificationForTest(runner, async () => {
+    await phases.sourcePreparation();
+    await phases.pack();
+    await phases.extract();
+    await phases.prepareAccess();
+    await phases.metadataAndDeclarations();
+    await phases.typeCompilation();
+    await phases.runtimeConsumer();
+    await phases.assertComplete();
   });
-  await writeFile(
-    join(consumerDirectory, 'tsconfig.private.json'),
-    `${JSON.stringify({ ...consumerTsconfig, include: ['private-consumer.ts'] }, undefined, 2)}\n`,
-  );
-  assert.throws(
-    () =>
-      execFileSync(join(root, 'node_modules/.bin/tsc'), ['-p', 'tsconfig.private.json'], {
-        cwd: consumerDirectory,
-        stdio: 'pipe',
-      }),
-    (error: unknown) => commandFailureOutput(error).includes('TS2307'),
-    'A private type-level deep import from the exact tarball must fail TypeScript resolution.',
-  );
-  execFileSync(process.execPath, ['consumer.mjs'], {
-    cwd: consumerDirectory,
-    stdio: 'pipe',
-  });
 
-  console.log(
-    `Exact tarball validation passed (${manifest.files.length} files; publint, ATTW, exact contents, ESM, all 86 types, runtime/type deep-import denial).`,
-  );
-} finally {
-  await rm(temporaryRoot, { recursive: true, force: true });
+if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
+  const root = process.cwd();
+  const runner = createPackageCommandRunner();
+
+  let expectedPaths: readonly string[] = [];
+  let sourceRootDeclaration = '';
+  let readmeConsumer = '';
+  let expandedConsumer = '';
+  let artifact: PackageArtifact | undefined;
+  let access: PackageArtifactAccess | undefined;
+
+  await runPackageVerificationPhasesForTest(runner, {
+    sourcePreparation: async () => {
+      const sourceModules = await collectSourceModules(root, join(root, 'src'));
+      expectedPaths = expectedPackagePaths(sourceModules);
+      sourceRootDeclaration = await readFile(join(root, 'src/index.ts'), 'utf8');
+      readmeConsumer = await executableExample(root, 'readme-working-root');
+      expandedConsumer = await executableExample(root, 'expanded-consumer');
+      const sourceManifest: unknown = JSON.parse(
+        await readFile(join(root, 'package.json'), 'utf8'),
+      );
+      assert.ok(isRecord(sourceManifest));
+      assertPackageMetadata(sourceManifest);
+    },
+    pack: () => {
+      artifact = runner.pack();
+      const packedArtifact = artifact;
+      assert.deepEqual(
+        packedArtifact.manifest.files.map(({ path }) => path).sort(),
+        expectedPaths,
+        'The exact tarball contents must equal source-derived compiler emissions and fixed metadata.',
+      );
+    },
+    extract: () => {
+      const packedArtifact = artifact;
+      if (!packedArtifact) {
+        throw new Error('[package-artifact-unavailable]');
+      }
+      runner.publint(packedArtifact);
+      runner.attw(packedArtifact);
+      runner.extract(packedArtifact);
+    },
+    prepareAccess: () => {
+      const packedArtifact = artifact;
+      if (!packedArtifact) {
+        throw new Error('[package-artifact-unavailable]');
+      }
+      access = runner.prepareArtifact(packedArtifact);
+    },
+    metadataAndDeclarations: () => {
+      const preparedAccess = access;
+      if (!preparedAccess) {
+        throw new Error('[package-artifact-unavailable]');
+      }
+      assert.deepEqual(
+        preparedAccess.readPackedFileManifest(),
+        expectedPaths,
+        'The reader must preserve the exact pack-manifest identity.',
+      );
+      assertPackageMetadata({ ...preparedAccess.readPackedManifest() });
+      const rootDeclaration = preparedAccess.readRootDeclaration();
+      assert.deepEqual(
+        namedExports(sourceRootDeclaration),
+        namedExports(rootDeclaration),
+        'Packed declarations must expose exactly the source root names without aliases or defaults.',
+      );
+      assert.equal(
+        namedExports(rootDeclaration).length,
+        91,
+        'Packed declarations must expose exactly five values and 86 types.',
+      );
+      const declarations = preparedAccess.readDeclarationManifest();
+      const occurrenceDeclaration = declarations.find(
+        ({ label }) => label === 'dist/spec/pipeline-occurrence-key.d.ts',
+      );
+      assert.ok(occurrenceDeclaration);
+      assert.equal(
+        occurrenceDeclaration.content,
+        'export type PipelineOccurrenceKey = string;\n//# sourceMappingURL=pipeline-occurrence-key.d.ts.map',
+        'The packed occurrence-key declaration must retain the exact accepted string alias.',
+      );
+      assert.ok(preparedAccess.readRootRuntimeModule().content.length > 0);
+      assert.deepEqual(preparedAccess.readTypeClosureManifest(), [
+        'undici-types@7.18.2',
+        '@types/node@24.13.3',
+      ]);
+      preparedAccess.assertPackageRootResolution();
+      preparedAccess.assertDeniedPackageResolution('@revisium/revo-pipeline/dist/index.js');
+      preparedAccess.assertDeniedPackageResolution('@revisium/revo-pipeline/transition');
+    },
+    typeCompilation: () => {
+      const preparedAccess = access;
+      if (!preparedAccess) {
+        throw new Error('[package-artifact-unavailable]');
+      }
+      const positive = preparedAccess.createTypeConsumer('positive', TYPE_CONSUMER_SOURCE);
+      const hostShaped = preparedAccess.createTypeConsumer(
+        'host-shaped',
+        HOST_SHAPED_CONSUMER_SOURCE,
+      );
+      const readme = preparedAccess.createTypeConsumer('readme-example', readmeConsumer);
+      const expanded = preparedAccess.createTypeConsumer('expanded-example', expandedConsumer);
+      const decisionGrowth = preparedAccess.createTypeConsumer(
+        'decision-growth',
+        TYPE_CONSUMER_SOURCE,
+      );
+      const reductionGrowth = preparedAccess.createTypeConsumer(
+        'reduction-growth',
+        TYPE_CONSUMER_SOURCE,
+      );
+      const privateType = preparedAccess.createTypeConsumer(
+        'private',
+        PRIVATE_TYPE_CONSUMER_SOURCE,
+      );
+      const defaultType = preparedAccess.createTypeConsumer(
+        'default',
+        DEFAULT_TYPE_CONSUMER_SOURCE,
+      );
+      const aliasType = preparedAccess.createTypeConsumer('alias', ALIAS_TYPE_CONSUMER_SOURCE);
+      const subpathType = preparedAccess.createTypeConsumer(
+        'subpath',
+        SUBPATH_TYPE_CONSUMER_SOURCE,
+      );
+
+      runner.typeScript(preparedAccess, positive);
+      runner.typeScript(preparedAccess, hostShaped);
+      runner.typeScript(preparedAccess, readme);
+      runner.typeScript(preparedAccess, expanded);
+      runner.typeScript(preparedAccess, decisionGrowth, 'TS2345');
+      runner.typeScript(preparedAccess, reductionGrowth, 'TS2345');
+      runner.typeScript(preparedAccess, privateType, 'TS2307');
+      runner.typeScript(preparedAccess, defaultType, 'TS1192');
+      runner.typeScript(preparedAccess, aliasType, 'TS2305');
+      runner.typeScript(preparedAccess, subpathType, 'TS2307');
+    },
+    runtimeConsumer: () => {
+      const preparedAccess = access;
+      if (!preparedAccess) {
+        throw new Error('[package-artifact-unavailable]');
+      }
+      const runtime = preparedAccess.createRuntimeConsumer('runtime', RUNTIME_CONSUMER_SOURCE);
+      const privateRuntime = preparedAccess.createRuntimeConsumer(
+        'private-runtime',
+        PRIVATE_RUNTIME_CONSUMER_SOURCE,
+      );
+      const typedRuntime = preparedAccess.createRuntimeConsumer('typed', '');
+      const hostRuntime = preparedAccess.createRuntimeConsumer('host-shaped', '');
+      const readmeRuntime = preparedAccess.createRuntimeConsumer('readme-example', '');
+      const expandedRuntime = preparedAccess.createRuntimeConsumer('expanded-example', '');
+      const permissionRead = preparedAccess.createRuntimeConsumer(
+        'permission-read',
+        permissionFixtureSource('permission-read'),
+      );
+      const permissionWrite = preparedAccess.createRuntimeConsumer(
+        'permission-write',
+        permissionFixtureSource('permission-write'),
+      );
+      const permissionChild = preparedAccess.createRuntimeConsumer(
+        'permission-child',
+        permissionFixtureSource('permission-child'),
+      );
+      const permissionWorker = preparedAccess.createRuntimeConsumer(
+        'permission-worker',
+        permissionFixtureSource('permission-worker'),
+      );
+
+      runner.executeConsumer(preparedAccess, runtime);
+      runner.executeConsumer(preparedAccess, privateRuntime, 'ERR_PACKAGE_PATH_NOT_EXPORTED');
+      runner.executeConsumer(preparedAccess, typedRuntime);
+      runner.executeConsumer(preparedAccess, hostRuntime);
+      runner.executeConsumer(preparedAccess, readmeRuntime);
+      runner.executeConsumer(preparedAccess, expandedRuntime);
+      runner.executeConsumer(preparedAccess, permissionRead);
+      runner.executeConsumer(preparedAccess, permissionWrite);
+      runner.executeConsumer(preparedAccess, permissionChild);
+      runner.executeConsumer(preparedAccess, permissionWorker);
+    },
+    assertComplete: () => {
+      const preparedAccess = access;
+      const packedArtifact = artifact;
+      if (!preparedAccess || !packedArtifact) {
+        throw new Error('[package-artifact-unavailable]');
+      }
+      runner.assertComplete(preparedAccess);
+      console.log(
+        `Exact tarball validation passed (${packedArtifact.manifest.files.length} files; one pack, closed reader, real-file type closure, permission probes, metadata, declarations, runtime, strict consumers, executable examples, and denied imports).`,
+      );
+    },
+  });
 }
