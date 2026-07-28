@@ -1,20 +1,14 @@
 import { defineConfig } from 'vitest/config';
 
+import {
+  NON_SCRIPT_UNIT_EXCLUDES,
+  NON_SCRIPT_UNIT_TESTS,
+} from './scripts/test/test-suite-routes.js';
+
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['test/**/*.test.ts'],
-    coverage: {
-      provider: 'v8',
-      include: ['src/**/*.ts', 'scripts/architecture/**/*.ts'],
-      reporter: ['text', 'lcov'],
-      reportsDirectory: 'coverage',
-      thresholds: {
-        branches: 80,
-        functions: 90,
-        lines: 90,
-        statements: 90,
-      },
-    },
+    include: [...NON_SCRIPT_UNIT_TESTS],
+    exclude: [...NON_SCRIPT_UNIT_EXCLUDES],
   },
 });

@@ -178,8 +178,9 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm verify
 ```
 
-`verify` covers formatting, strict TypeScript, type-aware linting, unit/coverage and
-architecture proof, declarations/build, and one exact packed tarball reused for
-contents, publint, ATTW, isolated ESM/strict TypeScript consumers, all 86 public types,
-and runtime/type deep-import denial. Publishing, tagging, releasing, or merging requires
-separate approval.
+`verify` covers formatting, strict TypeScript, type-aware linting, every discovered test
+exactly once across the architecture harness and product coverage routes, complete
+`src`-only LCOV, direct architecture proof, declarations/build, and one exact packed
+tarball reused for contents, publint, ATTW, isolated ESM/strict TypeScript consumers, all
+86 public types, and runtime/type deep-import denial. Publishing, tagging, releasing, or
+merging requires separate approval.
