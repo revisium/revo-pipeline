@@ -11,6 +11,10 @@ const modules = read('docs/specs/internal-module-structure.spec.md');
 const architecture = read('docs/architecture.md');
 const index = read('docs/specs/README.md');
 const adr = read('docs/adr/0002-portable-decoding-and-reduction.md');
+const readme = read('README.md');
+const docsIndex = read('docs/README.md');
+const consumer = read('docs/examples/consumer.md');
+const testing = read('docs/testing.md');
 
 const compiledIntegrityModuleMap = `transition/decode-compiled-pipeline.ts
 transition/inspect-compiled-pipeline.ts
@@ -116,6 +120,45 @@ const tableRowsAfter = (document: string, marker: string): readonly (readonly st
 };
 
 describe('Accepted decoder and reducer target', () => {
+  test('keeps shipped status, final-manifest ownership, and executable examples synchronized', () => {
+    expect(readme).toContain('package-example:readme-working-root');
+    expect(consumer).toContain('package-example:expanded-consumer');
+    expect(readme).toContain('`0.0.0` package is not\npublished');
+    expect(readme).toContain('zero runtime dependencies');
+    expect(readme).toContain('Decisions narrow by `kind`');
+    expect(consumer).toContain('decodeCompiledPipeline(serialized)');
+    expect(readme).toContain("initialization.snapshot.phase !== 'active'");
+    expect(consumer).toContain("initialization.snapshot.phase !== 'active'");
+    expect(readme).toContain("kind: 'activateNode'");
+    expect(consumer).toContain("kind: 'activateNode'");
+    expect(consumer).toContain("replay.application !== 'unchanged'");
+    expect(consumer).toContain('replay.batch.items.length !== 0');
+    expect(modules).toContain('final five-value/86-type root manifest');
+    expect(decoder).toContain('## Shipped example and proof');
+    expect(reducer).toContain('- Implementation: Shipped by PR7');
+    expect(adr).toContain('The shipped public root contains five values and 86 types.');
+    expect(testing).toContain('90% statements, 90% lines, 90% functions, and 80% branches');
+    expect(testing).toContain('Sonar coverage is intentionally the production `src` surface only.');
+    for (const link of [
+      '[Accepted pipeline decoding v1](./specs/pipeline-decoding-v1.spec.md)',
+      '[Accepted pipeline reducer v1](./specs/pipeline-reducer-v1.spec.md)',
+      '[ADR 0002: portable decoding and pure reduction](./adr/0002-portable-decoding-and-reduction.md)',
+      '[Transition test traceability](./transition-test-traceability.md)',
+    ]) {
+      expect(docsIndex).toContain(link);
+    }
+    for (const stalePhrase of [
+      'No such decoder is part of this\nAccepted root manifest',
+      'Target for PR7; not currently exported',
+      'Until then these are Accepted targets, not shipped exports',
+      'This section plans PR6/PR7 ownership without creating files or exports now',
+    ]) {
+      expect([readme, consumer, decoder, reducer, modules, adr].join('\n')).not.toContain(
+        stalePhrase,
+      );
+    }
+  });
+
   test('pins the exact hostile compiled module inventory and direct-import DAG', () => {
     expect(
       fencedBlockAfter(

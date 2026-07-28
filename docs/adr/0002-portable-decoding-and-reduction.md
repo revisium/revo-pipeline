@@ -41,7 +41,6 @@ keys, not by a new occurrence or node reactivation.
 
 ## Consequences
 
-The public target grows after PR7 from three values and 63 types to five values and 86
-types. PR6 implements decoding; PR7 implements reduction and the private shared decision
-seam. Until then these are Accepted targets, not shipped exports. Consumer-specific
-schemas and transaction technology require a separate architecture decision.
+The shipped public root contains five values and 86 types. PR6 implemented decoding, and
+PR7 implemented reduction and the private shared decision seam. Consumer-specific
+schemas and transaction technology still require a separate architecture decision.

@@ -1,8 +1,8 @@
 # Architecture
 
 `@revisium/revo-pipeline` is a zero-runtime-dependency ESM library for portable graph
-definitions, deterministic compilation, and one pure semantic decision from supplied
-facts.
+definitions, deterministic compilation, safe decoding, pure decisions, and pure
+reduction from supplied data.
 
 ```text
 PipelineDefinition --compilePipeline--> CompiledPipeline
@@ -26,12 +26,34 @@ retry, resume, persistence, queue, authorization, inbox, notification, agent, sc
 model/profile/prompt/workspace/provider binding, or host lifecycle. It never accepts a
 `JoinArrival` or a host execution-plan object.
 
-`@revisium/revo-run` may depend on this package; reverse dependency is forbidden. A host
-reads durable state, maps it to portable facts, atomically applies a decision, and reloads
-after conflicts. That host work is deliberately outside this package.
+Any future host may depend on this package; reverse dependency is forbidden. A host reads
+durable state, maps it to portable inputs, applies effects, and reloads after conflicts.
+The decision/reducer integration seam, plan compilation, legacy graph migration, durable
+reconstruction, and persistence/CAS mapping remain host architecture work outside this
+package.
 
 The diagnostic decoder and pure reducer are shipped. Reduction adds twenty readonly
 contract types, reaching exactly five root values and 86 types.
+
+Package verification has one command boundary:
+`verify-package -> package-command-runner -> node:child_process`. The runner exposes only
+pack, publint, ATTW, extraction, artifact preparation, TypeScript, consumer execution,
+completion, and path-free disposal capabilities. One frozen nominal package artifact and
+one runner-private reader supply an opaque semantic access object for every packed check
+and trusted repository fixture. A separate artifact-tree module is the sole
+post-extraction filesystem/path boundary. It copies the generic lockfile-resolved type
+closure as ordinary files, audits the isolated tree immediately before each runtime
+launch, and supports fixed semantic reads, fixture creation, and resolution assertions
+rather than caller-selected paths. Runtime fixtures launch under Node's
+permission model with read access only to the isolated root; direct outside reads, all
+writes, child processes, and workers are negative probes. These controls are
+defense-in-depth for trusted same-process fixtures, not a sandbox, malicious-code
+containment, or a race-free filesystem guarantee. A finite static validator snapshots the
+canonical imports, public capability surfaces, sole child-process call, exact runtime
+flags/environment/stdio, direct verifier sequence, unconditional disposal, and absence of
+retired analyzers. The verifier preserves a primary failure when cleanup succeeds and
+reports ordered primary/cleanup failures together when both fail. Successful completion
+is terminal for the runner.
 Compiled input admits at most 128 distinct fact keys, so a valid public reduction can
 reach but cannot exceed 128 source-owned values without first colliding with an existing
 owner. A live pre-mutation prospective-count guard remains mandatory and is protected by

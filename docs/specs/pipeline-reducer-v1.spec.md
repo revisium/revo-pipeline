@@ -1,7 +1,7 @@
 # Pipeline Reducer v1
 
 - Status: Accepted
-- Implementation: Target for PR7; not currently exported
+- Implementation: Shipped by PR7
 - Target package: `@revisium/revo-pipeline`
 
 ## Public state and command contract
@@ -443,7 +443,7 @@ one indivisible host change. It commits no prefix or reordering. On optimistic C
 conflict it reloads and recomputes the plan, snapshot, command, reduction, batch, host
 mapping, and expectations from scratch.
 
-Accepted target; implemented in PR7:
+Shipped implementation example:
 
 ```ts
 const snapshot: PipelineSnapshot = {
@@ -469,7 +469,7 @@ A separate execution uses a new uninitialized snapshot and key and starts at ent
 exact replay returns an empty `batch.items`. No example lets the package open a
 transaction or implies that an effect batch applies itself.
 
-## Planned manifest and PR7 verification
+## Shipped manifest and PR7 verification
 
 The exact new public type manifest is:
 
@@ -499,11 +499,11 @@ PipelineValueSource
 PipelineWait
 ```
 
-These are exactly 23 unique new types: three decoder types followed by twenty reducer
-types, producing 86 root types. Planned values are exactly `definePipeline`, `compilePipeline`,
-`decodeCompiledPipeline`, `decidePipeline`, and `reducePipeline`.
+These are exactly 23 unique additions: three decoder types followed by twenty reducer
+types, producing 86 root types. The shipped values are exactly `definePipeline`,
+`compilePipeline`, `decodeCompiledPipeline`, `decidePipeline`, and `reducePipeline`.
 
-PR7 MUST prove exact signatures and narrowing; all commands and effects; occurrence
+PR7 proved exact signatures and narrowing; all commands and effects; occurrence
 isolation and hostile shapes; replay, conflicts, settledness; finite two- and maximum-N
 unrolling including fork/join/final-gate/exhaustion behavior; all faults and bounds;
 513/514 boundaries; bidirectional effect/snapshot consistency; all node/policy families;

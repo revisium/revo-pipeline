@@ -9,6 +9,7 @@ import {
   type ArchitectureRule,
   type SourceModule,
 } from './architecture/validate-module-structure.js';
+import { validatePackageVerifierFlow } from './architecture/validate-package-verifier-flow.js';
 import { validateReducerBounds } from './architecture/validate-reducer-bounds.js';
 import {
   sourceMetricScope,
@@ -162,6 +163,7 @@ validateSourceMetrics(sourceModules, [
   ...sourceMetricScope(sourceModules, 'PR4c'),
 ]);
 assert.deepEqual(validateGraphKernelFlow(root), []);
+validatePackageVerifierFlow(root);
 execFileSync(oxlint, ['--config', config, '--deny-warnings', 'src', 'test'], {
   cwd: root,
   stdio: 'pipe',

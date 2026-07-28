@@ -8,9 +8,11 @@ The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**, 
 **MAY** in this document are to be interpreted as described in BCP 14 (RFC 2119 and
 RFC 8174) when, and only when, they appear in all capitals.
 
-This specification fixed the contract before implementation. Its bootstrap guard
-required `src/index.ts` to remain exactly `export {};` until the public implementation
-slice; that slice now ships the exact manifest below.
+This specification fixed the definition/transition slice before implementation. Its
+bootstrap guard required `src/index.ts` to remain exactly `export {};` until that slice;
+the slice now ships. Decoder and reducer additions are owned by their Accepted
+specifications, while the [internal module structure](./internal-module-structure.spec.md)
+owns the final root manifest.
 
 ## Public contract
 
@@ -286,15 +288,15 @@ globally first 99 plus a fixed root `DEF_LIMIT` truncation fault as item 100.
 Compilation MUST be bounded `O(V + E)` plus bounded sorting. Recursion MUST NOT depend
 on unbounded caller input depth.
 
-## Exact root export manifest
+## Definition and transition slice export contribution
 
-The root MUST export exactly these runtime values:
+This slice contributed these runtime values:
 
 - `definePipeline`
 - `compilePipeline`
 - `decidePipeline`
 
-It MUST export these types: `JsonScalar`, `NodeKey`, `FactKey`, `CandidateKey`,
+It contributed these types: `JsonScalar`, `NodeKey`, `FactKey`, `CandidateKey`,
 `BranchName`, `ResolutionName`, `TaskOutcome`, `FactType`, `FactDefinition`,
 `TaskRoutes`, `BranchPredicate`, `BranchCase`, `BranchDefault`, `ForkBranch`,
 `AllJoinPolicy`, `AnyJoinPolicy`, `ThresholdJoinPolicy`, `JoinPolicy`, `JoinOutcome`,
@@ -310,5 +312,7 @@ It MUST export these types: `JsonScalar`, `NodeKey`, `FactKey`, `CandidateKey`,
 `ActivateDecision`, `SelectDecision`, `WaitDecision`, `TerminalDecision`,
 `NoopDecision`, `RejectDecision`, and `PipelineDecision`.
 
-Limits, validators, comparators, fault-ordering helpers, and graph algorithms MUST NOT be
-runtime exports.
+This partial manifest is not the final global root. The decoder/reducer specifications
+add their shipped exports, and the internal module structure specification owns the exact
+final five-value/86-type root manifest. Limits, validators, comparators, fault-ordering
+helpers, and graph algorithms MUST NOT be runtime exports.

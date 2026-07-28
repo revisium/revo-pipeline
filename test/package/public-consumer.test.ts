@@ -3,8 +3,11 @@ import { expect, test } from 'vitest';
 import {
   compilePipeline,
   decidePipeline,
+  decodeCompiledPipeline,
   definePipeline,
+  reducePipeline,
   type PipelineFacts,
+  type PipelineSnapshot,
 } from '../../src/index.js';
 
 const definition = definePipeline({
@@ -33,7 +36,33 @@ test('supports the documented deterministic public root workflow with isolated c
   if (!compilation.ok) {
     return;
   }
-  const pipeline = structuredClone(compilation.pipeline);
+  const decoding = decodeCompiledPipeline(JSON.parse(JSON.stringify(compilation.pipeline)));
+  expect(decoding.ok).toBe(true);
+  if (!decoding.ok) {
+    return;
+  }
+  const pipeline = decoding.pipeline;
+  const snapshot: PipelineSnapshot = {
+    schemaVersion: 1,
+    occurrenceKey: 'public-consumer',
+    phase: 'uninitialized',
+    values: [],
+    nodes: [],
+    candidateVerdicts: [],
+    gateResolutions: [],
+    terminal: null,
+  };
+  const command = { schemaVersion: 1 as const, kind: 'init' as const, values: [] };
+  const initialization = reducePipeline(pipeline, snapshot, command);
+  expect(initialization).toMatchObject({
+    ok: true,
+    application: 'applied',
+    status: 'waiting',
+    batch: { kind: 'atomic' },
+  });
+  if (!initialization.ok) {
+    return;
+  }
   const emptyFacts: PipelineFacts = {
     values: [],
     nodes: [],
@@ -68,4 +97,11 @@ test('supports the documented deterministic public root workflow with isolated c
   };
   expect(decidePipeline(pipeline, resolvedFacts)).toEqual(expected);
   expect(decidePipeline(pipeline, resolvedFacts)).toEqual(expected);
+
+  const replay = reducePipeline(pipeline, initialization.snapshot, command);
+  expect(replay).toEqual({
+    ...initialization,
+    application: 'unchanged',
+    batch: { kind: 'atomic', items: [] },
+  });
 });

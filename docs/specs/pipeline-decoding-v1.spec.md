@@ -57,7 +57,7 @@ maximum is 100 faults. Overflow returns the first 99 plus:
 `DECODE_LIMIT` is reserved for input-bound violations. Consumers branch on codes, not
 messages.
 
-## Accepted target example
+## Shipped example and proof
 
 Implemented in PR6:
 
