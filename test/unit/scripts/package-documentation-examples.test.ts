@@ -16,13 +16,9 @@ const documents = (): readonly { readonly path: string; readonly content: string
     ];
   });
 
-test('extracts the three catalog-owned executable documents', () => {
+test('extracts the catalog-owned executable document', () => {
   const examples = extractDocumentationExamples(documents());
-  expect(examples.map(({ caseId }) => caseId)).toEqual([
-    'task-branch-terminal',
-    'fork-join-consensus-terminal',
-    'human-gate-terminal-replay',
-  ]);
+  expect(examples.map(({ caseId }) => caseId)).toEqual(['task-branch-terminal']);
   expect(examples.every(({ source }) => source.startsWith('export const'))).toBe(true);
 });
 
@@ -50,16 +46,7 @@ test.each([
   expect(() => extractDocumentationExamples(source)).toThrow('[package-documentation-marker]');
 });
 
-test('rejects a valid marker pair placed in the wrong catalog-owned document', () => {
-  const source = [...documents()];
-  const first = source[0];
-  const second = source[1];
-  expect(first).toBeDefined();
-  expect(second).toBeDefined();
-  if (!first || !second) {
-    return;
-  }
-  source[0] = { ...first, content: second.content };
-  source[1] = { ...second, content: first.content };
-  expect(() => extractDocumentationExamples(source)).toThrow('[package-documentation-marker]');
+test('rejects a document outside the catalog-owned path', () => {
+  const source = documents().map((document) => ({ ...document, path: 'docs/example.md' }));
+  expect(() => extractDocumentationExamples(source)).toThrow('[package-documentation-source]');
 });

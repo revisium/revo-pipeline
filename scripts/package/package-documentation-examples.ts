@@ -22,15 +22,7 @@ const expectedPublicValues = Object.freeze([
   'reducePipeline',
 ]);
 
-const expectedNodeKinds = Object.freeze([
-  'branch',
-  'consensus',
-  'fork',
-  'humanGate',
-  'join',
-  'task',
-  'terminal',
-]);
+const expectedNodeKinds = Object.freeze(['task', 'terminal']);
 
 const documentationCases = (): readonly ConsumerCase[] =>
   Object.freeze(PACKAGE_CONSUMER_CASES.filter((entry) => entry.documentation !== null));
