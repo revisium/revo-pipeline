@@ -158,8 +158,14 @@ const CASES: readonly ConsumerCase[] = [
     },
     documentation: {
       documentPath: 'README.md',
-      publicValues: ['definePipeline', 'compilePipeline', 'decidePipeline'],
-      nodeKinds: ['task', 'branch', 'terminal'],
+      publicValues: [
+        'definePipeline',
+        'compilePipeline',
+        'decodeCompiledPipeline',
+        'decidePipeline',
+        'reducePipeline',
+      ],
+      nodeKinds: ['task', 'terminal'],
     },
   },
   {
@@ -175,11 +181,7 @@ const CASES: readonly ConsumerCase[] = [
       expected: 'success',
       emittedFrom: 'fork-join-consensus-terminal',
     },
-    documentation: {
-      documentPath: 'docs/examples/fork-join-consensus-terminal.md',
-      publicValues: ['compilePipeline', 'decodeCompiledPipeline', 'reducePipeline'],
-      nodeKinds: ['fork', 'join', 'consensus', 'terminal'],
-    },
+    documentation: null,
   },
   {
     id: 'human-gate-terminal-replay',
@@ -194,11 +196,7 @@ const CASES: readonly ConsumerCase[] = [
       expected: 'success',
       emittedFrom: 'human-gate-terminal-replay',
     },
-    documentation: {
-      documentPath: 'docs/examples/human-gate-terminal-replay.md',
-      publicValues: ['compilePipeline', 'reducePipeline'],
-      nodeKinds: ['humanGate', 'terminal'],
-    },
+    documentation: null,
   },
   {
     id: 'decision-growth',

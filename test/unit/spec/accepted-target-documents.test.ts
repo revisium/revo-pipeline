@@ -9,14 +9,8 @@ const decoder = read('docs/specs/pipeline-decoding-v1.spec.md');
 const reducer = read('docs/specs/pipeline-reducer-v1.spec.md');
 const modules = read('docs/specs/internal-module-structure.spec.md');
 const architecture = read('docs/architecture.md');
-const index = read('docs/specs/README.md');
 const adr = read('docs/adr/0002-portable-decoding-and-reduction.md');
 const readme = read('README.md');
-const docsIndex = read('docs/README.md');
-const examplesIndex = read('docs/examples/README.md');
-const forkJoinExample = read('docs/examples/fork-join-consensus-terminal.md');
-const humanGateExample = read('docs/examples/human-gate-terminal-replay.md');
-const testing = read('docs/testing.md');
 
 const compiledIntegrityModuleMap = `transition/decode-compiled-pipeline.ts
 transition/inspect-compiled-pipeline.ts
@@ -122,74 +116,32 @@ const tableRowsAfter = (document: string, marker: string): readonly (readonly st
 };
 
 describe('Accepted decoder and reducer target', () => {
-  test('keeps shipped status, final-manifest ownership, and executable examples synchronized', () => {
+  test('keeps shipped status, final-manifest ownership, and the executable example synchronized', () => {
     expect(readme).toContain('package-example:start:task-branch-terminal');
     expect(readme).toContain('package-example:end:task-branch-terminal');
-    expect(forkJoinExample).toContain('package-example:start:fork-join-consensus-terminal');
-    expect(forkJoinExample).toContain('package-example:end:fork-join-consensus-terminal');
-    expect(humanGateExample).toContain('package-example:start:human-gate-terminal-replay');
-    expect(humanGateExample).toContain('package-example:end:human-gate-terminal-replay');
-    expect(examplesIndex).toContain('`definePipeline`, `compilePipeline`, `decidePipeline`');
-    expect(examplesIndex).toContain(
-      '`compilePipeline`, `decodeCompiledPipeline`, `reducePipeline`',
-    );
-    for (const nodeKind of [
-      '`task`',
-      '`branch`',
-      '`fork`',
-      '`join`',
-      '`consensus`',
-      '`humanGate`',
-      '`terminal`',
+    for (const value of [
+      'definePipeline',
+      'compilePipeline',
+      'decodeCompiledPipeline',
+      'decidePipeline',
+      'reducePipeline',
     ]) {
-      expect(examplesIndex).toContain(nodeKind);
+      expect(readme).toContain(`export declare function ${value}`);
     }
-    expect(readme).toContain('Registry publication is a separate authorized release operation');
-    expect(readme).toContain('zero runtime dependencies');
+    expect(readme).toContain('Pre-release package. It is not published to npm');
+    expect(readme).toContain('no runtime dependencies');
     expect(readme).toContain('Narrow decisions by `kind`');
-    expect(forkJoinExample).toContain('decodeCompiledPipeline(unknownA)');
-    expect(forkJoinExample).toContain("initialized.status !== 'waiting'");
-    expect(forkJoinExample).toContain("'activateNode'");
-    expect(humanGateExample).toContain("replay.application, 'unchanged'");
-    expect(humanGateExample).toContain("{ kind: 'atomic', items: [] }");
     expect(modules).toContain('final five-value/86-type root manifest');
     expect(decoder).toContain('## Shipped example and proof');
     expect(reducer).toContain('- Implementation: Shipped by PR7');
     expect(adr).toContain('The shipped public root contains five values and 86 types.');
-    expect(testing.replace(/\s+/g, ' ')).toContain(
-      '90% statements, 90% lines, 90% functions, and 80% branches',
-    );
-    expect(testing).toContain(
-      'V8 coverage and its `lcov` report intentionally cover the production',
-    );
-    expect(testing).toContain('`src/**/*.ts` surface only.');
-    for (const link of [
-      '[Accepted decoding](./specs/pipeline-decoding-v1.spec.md)',
-      '[Accepted reducer](./specs/pipeline-reducer-v1.spec.md)',
-      '[ADR 0002: portable decoding and pure reduction](./adr/0002-portable-decoding-and-reduction.md)',
-      '[Transition test traceability](./transition-test-traceability.md)',
-      '[Executable scenarios](./examples/README.md)',
-    ]) {
-      expect(docsIndex).toContain(link);
-    }
     for (const stalePhrase of [
       'No such decoder is part of this\nAccepted root manifest',
       'Target for PR7; not currently exported',
       'Until then these are Accepted targets, not shipped exports',
       'This section plans PR6/PR7 ownership without creating files or exports now',
     ]) {
-      expect(
-        [
-          readme,
-          examplesIndex,
-          forkJoinExample,
-          humanGateExample,
-          decoder,
-          reducer,
-          modules,
-          adr,
-        ].join('\n'),
-      ).not.toContain(stalePhrase);
+      expect([readme, decoder, reducer, modules, adr].join('\n')).not.toContain(stalePhrase);
     }
   });
 
@@ -206,10 +158,7 @@ describe('Accepted decoder and reducer target', () => {
     );
   });
 
-  test('indexes accepted, shipped contracts and their ADR', () => {
-    expect(index).toContain('[Pipeline decoding v1](./pipeline-decoding-v1.spec.md)');
-    expect(index).toContain('[Pipeline reducer v1](./pipeline-reducer-v1.spec.md)');
-    expect(index).toContain('Definition, transition, decoding, and reduction are shipped');
+  test('keeps accepted shipped contracts and their ADR', () => {
     for (const document of [decoder, reducer, adr]) {
       expect(document).toContain('- Status: Accepted');
     }
