@@ -1,5 +1,5 @@
 import { compareUnicodeCodePoints, normalizeJsonScalar } from '../../policy/index.js';
-import type { BranchCase, JsonScalar, PipelineNode } from '../../spec/index.js';
+import type { BranchCase, CompiledNode, JsonScalar, PipelineNode } from '../../spec/index.js';
 
 const scalarTypeRank = (value: JsonScalar): number => {
   if (value === null) {
@@ -40,9 +40,11 @@ const normalizeCase = (entry: BranchCase): BranchCase => ({
         },
 });
 
-export const normalizePipelineNode = (node: PipelineNode): PipelineNode => {
+export const normalizePipelineNode = (node: PipelineNode): CompiledNode => {
   switch (node.kind) {
     case 'task':
+      return { kind: 'task', key: node.key, outcomes: { ...node.outcomes } };
+    case 'script':
       return { kind: 'task', key: node.key, outcomes: { ...node.outcomes } };
     case 'branch':
       return {

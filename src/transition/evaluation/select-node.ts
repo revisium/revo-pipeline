@@ -1,4 +1,4 @@
-import type { PipelineNode } from '../../spec/index.js';
+import type { CompiledNode } from '../../spec/index.js';
 import type { DecisionContext } from '../context/decision-context.js';
 import type { ValidatedFacts } from '../facts/validated-facts.js';
 import { selectBranch } from './select-branch.js';
@@ -9,7 +9,7 @@ import { selectJoin } from './select-join.js';
 import type { Selection } from './selection.js';
 
 export const selectNode = (
-  node: Exclude<PipelineNode, { readonly kind: 'task' | 'terminal' }>,
+  node: Exclude<CompiledNode, { readonly kind: 'task' | 'terminal' }>,
   facts: ValidatedFacts,
   context: DecisionContext,
 ): Selection | undefined => {

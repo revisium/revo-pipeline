@@ -169,7 +169,7 @@ const forgedOverlappingRegion = (): {
       schemaVersion: 1,
       entry: definition.entry,
       facts: [],
-      nodes,
+      nodes: nodes.filter((node) => node.kind !== 'script'),
       edges,
       topologicalOrder,
       forkRegions: [

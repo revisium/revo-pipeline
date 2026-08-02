@@ -43,6 +43,52 @@ const definition = definePipeline({
 const compilation = compilePipeline(definition);
 assert.equal(compilation.ok, true);
 if (!compilation.ok) throw new Error('The packed example must compile.');
+const scriptCompilation = compilePipeline(definePipeline({
+  schemaVersion: 1,
+  entry: 'script',
+  facts: [],
+  nodes: [
+    {
+      kind: 'script',
+      key: 'script',
+      script: { id: 'script:system/packed', version: 1 },
+      input: { message: 'packed root' },
+      outcomes: {
+        completed: 'published',
+        failed: 'cancelled',
+        cancelled: 'cancelled',
+        skipped: 'cancelled',
+      },
+    },
+    { kind: 'terminal', key: 'published', outcome: 'published' },
+    { kind: 'terminal', key: 'cancelled', outcome: 'cancelled' },
+  ],
+}));
+assert.equal(scriptCompilation.ok, true);
+if (!scriptCompilation.ok) throw new Error('The packed script example must compile.');
+assert.deepEqual(scriptCompilation.pipeline.nodes.find(({ key }) => key === 'script'), {
+  kind: 'task',
+  key: 'script',
+  outcomes: {
+    completed: 'published',
+    failed: 'cancelled',
+    cancelled: 'cancelled',
+    skipped: 'cancelled',
+  },
+});
+assert.equal(scriptCompilation.template.pipeline, scriptCompilation.pipeline);
+assert.deepEqual(scriptCompilation.template.executorRequirements, [
+  {
+    kind: 'script',
+    nodeKey: 'script',
+    script: { id: 'script:system/packed', version: 1 },
+    input: { message: 'packed root' },
+  },
+]);
+assert.deepEqual(scriptCompilation.template.terminalBindings, [
+  { nodeKey: 'cancelled', outcome: 'cancelled' },
+  { nodeKey: 'published', outcome: 'published' },
+]);
 const pipeline = JSON.parse(JSON.stringify(compilation.pipeline));
 const decoding = decodeCompiledPipeline(pipeline);
 assert.equal(decoding.ok, true);
@@ -141,6 +187,7 @@ import {
   type ConsensusOutcome,
   type ConsensusPolicy,
   type ConsensusRoutes,
+  type ExecutorRequirement,
   type DecisionFault,
   type DecisionFaultCode,
   type DecodeFault,
@@ -160,12 +207,14 @@ import {
   type JoinPolicy,
   type JoinRoutes,
   type JsonScalar,
+  type JsonValue,
   type NodeFact,
   type NodeKey,
   type NoopDecision,
   type PipelineCompilation,
   type PipelineDecision,
   type PipelineDefinition,
+  type PipelineExecutionTemplate,
   type PipelineFacts,
   type PipelineNode,
   type PipelineCandidateVerdictRecord,
@@ -192,10 +241,13 @@ import {
   type QuorumConsensusPolicy,
   type RejectDecision,
   type ResolutionName,
+  type ScriptIdentity,
+  type ScriptNode,
   type SelectDecision,
   type TaskNode,
   type TaskOutcome,
   type TaskRoutes,
+  type TerminalBindingTemplate,
   type TerminalDecision,
   type TerminalNode,
   type ThresholdConsensusPolicy,
@@ -214,10 +266,12 @@ type PublicTypes = readonly [
   FactType, FactDefinition, TaskRoutes, BranchPredicate, BranchCase, BranchDefault,
   ForkBranch, AllJoinPolicy, AnyJoinPolicy, ThresholdJoinPolicy, JoinPolicy, JoinOutcome,
   JoinRoutes, UnanimousConsensusPolicy, QuorumConsensusPolicy, ThresholdConsensusPolicy,
-  ConsensusPolicy, ConsensusOutcome, ConsensusRoutes, HumanGateRoute, TaskNode, BranchNode,
+  ConsensusPolicy, ConsensusOutcome, ConsensusRoutes, HumanGateRoute, TaskNode, JsonValue,
+  ScriptIdentity, ScriptNode, BranchNode,
   ForkNode, JoinNode, ConsensusNode, HumanGateNode, TerminalNode, PipelineNode,
   PipelineDefinition, CompiledNode, CompiledEdgeRole, CompiledEdge, CompiledForkBranch,
   CompiledForkRegion, CompiledNodeIndexEntry, CompiledEdgeIndexEntry, CompiledPipeline,
+  ExecutorRequirement, TerminalBindingTemplate, PipelineExecutionTemplate,
   CompiledPipelineDecoding, DecodeFaultCode, DecodeFault,
   DefinitionFaultCode, DefinitionFault, PipelineCompilation, NodeFact, PipelineValueFact,
   CandidateVerdict, GateResolution, PipelineFacts, ActivationCause, WaitReason,
@@ -229,7 +283,7 @@ type PublicTypes = readonly [
   PipelineReductionFaultCode, PipelineReductionStatus, PipelineRetirement, PipelineSnapshot,
   PipelineSnapshotNode, PipelineTerminal, PipelineValueRecord, PipelineValueSource, PipelineWait,
 ];
-const publicTypeCount: 86 = null as unknown as PublicTypes['length'];
+const publicTypeCount: 92 = null as unknown as PublicTypes['length'];
 
 const definition = definePipeline({
   schemaVersion: 1,

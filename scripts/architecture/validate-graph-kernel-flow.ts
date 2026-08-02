@@ -431,17 +431,6 @@ const hasExactObjectProperties = (
   return names.every((name, index) => name === expectedNames[index]);
 };
 
-const isExactCall = (
-  node: Node | undefined,
-  name: string,
-  argumentsMatch: readonly ((argument: Node | undefined) => boolean)[],
-): node is CallExpression =>
-  node !== undefined &&
-  ts.isCallExpression(node) &&
-  callNamed(node, name) &&
-  node.arguments.length === argumentsMatch.length &&
-  argumentsMatch.every((matches, index) => matches(node.arguments[index]));
-
 const localConst = (
   owner: FunctionLikeDeclaration,
   name: string,
@@ -629,39 +618,56 @@ const validatesReadinessAssignments = (owner: FunctionLikeDeclaration): boolean 
 };
 
 const validatesAssemblyPromotion = (owner: FunctionLikeDeclaration): boolean => {
-  const returns =
-    owner.body && ts.isBlock(owner.body)
-      ? owner.body.statements.filter((statement): statement is ts.ReturnStatement =>
-          ts.isReturnStatement(statement),
-        )
+  if (!owner.body || !ts.isBlock(owner.body)) {
+    return false;
+  }
+  const declaration = owner.body.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations])
+    .find((candidate) => isIdentifierNamed(candidate.name, 'pipeline'));
+  const pipeline = declaration?.initializer;
+  const returned = owner.body.statements
+    .filter((statement): statement is ts.ReturnStatement => ts.isReturnStatement(statement))
+    .at(0)?.expression;
+  const template = objectProperty(returned, 'template');
+  const pipelineCall = pipeline && ts.isCallExpression(pipeline) ? pipeline : undefined;
+  const snapshot =
+    pipelineCall && callNamed(pipelineCall, 'deepFreeze') ? pipelineCall.arguments[0] : undefined;
+  const spreads =
+    snapshot && ts.isObjectLiteralExpression(snapshot)
+      ? snapshot.properties.filter(ts.isSpreadAssignment)
       : [];
-  const returned = returns.length === 1 ? returns[0]?.expression : undefined;
-  if (!hasExactObjectProperties(returned, ['ok', 'pipeline'])) {
-    return false;
-  }
-  const ok = objectProperty(returned, 'ok');
-  const pipeline = objectProperty(returned, 'pipeline');
-  if (
-    ok?.kind !== SyntaxKind.TrueKeyword ||
-    !pipeline ||
-    !isExactCall(pipeline, 'deepFreeze', [
-      (argument) => argument !== undefined && ts.isObjectLiteralExpression(argument),
-    ])
-  ) {
-    return false;
-  }
-  const snapshot = pipeline.arguments[0];
-  if (!snapshot || !ts.isObjectLiteralExpression(snapshot)) {
-    return false;
-  }
-  const spreads = snapshot.properties.filter(ts.isSpreadAssignment);
+  const indexes = spreads[0]?.expression;
   return (
+    hasExactObjectProperties(returned, ['ok', 'pipeline', 'template']) &&
+    objectProperty(returned, 'ok')?.kind === SyntaxKind.TrueKeyword &&
+    isIdentifierNamed(objectProperty(returned, 'pipeline'), 'pipeline') &&
+    pipelineCall?.arguments.length === 1 &&
+    snapshot !== undefined &&
+    ts.isObjectLiteralExpression(snapshot) &&
     exactPropertyPath(objectProperty(snapshot, 'edges'), ['graph', 'edges']) &&
     spreads.length === 1 &&
-    isExactCall(spreads[0]?.expression, 'buildIndexes', [
-      (argument) => isIdentifierNamed(argument, 'nodes'),
-      (argument) => isIdentifierNamed(argument, 'graph'),
-    ])
+    indexes !== undefined &&
+    ts.isCallExpression(indexes) &&
+    callNamed(indexes, 'buildIndexes') &&
+    indexes.arguments.length === 2 &&
+    isIdentifierNamed(indexes.arguments[0], 'nodes') &&
+    isIdentifierNamed(indexes.arguments[1], 'graph') &&
+    template !== undefined &&
+    ts.isCallExpression(template) &&
+    callNamed(template, 'deepFreeze') &&
+    template.arguments.length === 1 &&
+    hasExactObjectProperties(template.arguments[0], [
+      'pipeline',
+      'executorRequirements',
+      'terminalBindings',
+    ]) &&
+    isIdentifierNamed(objectProperty(template.arguments[0], 'pipeline'), 'pipeline') &&
+    isIdentifierNamed(
+      objectProperty(template.arguments[0], 'executorRequirements'),
+      'executorRequirements',
+    ) &&
+    isIdentifierNamed(objectProperty(template.arguments[0], 'terminalBindings'), 'terminalBindings')
   );
 };
 
@@ -754,6 +760,7 @@ const COMPILER_SEMANTIC_CONTRACTS = [
     name: 'normalizePipelineNode',
     required: [
       "case'task':return{kind:'task',key:node.key,outcomes:{...node.outcomes}}",
+      "case'script':return{kind:'task',key:node.key,outcomes:{...node.outcomes}}",
       'fact:node.fact,cases:node.cases.map(normalizeCase).sort((left,right)=>compareUnicodeCodePoints(left.name,right.name)||compareUnicodeCodePoints(left.to,right.to)',
       'default:node.default?{...node.default}:null',
       'join:node.join,branches:node.branches.map((branch)=>({...branch})).sort((left,right)=>compareUnicodeCodePoints(left.name,right.name)||compareUnicodeCodePoints(left.entry,right.entry)',
@@ -938,8 +945,10 @@ const validateCompilerLeafSemantics = (
   );
   if (!assemblyModule || !assembler || !indexBuilder) {
     add(violations, 'GRAPH_KERNEL_ANALYSIS_UNPROVEN', assemblyModule);
-  } else if (!validatesAssemblyPromotion(assembler) || !validatesAssemblyIndexes(indexBuilder)) {
+  } else if (!validatesAssemblyPromotion(assembler)) {
     add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', assemblyModule, assembler);
+  } else if (!validatesAssemblyIndexes(indexBuilder)) {
+    add(violations, 'GRAPH_KERNEL_INPUT_PROVENANCE', assemblyModule, indexBuilder);
   }
 };
 

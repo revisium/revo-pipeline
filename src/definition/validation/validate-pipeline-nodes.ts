@@ -20,6 +20,7 @@ const NODE_KINDS: ReadonlySet<string> = new Set([
   'fork',
   'humanGate',
   'join',
+  'script',
   'task',
   'terminal',
 ]);
@@ -29,6 +30,29 @@ const isStringRecord = (
   context: DefinitionValidationContext,
 ): value is Record<string, string> =>
   context.isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string');
+
+const validateScriptNode = (
+  entry: Readonly<Record<string, unknown>>,
+  path: string,
+  context: DefinitionValidationContext,
+): void => {
+  context.unknownFields(entry, ['input', 'key', 'kind', 'outcomes', 'script'], path);
+  context.validateExactRoutes(entry.outcomes, TASK_OUTCOMES, `${path}/outcomes`);
+  if (!('input' in entry)) {
+    context.addFault('DEF_TYPE', `${path}/input`, 'Expected portable script input.');
+  }
+  if (!context.isRecord(entry.script)) {
+    context.addFault('DEF_TYPE', `${path}/script`, 'Expected script identity.');
+    return;
+  }
+  context.unknownFields(entry.script, ['id', 'version'], `${path}/script`);
+  if (typeof entry.script.id !== 'string' || !entry.script.id.startsWith('script:')) {
+    context.addFault('DEF_TYPE', `${path}/script/id`, 'Expected script: identity.');
+  }
+  if (!Number.isSafeInteger(entry.script.version) || Number(entry.script.version) < 1) {
+    context.addFault('DEF_TYPE', `${path}/script/version`, 'Expected positive integer version.');
+  }
+};
 
 const isPipelineNode = (
   value: unknown,
@@ -40,6 +64,14 @@ const isPipelineNode = (
   switch (value.kind) {
     case 'task':
       return isStringRecord(value.outcomes, context);
+    case 'script':
+      return (
+        context.isRecord(value.script) &&
+        typeof value.script.id === 'string' &&
+        typeof value.script.version === 'number' &&
+        'input' in value &&
+        isStringRecord(value.outcomes, context)
+      );
     case 'branch':
       return (
         typeof value.fact === 'string' &&
@@ -137,6 +169,9 @@ export const validatePipelineNodes = (
       case 'task':
         context.unknownFields(entry, ['key', 'kind', 'outcomes'], path);
         context.validateExactRoutes(entry.outcomes, TASK_OUTCOMES, `${path}/outcomes`);
+        break;
+      case 'script':
+        validateScriptNode(entry, path, context);
         break;
       case 'branch':
         validateBranchNode(entry, path, factTypes, context);

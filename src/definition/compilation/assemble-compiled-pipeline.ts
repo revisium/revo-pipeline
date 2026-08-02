@@ -4,7 +4,9 @@ import type {
   CompiledForkRegion,
   CompiledPipeline,
   FactDefinition,
-  PipelineNode,
+  CompiledNode,
+  ExecutorRequirement,
+  TerminalBindingTemplate,
 } from '../../spec/index.js';
 import type { CompilerSemanticGraph } from '../contracts/compiler-semantic-graph.js';
 
@@ -12,7 +14,9 @@ type AssemblyInput = {
   readonly entry: string;
   readonly facts: readonly FactDefinition[];
   readonly graph: CompilerSemanticGraph;
-  readonly nodes: readonly PipelineNode[];
+  readonly nodes: readonly CompiledNode[];
+  readonly executorRequirements: readonly ExecutorRequirement[];
+  readonly terminalBindings: readonly TerminalBindingTemplate[];
   readonly regions: readonly CompiledForkRegion[];
 };
 
@@ -30,7 +34,7 @@ const deepFreeze = <T>(value: T): T => {
 };
 
 const buildIndexes = (
-  nodes: readonly PipelineNode[],
+  nodes: readonly CompiledNode[],
   graph: CompilerSemanticGraph,
 ): Pick<CompiledPipeline, 'incomingIndex' | 'nodeIndex' | 'outgoingIndex'> => ({
   nodeIndex: nodes.map((node, index) => ({ key: node.key, node: index })),
@@ -50,6 +54,8 @@ export const assembleCompiledPipeline = ({
   graph,
   nodes,
   regions,
+  executorRequirements,
+  terminalBindings,
 }: AssemblyInput): PipelineCompilation => {
   const sortedFacts = [...facts].sort((left, right) =>
     compareUnicodeCodePoints(left.key, right.key),
@@ -62,17 +68,19 @@ export const assembleCompiledPipeline = ({
       ),
     }))
     .sort((left, right) => compareUnicodeCodePoints(left.fork, right.fork));
+  const pipeline: CompiledPipeline = deepFreeze({
+    schemaVersion: 1,
+    entry,
+    facts: sortedFacts,
+    nodes,
+    edges: graph.edges,
+    topologicalOrder: graph.topologicalOrder,
+    forkRegions,
+    ...buildIndexes(nodes, graph),
+  });
   return {
     ok: true,
-    pipeline: deepFreeze({
-      schemaVersion: 1,
-      entry,
-      facts: sortedFacts,
-      nodes,
-      edges: graph.edges,
-      topologicalOrder: graph.topologicalOrder,
-      forkRegions,
-      ...buildIndexes(nodes, graph),
-    }),
+    pipeline,
+    template: deepFreeze({ pipeline, executorRequirements, terminalBindings }),
   };
 };

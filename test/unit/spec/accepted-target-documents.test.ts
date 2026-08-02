@@ -10,6 +10,10 @@ const reducer = read('docs/specs/pipeline-reducer-v1.spec.md');
 const modules = read('docs/specs/internal-module-structure.spec.md');
 const architecture = read('docs/architecture.md');
 const adr = read('docs/adr/0002-portable-decoding-and-reduction.md');
+const scriptAdr = read(
+  'docs/adr/0003-native-script-definitions-and-unresolved-execution-templates.md',
+);
+const definition = read('docs/specs/pipeline-definition-v1.spec.md');
 const readme = read('README.md');
 
 const compiledIntegrityModuleMap = `transition/decode-compiled-pipeline.ts
@@ -131,10 +135,10 @@ describe('Accepted decoder and reducer target', () => {
     expect(readme).toContain('Pre-release package. It is not published to npm');
     expect(readme).toContain('no runtime dependencies');
     expect(readme).toContain('Narrow decisions by `kind`');
-    expect(modules).toContain('final five-value/86-type root manifest');
+    expect(modules).toContain('final five-value/92-type root manifest');
     expect(decoder).toContain('## Shipped example and proof');
     expect(reducer).toContain('- Implementation: Shipped by PR7');
-    expect(adr).toContain('The shipped public root contains five values and 86 types.');
+    expect(adr).toContain('The shipped public root contains five values and 92 types.');
     for (const stalePhrase of [
       'No such decoder is part of this\nAccepted root manifest',
       'Target for PR7; not currently exported',
@@ -159,9 +163,28 @@ describe('Accepted decoder and reducer target', () => {
   });
 
   test('keeps accepted shipped contracts and their ADR', () => {
-    for (const document of [decoder, reducer, adr]) {
+    for (const document of [decoder, reducer, adr, scriptAdr, definition]) {
       expect(document).toContain('- Status: Accepted');
     }
+  });
+
+  test('pins native script lowering and unresolved-template compatibility', () => {
+    for (const typeName of [
+      'JsonValue',
+      'ScriptIdentity',
+      'ScriptNode',
+      'ExecutorRequirement',
+      'TerminalBindingTemplate',
+      'PipelineExecutionTemplate',
+    ]) {
+      expect(definition).toContain(`type ${typeName} =`);
+    }
+    expect(definition).toContain('readonly template: PipelineExecutionTemplate');
+    expect(definition).toContain('MUST lower each valid `ScriptNode` to a `TaskNode`');
+    expect(definition).toContain("template's `pipeline` MUST be the identical object");
+    expect(scriptAdr).toContain('ADR 0002 continues to own');
+    expect(architecture).toContain('Task-only definitions and consumers');
+    expect(readme).toContain('does not resolve or execute scripts');
   });
 
   test('fixes exact callables and excludes convenience/stateful surfaces', () => {

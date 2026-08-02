@@ -41,6 +41,6 @@ keys, not by a new occurrence or node reactivation.
 
 ## Consequences
 
-The shipped public root contains five values and 86 types. PR6 implemented decoding, and
+The shipped public root contains five values and 92 types. PR6 implemented decoding, and
 PR7 implemented reduction and the private shared decision seam. Consumer-specific
 schemas and transaction technology still require a separate architecture decision.

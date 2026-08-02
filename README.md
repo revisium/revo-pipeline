@@ -93,6 +93,36 @@ console.log(
 
 <!-- package-example:end:task-branch-terminal -->
 
+Script nodes pin an exact script identity and portable JSON input. A successful compilation
+also exposes the host-owned execution template:
+
+```ts
+const scriptCompilation = compilePipeline(
+  definePipeline({
+    schemaVersion: 1,
+    entry: 'echo',
+    facts: [],
+    nodes: [
+      {
+        kind: 'script',
+        key: 'echo',
+        script: { id: 'script:system/echo', version: 1 },
+        input: { message: 'Hello' },
+        outcomes: { completed: 'done', failed: 'done', cancelled: 'done', skipped: 'done' },
+      },
+      { kind: 'terminal', key: 'done', outcome: 'succeeded' },
+    ],
+  }),
+);
+if (scriptCompilation.ok) console.log(scriptCompilation.template.executorRequirements);
+```
+
+Script authoring is backward-compatible with the pure graph contract: compilation lowers
+each script node to a task in `compilation.pipeline`, while `compilation.template`
+references that same pipeline and carries only unresolved host requirements. This package
+does not resolve or execute scripts. Task-only definitions and pipeline consumers do not
+need to adopt the template.
+
 ## Complete public API
 
 ```ts

@@ -10,8 +10,8 @@ const root = resolve(import.meta.dirname, '..');
 const characterization = resolve(root, 'test/characterization');
 const baseSha = 'c5dafd574269c230e4921614a481fc7277f2ff00';
 const acceptedProductionTreeSha256 =
-  '81e04568af318f7c7146d741ee8c43a7aa223237e1643a47c1cb481550c3ed93';
-const acceptedRootDigest = '29186644fb2b3b9bf1ccd1fc7ccb7805815b12232e5225886222ccf2e13bb08e';
+  'ed752ef65c754585f44a582e20fe3f6f24dd3388b5c53b0ea1193c39da4286a6';
+const acceptedRootDigest = '3f98846bd74ed4875f3b2e14d701ec2a36c320c4e00db9d5dbf54b017d4bed10';
 const acceptedFrontierFixtureSha256 =
   '452d61513245cbb479e046113627f6c52583c92d37633d460379f1450a466654';
 const acceptedValidFrontierCount = 94;

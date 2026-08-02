@@ -157,7 +157,7 @@ test('preserves exact accepted scalar, outcome, node and decision unions', () =>
     | 'gate-unresolved'
   >();
   expectTypeOf<PipelineNode['kind']>().toEqualTypeOf<
-    'task' | 'branch' | 'fork' | 'join' | 'consensus' | 'humanGate' | 'terminal'
+    'task' | 'script' | 'branch' | 'fork' | 'join' | 'consensus' | 'humanGate' | 'terminal'
   >();
   expectTypeOf<PipelineDecision['kind']>().toEqualTypeOf<
     'activate' | 'select' | 'wait' | 'terminal' | 'noop' | 'reject'

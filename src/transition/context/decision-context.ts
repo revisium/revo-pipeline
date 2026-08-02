@@ -1,4 +1,4 @@
-import type { PipelineNode } from '../../spec/index.js';
+import type { CompiledNode } from '../../spec/index.js';
 import type { CompiledInspection } from '../compiled/compiled-inspection.js';
 
 type SuccessfulCompiledValidation = Extract<CompiledInspection, { readonly ok: true }>;
@@ -7,7 +7,7 @@ export interface DecisionContext {
   readonly compiled: SuccessfulCompiledValidation;
   readonly candidatesByNode: ReadonlyMap<string, ReadonlySet<string>>;
   readonly incomingByKey: ReadonlyMap<string, readonly number[]>;
-  readonly nodeByKey: ReadonlyMap<string, PipelineNode>;
+  readonly nodeByKey: ReadonlyMap<string, CompiledNode>;
   readonly outgoingByKey: ReadonlyMap<string, readonly number[]>;
   readonly regionByFork: ReadonlyMap<
     string,

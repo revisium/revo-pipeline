@@ -5,6 +5,7 @@ import { expect, test } from 'vitest';
 
 import {
   HOST_SHAPED_CONSUMER_SOURCE,
+  RUNTIME_CONSUMER_SOURCE,
   TYPE_CONSUMER_SOURCE,
   permissionFixtureSource,
 } from '../../../scripts/package/package-consumer-fixtures.js';
@@ -14,6 +15,25 @@ test('retains both live whole-union exhaustiveness calls', () => {
     expect(source).toContain('assertNever(decision);');
     expect(source).toContain('assertNever(reduction);');
   }
+});
+
+test('pins script authoring and all six script template types in isolated root consumers', () => {
+  expect(RUNTIME_CONSUMER_SOURCE).toContain("kind: 'script'");
+  expect(RUNTIME_CONSUMER_SOURCE).toContain(
+    'assert.equal(scriptCompilation.template.pipeline, scriptCompilation.pipeline);',
+  );
+  for (const typeName of [
+    'JsonValue',
+    'ScriptIdentity',
+    'ScriptNode',
+    'ExecutorRequirement',
+    'TerminalBindingTemplate',
+    'PipelineExecutionTemplate',
+  ]) {
+    expect(TYPE_CONSUMER_SOURCE).toContain(`type ${typeName}`);
+  }
+  expect(TYPE_CONSUMER_SOURCE).toContain('const publicTypeCount: 92');
+  expect(TYPE_CONSUMER_SOURCE).not.toContain('@revisium/revo-pipeline/');
 });
 
 test('builds only the four ordinary permission regression fixtures', () => {
