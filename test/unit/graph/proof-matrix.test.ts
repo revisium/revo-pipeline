@@ -336,6 +336,37 @@ const query = (
 });
 
 describe('graph kernel proof matrix', () => {
+  test('keeps A/B/A kernel builds isolated without module-level cache state', () => {
+    const aInput = { nodeKeys: ['a', 'b'], edges: [{ from: 'a', to: 'b' }] } as const;
+    const bInput = { nodeKeys: ['x', 'y', 'z'], edges: [{ from: 'y', to: 'z' }] } as const;
+    const firstA = buildGraphKernel(aInput);
+    const betweenB = buildGraphKernel(bInput);
+    const secondA = buildGraphKernel(aInput);
+    expect(firstA.ok && betweenB.ok && secondA.ok).toBe(true);
+    if (!firstA.ok || !betweenB.ok || !secondA.ok) {
+      return;
+    }
+    expect(secondA.kernel).not.toBe(firstA.kernel);
+    expect({ ...secondA.kernel, nodeOffset: undefined }).toEqual({
+      ...firstA.kernel,
+      nodeOffset: undefined,
+    });
+    expect(secondA.kernel.nodeOffset('a')).toBe(0);
+    expect(secondA.kernel.nodeOffset('x')).toBeUndefined();
+    expect(betweenB.kernel.nodeOffset('x')).toBe(0);
+  });
+
+  test('charges duplicate reconstructed kernel work independently', () => {
+    const input = { nodeKeys: ['a', 'b', 'c'], edges: [{ from: 'a', to: 'b' }] } as const;
+    const recording = recordingSink();
+    expect(buildGraphKernel(input, recording.sink).ok).toBe(true);
+    expect(recording.counts).toMatchObject({ node: 3, edge: 1 });
+    expect(
+      buildGraphKernel({ nodeKeys: [...input.nodeKeys], edges: [...input.edges] }, recording.sink)
+        .ok,
+    ).toBe(true);
+    expect(recording.counts).toMatchObject({ node: 6, edge: 2 });
+  });
   test('matches seeded independent references for DAG, cyclic, and disconnected ownership', () => {
     const random = seeded(0x5eed_2026);
     for (let sample = 0; sample < 120; sample += 1) {

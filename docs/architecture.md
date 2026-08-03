@@ -1,5 +1,9 @@
 # Architecture
 
+Architecture validation follows [ADR 0004](./adr/0004-behavior-first-architecture-validation.md):
+stable module grammar is checked declaratively, while observable semantics are verified
+at behavior and package boundaries.
+
 `@revisium/revo-pipeline` is a zero-runtime-dependency, pure ESM library.
 
 ```text

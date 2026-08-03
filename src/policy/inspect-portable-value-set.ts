@@ -115,6 +115,17 @@ const inspect = (input: unknown, path: string, depth: number, context: Context):
   const keys = isArray
     ? Array.from({ length: input.length }, (_entry, index) => String(index))
     : reflectedKeys.toSorted(compareUnicodeCodePoints);
+  return inspectChildren(input, keys, isArray, path, depth, context);
+};
+
+const inspectChildren = (
+  input: object,
+  keys: readonly string[],
+  isArray: boolean,
+  path: string,
+  depth: number,
+  context: Context,
+): unknown => {
   const outputArray: unknown[] = [];
   const outputObject: Record<string, unknown> = {};
   const descriptors = readDescriptors(input, keys, path, context);

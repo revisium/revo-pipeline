@@ -3,10 +3,6 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 
 import {
-  validateModuleStructure,
-  type SourceModule,
-} from './architecture/validate-module-structure.js';
-import {
   createPackageCommandRunner,
   type PackageArtifact,
   type PackageArtifactAccess,
@@ -24,9 +20,14 @@ import {
   permissionFixtureSource,
 } from './package/package-consumer-fixtures.js';
 import { extractDocumentationExamples } from './package/package-documentation-examples.js';
+import {
+  assertExactPublicDeclaration,
+  assertTypeOnlyRuntimeModule,
+} from './package/public-contract.js';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
+type SourceModule = { readonly path: string };
 
 const collectSourceModules = async (
   root: string,
@@ -42,16 +43,13 @@ const collectSourceModules = async (
       if (!entry.name.endsWith('.ts')) {
         return [];
       }
-      return [
-        { path: relative(root, path).replaceAll('\\', '/'), source: await readFile(path, 'utf8') },
-      ];
+      return [{ path: relative(root, path).replaceAll('\\', '/') }];
     }),
   );
   return groups.flat();
 };
 
 const expectedPackagePaths = (sourceModules: readonly SourceModule[]): readonly string[] => {
-  validateModuleStructure(sourceModules);
   const compilerEmissions = sourceModules.flatMap(({ path }) => {
     assert.match(path, /^src\/.*\.ts$/);
     const output = `dist/${path.slice('src/'.length, -'.ts'.length)}`;
@@ -59,13 +57,6 @@ const expectedPackagePaths = (sourceModules: readonly SourceModule[]): readonly 
   });
   return ['LICENSE', 'README.md', 'package.json', ...compilerEmissions].sort();
 };
-
-const namedExports = (source: string): readonly string[] =>
-  [...source.matchAll(/export(?: type)? \{([\s\S]*?)\} from/g)]
-    .flatMap((match) => match[1]?.split(',') ?? [])
-    .map((name) => name.trim())
-    .filter((name) => name.length > 0)
-    .sort();
 
 const assertPackageMetadata = (manifest: Record<string, unknown>): void => {
   assert.deepEqual(
@@ -178,7 +169,6 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
   const runner = createPackageCommandRunner();
 
   let expectedPaths: readonly string[] = [];
-  let sourceRootDeclaration = '';
   let documentationSources = new Map<string, string>();
   let artifact: PackageArtifact | undefined;
   let access: PackageArtifactAccess | undefined;
@@ -187,7 +177,6 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
     sourcePreparation: async () => {
       const sourceModules = await collectSourceModules(root, join(root, 'src'));
       expectedPaths = expectedPackagePaths(sourceModules);
-      sourceRootDeclaration = await readFile(join(root, 'src/index.ts'), 'utf8');
       const documentation = await Promise.all(
         PACKAGE_CONSUMER_CASES.flatMap((entry) =>
           entry.documentation
@@ -208,6 +197,17 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
       );
       assert.ok(isRecord(sourceManifest));
       assertPackageMetadata(sourceManifest);
+      const rootDeclaration = await readFile(join(root, 'dist/index.d.ts'), 'utf8');
+      assertExactPublicDeclaration(rootDeclaration);
+      const typeOnlyModules = sourceModules.filter(
+        ({ path }) => path.startsWith('src/spec/') || path.startsWith('src/errors/'),
+      );
+      await Promise.all(
+        typeOnlyModules.map(async ({ path }) => {
+          const label = `dist/${path.slice('src/'.length, -'.ts'.length)}.js`;
+          assertTypeOnlyRuntimeModule(label, await readFile(join(root, label), 'utf8'));
+        }),
+      );
     },
     pack: () => {
       artifact = runner.pack();
@@ -245,17 +245,7 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
         'The reader must preserve the exact pack-manifest identity.',
       );
       assertPackageMetadata({ ...preparedAccess.readPackedManifest() });
-      const rootDeclaration = preparedAccess.readRootDeclaration();
-      assert.deepEqual(
-        namedExports(sourceRootDeclaration),
-        namedExports(rootDeclaration),
-        'Packed declarations must expose exactly the source root names without aliases or defaults.',
-      );
-      assert.equal(
-        namedExports(rootDeclaration).length,
-        97,
-        'Packed declarations must expose exactly five values and 92 types.',
-      );
+      assertExactPublicDeclaration(preparedAccess.readRootDeclaration());
       const declarations = preparedAccess.readDeclarationManifest();
       const occurrenceDeclaration = declarations.find(
         ({ label }) => label === 'dist/spec/pipeline-occurrence-key.d.ts',

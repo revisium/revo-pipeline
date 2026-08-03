@@ -1,0 +1,76 @@
+[
+  {
+    "name": "allowed layer barrel type import",
+    "expectedRule": null,
+    "files": {
+      "src/graph/a.ts": "import type { Spec } from '../spec/index.js'; export type A = Spec;",
+      "src/spec/index.ts": "export type { Spec } from './spec.js';",
+      "src/spec/spec.ts": "export type Spec = string;"
+    }
+  },
+  {
+    "name": "private cross-boundary type import",
+    "expectedRule": "no-private-graph-imports",
+    "files": {
+      "test/a.ts": "import type { Hidden } from '../src/graph/private.js'; export type A = Hidden;",
+      "src/graph/private.ts": "export type Hidden = string;"
+    }
+  },
+  {
+    "name": "forbidden layer export-from",
+    "expectedRule": "graph-depends-downward",
+    "files": {
+      "src/graph/a.ts": "export type { Definition } from '../definition/index.js';",
+      "src/definition/index.ts": "export type Definition = string;"
+    }
+  },
+  {
+    "name": "transitive type cycle",
+    "expectedRule": "no-cycles",
+    "files": {
+      "src/graph/a.ts": "import type { B } from './b.js'; export type A = B;",
+      "src/graph/b.ts": "import type { C } from './c.js'; export type B = C;",
+      "src/graph/c.ts": "import type { A } from './a.js'; export type C = A;"
+    }
+  },
+  {
+    "name": "internal static import of root",
+    "expectedRule": "internal-does-not-import-root",
+    "files": {
+      "src/index.ts": "export const root = true;",
+      "src/graph/a.ts": "import { root } from '../index.js'; export const value = root;"
+    }
+  },
+  {
+    "name": "relative production escape",
+    "expectedRule": "production-stays-in-src",
+    "files": {
+      "src/graph/a.ts": "export { escaped } from '../../outside.js';",
+      "outside.ts": "export const escaped = true;"
+    }
+  },
+  {
+    "name": "Node builtin runtime import",
+    "expectedRule": "production-does-not-import-node-builtins",
+    "files": {
+      "src/graph/a.ts": "import { readFile } from 'node:fs/promises'; export const value = readFile;"
+    }
+  },
+  {
+    "name": "resolved external dynamic runtime import",
+    "expectedRule": "production-has-no-external-runtime-dependencies",
+    "files": {
+      "package.json": "{\"type\":\"module\",\"dependencies\":{\"external\":\"1.0.0\"}}",
+      "src/graph/a.ts": "export const value = import('external');",
+      "node_modules/external/package.json": "{\"name\":\"external\",\"version\":\"1.0.0\",\"type\":\"module\",\"exports\":\"./index.js\"}",
+      "node_modules/external/index.js": "export const value = true;"
+    }
+  },
+  {
+    "name": "unresolved bare production import",
+    "expectedRule": "production-imports-must-resolve",
+    "files": {
+      "src/graph/a.ts": "import value from 'missing-package'; export { value };"
+    }
+  }
+]

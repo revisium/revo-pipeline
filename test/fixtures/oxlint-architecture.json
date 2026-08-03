@@ -1,0 +1,24 @@
+{
+  "forbidden": {
+    "static": "import value from '@revisium/revo-run'; void value;",
+    "exportFrom": "export { value } from '@revisium/revo-run';",
+    "dynamic": "export const value = import('@revisium/revo-run');",
+    "type": "import type { Value } from '@revisium/revo-run'; export type Result = Value;"
+  },
+  "missingExtensions": {
+    "static": "import { value } from './dependency'; void value;",
+    "exportFrom": "export { value } from './dependency';"
+  },
+  "acceptedExtensions": {
+    "static": "import { value } from './dependency.js'; void value;",
+    "exportFrom": "export { value } from './dependency.js';",
+    "dynamic": "export const value = import('./dependency.js');",
+    "type": "import type { Value } from './dependency.js'; export type Result = Value;"
+  },
+  "typescriptExtensions": {
+    "extensionlessDynamic": "export const value = import('./dependency');",
+    "extensionlessImportType": "export type Result = import('./dependency').Value;",
+    "explicitDynamic": "export const value = import('./dependency.js');",
+    "explicitImportType": "export type Result = import('./dependency.js').Value;"
+  }
+}
