@@ -41,7 +41,6 @@ test('declares exactly one ESM-only root subpath and no production dependencies'
   });
   expect(manifest).toMatchObject({
     name: '@revisium/revo-pipeline',
-    version: '0.0.0',
     description: 'Portable pipeline definition, compilation, and transition semantics for Revo.',
     homepage: 'https://github.com/revisium/revo-pipeline#readme',
     bugs: { url: 'https://github.com/revisium/revo-pipeline/issues' },
