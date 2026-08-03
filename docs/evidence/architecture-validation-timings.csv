@@ -16,3 +16,4 @@ candidate,architecture,p95-type7,summary,B,6.002,passed,"linear interpolation at
 candidate,verify,gate,summary,B,,passed,"full verify exit 0; elapsed time was not captured as an accepted benchmark sample"
 candidate,audit,gate,summary,B,,passed,"production audit exit 0; no known vulnerabilities found"
 baseline,verify,cold-observed,0,A,180.116,timeout,"exit 124 at the per-sample bound; remaining full-verify samples not run; no ratio reported"
+candidate-upstream,architecture,warm-observed,adaptation,B,6.150,passed,"single post-rebase observation; 304 modules and 910 dependencies; excluded from archived A/B statistics"

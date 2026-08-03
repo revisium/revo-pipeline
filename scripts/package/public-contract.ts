@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 
 export const PUBLIC_DECLARATION_SHA256 =
-  '711b215da230fc37b3befdfe96a35e480355bf2a232ea17d31b997002dff552a';
+  'b4b79a6cd5bbf8a8d23334a50f7e70dd3e1220f0a9624fe058398eca84d2108f';
 
 export const normalizePublicDeclaration = (content: string): string =>
   `${content.replaceAll('\r\n', '\n').trimEnd()}\n`;

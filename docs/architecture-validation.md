@@ -27,9 +27,10 @@ extensionless literal dynamic imports and import-type expressions.
 
 Raw observations are stored in `docs/evidence/architecture-validation-timings.csv`.
 The human accepted a limited alternating 5A/5B mixed cold/warm observation in place of
-the original 10-cold/30-warm protocol. It contains one process-cold sample and four warm
-samples per variant, ordered cold `A,B` followed by two `A,B,B,A` blocks. OS page-cache
-state was uncontrolled. This is explicitly not the original protocol.
+the original 10-cold/30-warm protocol. It compared the archived pre-upstream candidate
+against its baseline. It contains one process-cold sample and four warm samples per
+variant, ordered cold `A,B` followed by two `A,B,B,A` blocks. OS page-cache state was
+uncontrolled. This is explicitly not the original protocol.
 
 Statistics use all five observations for each variant. Median is the ordinary sample
 median. p95 uses linear interpolation at `(n - 1) * 0.95` (Hyndman-Fan type 7). Ratios
@@ -43,3 +44,7 @@ The candidate full `verify` completed with exit 0, including socket/FIFO and nes
 checks, and the production audit completed with exit 0 and no known vulnerabilities.
 The archived baseline full `verify` reached the per-sample bound at 180.116 s with exit 124. The remaining full-verify samples were not run, and no full-verify timing ratio is
 reported.
+
+After adaptation to upstream native-script definitions, a separate single observation
+completed in 6.15 s while cruising 304 modules and 910 dependencies. It is not mixed into
+the archived A/B statistics and does not establish a new ratio.

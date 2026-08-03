@@ -77,6 +77,13 @@ describe('pipeline definition compilation', () => {
       ],
     });
     expect(Object.isFrozen(result.template)).toBe(true);
+    expect(result.template.pipeline).toBe(result.pipeline);
+    expect(Object.isFrozen(result.template.executorRequirements)).toBe(true);
+    expect(Object.isFrozen(result.template.executorRequirements[0])).toBe(true);
+    expect(Object.isFrozen(result.template.executorRequirements[0]?.script)).toBe(true);
+    expect(Object.isFrozen(result.template.executorRequirements[0]?.input)).toBe(true);
+    expect(Object.isFrozen(result.template.terminalBindings)).toBe(true);
+    expect(Object.isFrozen(result.template.terminalBindings[0])).toBe(true);
     expect('adapterId' in result.template.executorRequirements[0]!).toBe(false);
   });
 
