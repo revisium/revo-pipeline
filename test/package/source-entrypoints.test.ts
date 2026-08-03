@@ -3,8 +3,6 @@ import { join } from 'node:path';
 
 import { expect, test } from 'vitest';
 
-import { validateModuleStructure } from '../../scripts/architecture/validate-module-structure.js';
-import { validatePackageVerifierFlow } from '../../scripts/architecture/validate-package-verifier-flow.js';
 import {
   HOST_SHAPED_CONSUMER_SOURCE,
   TYPE_CONSUMER_SOURCE,
@@ -15,9 +13,7 @@ import * as packageRoot from '../../src/index.js';
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-test('ships exactly the accepted explicit source and runtime root manifest', async () => {
-  const source = await readFile(join(process.cwd(), 'src/index.ts'), 'utf8');
-  expect(() => validateModuleStructure([{ path: 'src/index.ts', source }])).not.toThrow();
+test('ships exactly the accepted runtime root manifest', () => {
   expect(Object.keys(packageRoot).sort()).toEqual([
     'compilePipeline',
     'decidePipeline',
@@ -56,10 +52,6 @@ test('declares exactly one ESM-only root subpath and no production dependencies'
     publishConfig: { access: 'public', provenance: true },
   });
   expect(manifest['dependencies']).toBeUndefined();
-});
-
-test('keeps package verification on exactly one pack invocation', async () => {
-  expect(() => validatePackageVerifierFlow(process.cwd())).not.toThrow();
 });
 
 test('keeps packed union growth fail-closed at full-object never calls', () => {

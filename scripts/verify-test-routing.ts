@@ -1,13 +1,8 @@
-import { spawnSync } from 'node:child_process';
 import { readdir, realpath } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
 
+import { listingDependencies, readTestListing, type ListedTest } from './test/read-test-listing.js';
 import { TEST_ROUTE_CHECKPOINT } from './test/test-suite-routes.js';
-
-type ListedTest = {
-  readonly file: string;
-  readonly name: string;
-};
 
 type RouteInventory = {
   readonly files: ReadonlySet<string>;
@@ -34,40 +29,12 @@ const canonicalPath = (path: string): string => {
   return repositoryPath.split(sep).join('/');
 };
 
-const isListedTest = (value: unknown): value is ListedTest =>
-  typeof value === 'object' &&
-  value !== null &&
-  'file' in value &&
-  typeof value.file === 'string' &&
-  'name' in value &&
-  typeof value.name === 'string' &&
-  value.name.length > 0;
-
 const parseListing = (config: string): readonly ListedTest[] => {
-  const result = spawnSync(process.execPath, [vitest, 'list', '--config', config, '--json'], {
-    cwd: root,
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (result.error) {
-    return fail(`${config} discovery could not start: ${result.error.message}`);
-  }
-  if (result.status !== 0) {
-    return fail(
-      `${config} discovery exited ${String(result.status)}: ${result.stderr.trim() || 'no stderr'}`,
-    );
-  }
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(result.stdout);
-  } catch {
-    return fail(`${config} discovery did not emit JSON`);
+    return readTestListing(config, listingDependencies(root, vitest, config));
+  } catch (error: unknown) {
+    return fail(error instanceof Error ? error.message : String(error));
   }
-  if (!Array.isArray(parsed) || !parsed.every(isListedTest)) {
-    return fail(`${config} discovery emitted an unexpected schema`);
-  }
-  return parsed;
 };
 
 const routeInventory = (config: string): RouteInventory => {

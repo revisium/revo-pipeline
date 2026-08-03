@@ -36,7 +36,7 @@ const definition = definePipeline({
   ],
 });
 
-test('supports the documented deterministic public root workflow with isolated compiled data', () => {
+test('keeps accepted decode, decision, and reduction topology/indexes in agreement', () => {
   expect(definition.entry).toBe('approval');
   const compilation = compilePipeline(definition);
   expect(compilation.ok).toBe(true);
@@ -49,6 +49,20 @@ test('supports the documented deterministic public root workflow with isolated c
     return;
   }
   const pipeline = decoding.pipeline;
+  const acceptedGraph = {
+    edges: pipeline.edges,
+    topologicalOrder: pipeline.topologicalOrder,
+    nodeIndex: pipeline.nodeIndex,
+    outgoingIndex: pipeline.outgoingIndex,
+    incomingIndex: pipeline.incomingIndex,
+  };
+  expect(acceptedGraph).toEqual({
+    edges: compilation.pipeline.edges,
+    topologicalOrder: compilation.pipeline.topologicalOrder,
+    nodeIndex: compilation.pipeline.nodeIndex,
+    outgoingIndex: compilation.pipeline.outgoingIndex,
+    incomingIndex: compilation.pipeline.incomingIndex,
+  });
   const snapshot: PipelineSnapshot = {
     schemaVersion: 1,
     occurrenceKey: 'public-consumer',
@@ -111,6 +125,13 @@ test('supports the documented deterministic public root workflow with isolated c
     application: 'unchanged',
     batch: { kind: 'atomic', items: [] },
   });
+  expect({
+    edges: pipeline.edges,
+    topologicalOrder: pipeline.topologicalOrder,
+    nodeIndex: pipeline.nodeIndex,
+    outgoingIndex: pipeline.outgoingIndex,
+    incomingIndex: pipeline.incomingIndex,
+  }).toEqual(acceptedGraph);
 });
 
 test('exposes the script execution template through the public package surface', () => {

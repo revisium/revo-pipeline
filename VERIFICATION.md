@@ -7,7 +7,8 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm verify
 ```
 
-`verify` is the required local gate. It checks formatting, types, lint, test routing,
+`verify` is the required local gate. It runs Oxlint and dependency-cruiser exactly once,
+and checks formatting, types, test routing,
 behavior and architecture tests, production coverage, characterization, build, package
 contents, declarations, and isolated packed consumers.
 

@@ -16,57 +16,6 @@ const scriptAdr = read(
 const definition = read('docs/specs/pipeline-definition-v1.spec.md');
 const readme = read('README.md');
 
-const compiledIntegrityModuleMap = `transition/decode-compiled-pipeline.ts
-transition/inspect-compiled-pipeline.ts
-transition/compiled/
-  compiled-inspection-fault.ts
-  compiled-inspection-fault-collector.ts
-  compiled-inspection.ts
-  compiled-capture-limit.ts
-  snapshot-compiled-input.ts
-  inspect-compiled-members.ts
-  inspect-compiled-root-members.ts
-  inspect-compiled-node-members.ts
-  inspect-compiled-node-policy.ts
-  inspect-compiled-node-routes.ts
-  inspect-compiled-branch-schema.ts
-  inspect-compiled-branch-fallback.ts
-  inspect-compiled-edges.ts
-  inspect-compiled-facts.ts
-  inspect-compiled-indexes.ts
-  inspect-compiled-outcomes.ts
-  inspect-compiled-regions.ts
-  expected-compiled-semantics.ts
-  derive-expected-compiled-semantics.ts
-  compare-serialized-graph.ts
-  verify-serialized-topology.ts
-  verify-serialized-indexes.ts`;
-
-const compiledIntegrityDag = `decode-compiled-pipeline / decide-pipeline
-  -> inspect-compiled-pipeline
-inspect-compiled-pipeline
-  -> snapshot-compiled-input
-     -> compiled-capture-limit
-  -> compiled-inspection-fault-collector -> compiled-inspection-fault
-  -> inspect-compiled-members
-     -> inspect-compiled-root-members
-     -> inspect-compiled-node-members
-        -> inspect-compiled-node-policy
-        -> inspect-compiled-node-routes
-           -> inspect-compiled-branch-schema
-              -> inspect-compiled-branch-fallback
-        -> inspect-compiled-outcomes
-     -> inspect-compiled-edges
-     -> inspect-compiled-facts
-     -> inspect-compiled-indexes
-     -> inspect-compiled-regions
-  -> derive-expected-compiled-semantics -> expected-compiled-semantics
-  -> compare-serialized-graph -> expected-compiled-semantics
-  -> graph barrel
-  -> verify-serialized-topology
-  -> verify-serialized-indexes
-  -> compiled-inspection`;
-
 const fencedBlockAfter = (document: string, marker: string, language: string): string => {
   const block = document
     .split(marker)[1]
@@ -135,7 +84,7 @@ describe('Accepted decoder and reducer target', () => {
     expect(readme).toContain('Pre-release package. It is not published to npm');
     expect(readme).toContain('no runtime dependencies');
     expect(readme).toContain('Narrow decisions by `kind`');
-    expect(modules).toContain('final five-value/92-type root manifest');
+    expect(modules).toContain('exact normalized root declaration');
     expect(decoder).toContain('## Shipped example and proof');
     expect(reducer).toContain('- Implementation: Shipped by PR7');
     expect(adr).toContain('The shipped public root contains five values and 92 types.');
@@ -147,19 +96,6 @@ describe('Accepted decoder and reducer target', () => {
     ]) {
       expect([readme, decoder, reducer, modules, adr].join('\n')).not.toContain(stalePhrase);
     }
-  });
-
-  test('pins the exact hostile compiled module inventory and direct-import DAG', () => {
-    expect(
-      fencedBlockAfter(
-        modules,
-        'The hostile compiled-integrity boundary MUST have exactly this private module map:',
-        'text',
-      ),
-    ).toBe(compiledIntegrityModuleMap);
-    expect(fencedBlockAfter(modules, 'and follow this\ndirect-import DAG:', 'text')).toBe(
-      compiledIntegrityDag,
-    );
   });
 
   test('keeps accepted shipped contracts and their ADR', () => {
@@ -197,15 +133,10 @@ describe('Accepted decoder and reducer target', () => {
     expect(reducer).toContain('mutable\nsession');
   });
 
-  test('keeps decoder-and-reducer manifests exact, unique, and equal across owning documents', () => {
+  test('keeps the decoder-and-reducer manifest exact and unique in its owning document', () => {
     const reducerManifest = manifestAfter(reducer, 'The exact new public type manifest is:');
-    const moduleManifest = manifestAfter(
-      modules,
-      'The exact decoder-and-reducer public type addition manifest is:',
-    );
     expect(reducerManifest).toHaveLength(23);
     expect(new Set(reducerManifest).size).toBe(23);
-    expect(moduleManifest).toEqual(reducerManifest);
     expect(reducerManifest.slice(0, 3)).toEqual([
       'CompiledPipelineDecoding',
       'DecodeFault',

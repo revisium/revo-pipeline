@@ -15,7 +15,8 @@ sufficient correction.
 - Join, consensus, or gate semantics require hidden mutable package state.
 - Transition evaluation performs I/O, reads a clock, generates an id, or mutates facts.
 - A deep import, broad barrel, forbidden dependency, or value/type cycle bypasses the DAG.
-- Architecture rules lack a positive graph and exact representative negative probes.
+- Stable architecture rules lack a positive graph and representative negative probes;
+  observable semantics lack behavior, property, differential, or contract coverage.
 - Package exports, declarations, docs, and packed behavior disagree.
 - Verification failures or warnings are suppressed.
 - A release can publish without a separate explicit approval.
