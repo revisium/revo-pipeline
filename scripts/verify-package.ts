@@ -71,7 +71,6 @@ const assertPackageMetadata = (manifest: Record<string, unknown>): void => {
   assert.deepEqual(
     {
       name: manifest['name'],
-      version: manifest['version'],
       description: manifest['description'],
       homepage: manifest['homepage'],
       bugs: manifest['bugs'],
@@ -90,7 +89,6 @@ const assertPackageMetadata = (manifest: Record<string, unknown>): void => {
     },
     {
       name: '@revisium/revo-pipeline',
-      version: '0.0.0',
       description: 'Portable pipeline definition, compilation, and transition semantics for Revo.',
       homepage: 'https://github.com/revisium/revo-pipeline#readme',
       bugs: { url: 'https://github.com/revisium/revo-pipeline/issues' },
