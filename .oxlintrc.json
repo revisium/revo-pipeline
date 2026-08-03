@@ -17,7 +17,7 @@
     "import/extensions": [
       "error",
       "ignorePackages",
-      { "checkDynamicImport": true, "checkTypeImports": true, "pattern": { "js": "always" } }
+      { "checkTypeImports": true, "pattern": { "js": "always" } }
     ],
     "max-lines-per-function": "off",
     "no-restricted-imports": [

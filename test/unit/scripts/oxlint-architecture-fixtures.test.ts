@@ -65,6 +65,18 @@ test.each(Object.entries(fixtures.acceptedExtensions))(
   },
 );
 
+test('committed extension rule has exact supported options', () => {
+  const parsed: unknown = JSON.parse(readFileSync(config, 'utf8'));
+  if (!isRecord(parsed) || !isRecord(parsed['rules'])) {
+    throw new Error('[oxlint-extension-rule]');
+  }
+  expect(parsed['rules']['import/extensions']).toEqual([
+    'error',
+    'ignorePackages',
+    { checkTypeImports: true, pattern: { js: 'always' } },
+  ]);
+});
+
 const callable = (lines: number): string =>
   ['export function bounded() {', ...Array.from({ length: lines - 2 }, () => 'void 0;'), '}'].join(
     '\n',

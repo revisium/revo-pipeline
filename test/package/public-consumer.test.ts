@@ -49,13 +49,16 @@ test('keeps accepted decode, decision, and reduction topology/indexes in agreeme
     return;
   }
   const pipeline = decoding.pipeline;
-  const acceptedGraph = {
+  const acceptedGraph: Pick<
+    CompiledPipeline,
+    'edges' | 'topologicalOrder' | 'nodeIndex' | 'outgoingIndex' | 'incomingIndex'
+  > = structuredClone({
     edges: pipeline.edges,
     topologicalOrder: pipeline.topologicalOrder,
     nodeIndex: pipeline.nodeIndex,
     outgoingIndex: pipeline.outgoingIndex,
     incomingIndex: pipeline.incomingIndex,
-  };
+  });
   expect(acceptedGraph).toEqual({
     edges: compilation.pipeline.edges,
     topologicalOrder: compilation.pipeline.topologicalOrder,

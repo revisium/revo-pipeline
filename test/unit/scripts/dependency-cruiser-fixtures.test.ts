@@ -1,7 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { expect, test } from 'vitest';
 
@@ -34,6 +36,28 @@ const cruise = (files: Readonly<Record<string, string>>): { status: number; outp
     rmSync(root, { recursive: true, force: true });
   }
 };
+
+const packageVersionFromEntry = (entry: string): string => {
+  const packageRoot = dirname(dirname(entry));
+  const manifest: unknown = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
+  if (
+    typeof manifest !== 'object' ||
+    manifest === null ||
+    !('version' in manifest) ||
+    typeof manifest.version !== 'string'
+  ) {
+    throw new Error('[dependency-cruiser-typescript-version]');
+  }
+  return manifest.version;
+};
+
+test('isolates dependency-cruiser TypeScript 6 from project TypeScript 7', () => {
+  const projectRequire = createRequire(import.meta.url);
+  const cruiserEntry = fileURLToPath(import.meta.resolve('dependency-cruiser'));
+  const cruiserRequire = createRequire(cruiserEntry);
+  expect(packageVersionFromEntry(cruiserRequire.resolve('typescript'))).toBe('6.0.3');
+  expect(packageVersionFromEntry(projectRequire.resolve('typescript'))).toBe('7.0.2');
+});
 
 test.each(fixtures)('$name', ({ files, expectedRule }) => {
   const { status, output } = cruise(files);
