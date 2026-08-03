@@ -27,6 +27,254 @@ const linearDefinition = () => {
 };
 
 describe('pipeline definition compilation', () => {
+  test('lowers a public script node into the pure graph and an unresolved executor requirement', () => {
+    const definition = definePipeline({
+      schemaVersion: 1,
+      entry: 'echo',
+      facts: [],
+      nodes: [
+        {
+          kind: 'script',
+          key: 'echo',
+          script: { id: 'script:system/echo', version: 1 },
+          input: { message: 'Hello from Revo' },
+          outcomes: {
+            completed: 'done',
+            failed: 'failed',
+            cancelled: 'failed',
+            skipped: 'failed',
+          },
+        },
+        { kind: 'terminal', key: 'done', outcome: 'succeeded' },
+        { kind: 'terminal', key: 'failed', outcome: 'failed' },
+      ],
+    });
+
+    const result = compilePipeline(definition);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.pipeline.nodes).toEqual([
+      { kind: 'terminal', key: 'done', outcome: 'succeeded' },
+      { kind: 'task', key: 'echo', outcomes: definition.nodes[0].outcomes },
+      { kind: 'terminal', key: 'failed', outcome: 'failed' },
+    ]);
+    expect(result.template).toEqual({
+      pipeline: result.pipeline,
+      executorRequirements: [
+        {
+          kind: 'script',
+          nodeKey: 'echo',
+          script: { id: 'script:system/echo', version: 1 },
+          input: { message: 'Hello from Revo' },
+        },
+      ],
+      terminalBindings: [
+        { nodeKey: 'done', outcome: 'succeeded' },
+        { nodeKey: 'failed', outcome: 'failed' },
+      ],
+    });
+    expect(Object.isFrozen(result.template)).toBe(true);
+    expect('adapterId' in result.template.executorRequirements[0]!).toBe(false);
+  });
+
+  test('snapshots script input without retaining or freezing caller data', () => {
+    const input = { message: 'Hello', nested: { value: 1 } };
+    const definition = definePipeline({
+      schemaVersion: 1,
+      entry: 'echo',
+      facts: [],
+      nodes: [
+        {
+          kind: 'script',
+          key: 'echo',
+          script: { id: 'script:system/echo', version: 1 },
+          input,
+          outcomes: taskRoutes('done'),
+        },
+        { kind: 'terminal', key: 'done', outcome: 'succeeded' },
+      ],
+    });
+
+    const result = compilePipeline(definition);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.template.executorRequirements[0]?.input).toEqual(input);
+    expect(result.template.executorRequirements[0]?.input).not.toBe(input);
+    expect(Object.isFrozen(input)).toBe(false);
+    expect(Object.isFrozen(input.nested)).toBe(false);
+    input.message = 'mutated';
+    input.nested.value = 2;
+    expect(result.template.executorRequirements[0]?.input).toEqual({
+      message: 'Hello',
+      nested: { value: 1 },
+    });
+  });
+
+  test('canonicalizes terminal templates independently of authoring order', () => {
+    const definition = definePipeline({
+      schemaVersion: 1,
+      entry: 'task',
+      facts: [],
+      nodes: [
+        {
+          kind: 'task',
+          key: 'task',
+          outcomes: {
+            completed: 'z-terminal',
+            failed: 'a-terminal',
+            cancelled: 'a-terminal',
+            skipped: 'a-terminal',
+          },
+        },
+        { kind: 'terminal', key: 'z-terminal', outcome: 'succeeded' },
+        { kind: 'terminal', key: 'a-terminal', outcome: 'failed' },
+      ],
+    });
+    const left = compilePipeline(definition);
+    const right = compilePipeline({ ...definition, nodes: [...definition.nodes].reverse() });
+    expect(left).toEqual(right);
+    expect(left.ok).toBe(true);
+    if (!left.ok) {
+      return;
+    }
+    expect(left.template.terminalBindings).toEqual([
+      { nodeKey: 'a-terminal', outcome: 'failed' },
+      { nodeKey: 'z-terminal', outcome: 'succeeded' },
+    ]);
+  });
+
+  test.each([
+    ['accessor', () => Object.defineProperty({}, 'message', { enumerable: true, get: () => 'x' })],
+    [
+      'cycle',
+      () => {
+        const value: { self?: unknown } = {};
+        value.self = value;
+        return value;
+      },
+    ],
+    [
+      'depth',
+      () => {
+        let value: Record<string, unknown> = {};
+        for (let index = 0; index < 10; index += 1) {
+          value = { value };
+        }
+        return value;
+      },
+    ],
+    ['oversize', () => ({ message: 'x'.repeat(513) })],
+    ['non-json', () => ({ message: undefined })],
+  ])('returns deterministic faults for invalid script input: %s', (_name, createInput) => {
+    const definition = {
+      schemaVersion: 1,
+      entry: 'echo',
+      facts: [],
+      nodes: [
+        {
+          kind: 'script',
+          key: 'echo',
+          script: { id: 'script:system/echo', version: 1 },
+          input: createInput(),
+          outcomes: taskRoutes('done'),
+        },
+        { kind: 'terminal', key: 'done', outcome: 'succeeded' },
+      ],
+    };
+    // @ts-expect-error exercises malformed runtime input
+    const first = compilePipeline(definition);
+    // @ts-expect-error exercises malformed runtime input
+    const second = compilePipeline(definition);
+    expect(first).toEqual(second);
+    expect(first.ok).toBe(false);
+    const paths = first.ok ? [] : first.faults.map(({ path }) => path);
+    expect(paths.some((path) => path.includes('/input'))).toBe(true);
+  });
+
+  test.each([
+    ['missing script', { input: {}, outcomes: taskRoutes('done') }, '/nodes/0/script'],
+    [
+      'malformed script',
+      { script: 'script:system/echo', input: {}, outcomes: taskRoutes('done') },
+      '/nodes/0/script',
+    ],
+    [
+      'missing id',
+      { script: { version: 1 }, input: {}, outcomes: taskRoutes('done') },
+      '/nodes/0/script/id',
+    ],
+    [
+      'invalid id',
+      { script: { id: 'system/echo', version: 1 }, input: {}, outcomes: taskRoutes('done') },
+      '/nodes/0/script/id',
+    ],
+    [
+      'missing version',
+      { script: { id: 'script:system/echo' }, input: {}, outcomes: taskRoutes('done') },
+      '/nodes/0/script/version',
+    ],
+    [
+      'invalid version',
+      { script: { id: 'script:system/echo', version: 0 }, input: {}, outcomes: taskRoutes('done') },
+      '/nodes/0/script/version',
+    ],
+    [
+      'missing input',
+      { script: { id: 'script:system/echo', version: 1 }, outcomes: taskRoutes('done') },
+      '/nodes/0/input',
+    ],
+    [
+      'missing route',
+      {
+        script: { id: 'script:system/echo', version: 1 },
+        input: {},
+        outcomes: { completed: 'done', failed: 'done', cancelled: 'done' },
+      },
+      '/nodes/0/outcomes/skipped',
+    ],
+    [
+      'unknown node field',
+      {
+        script: { id: 'script:system/echo', version: 1 },
+        input: {},
+        outcomes: taskRoutes('done'),
+        executor: 'host-owned',
+      },
+      '/nodes/0/executor',
+    ],
+    [
+      'unknown identity field',
+      {
+        script: { id: 'script:system/echo', version: 1, digest: 'mutable' },
+        input: {},
+        outcomes: taskRoutes('done'),
+      },
+      '/nodes/0/script/digest',
+    ],
+  ])('rejects %s on a script node', (_name, scriptFields, path) => {
+    const definition = {
+      schemaVersion: 1,
+      entry: 'echo',
+      facts: [],
+      nodes: [
+        { kind: 'script', key: 'echo', ...scriptFields },
+        { kind: 'terminal', key: 'done', outcome: 'succeeded' },
+      ],
+    };
+
+    // @ts-expect-error exercises malformed runtime input
+    const result = compilePipeline(definition);
+
+    expect(result.ok).toBe(false);
+    const paths = result.ok ? [] : result.faults.map((fault) => fault.path);
+    expect(paths).toContain(path);
+  });
+
   test('definePipeline is an identity and inference helper', () => {
     const definition = definePipeline({
       schemaVersion: 1,

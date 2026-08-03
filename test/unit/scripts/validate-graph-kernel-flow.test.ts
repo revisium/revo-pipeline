@@ -773,8 +773,39 @@ test.each([
     name: 'assembly skips deep freeze promotion',
     path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
     code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
-    from: 'pipeline: deepFreeze({',
-    to: 'pipeline: ({',
+    from: 'pipeline: CompiledPipeline = deepFreeze({',
+    to: 'pipeline: CompiledPipeline = ({',
+  },
+  {
+    name: 'normalization removes script lowering clause',
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from:
+      "    case 'script':\n" +
+      "      return { kind: 'task', key: node.key, outcomes: { ...node.outcomes } };",
+    to: '',
+  },
+  {
+    name: 'normalization retains script metadata',
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from:
+      "    case 'script':\n" +
+      "      return { kind: 'task', key: node.key, outcomes: { ...node.outcomes } };",
+    to:
+      "    case 'script':\n" +
+      "      return { ...node, kind: 'task', outcomes: { ...node.outcomes } };",
+  },
+  {
+    name: 'normalization substitutes script outcomes',
+    path: 'src/definition/compilation/normalize-pipeline-node.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from:
+      "    case 'script':\n" +
+      "      return { kind: 'task', key: node.key, outcomes: { ...node.outcomes } };",
+    to:
+      "    case 'script':\n" +
+      "      return { kind: 'task', key: node.key, outcomes: { ...node.outcomes, failed: node.outcomes.completed } };",
   },
   {
     name: 'assembly substitutes serialized edges',
@@ -789,6 +820,41 @@ test.each([
     code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
     from: '...buildIndexes(nodes, graph),',
     to: '...buildIndexes([], graph),',
+  },
+  {
+    name: 'assembly passes an extra index argument',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '...buildIndexes(nodes, graph),',
+    to: '...buildIndexes(nodes, graph, nodes),',
+  },
+  {
+    name: 'assembly passes an extra pipeline freeze argument',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: '    ...buildIndexes(nodes, graph),\n  });',
+    to: '    ...buildIndexes(nodes, graph),\n  }, graph);',
+  },
+  {
+    name: 'assembly substitutes executor requirement template provenance',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'template: deepFreeze({ pipeline, executorRequirements, terminalBindings }),',
+    to: 'template: deepFreeze({ pipeline, executorRequirements: [], terminalBindings }),',
+  },
+  {
+    name: 'assembly substitutes terminal binding template provenance',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'template: deepFreeze({ pipeline, executorRequirements, terminalBindings }),',
+    to: 'template: deepFreeze({ pipeline, executorRequirements, terminalBindings: [] }),',
+  },
+  {
+    name: 'assembly passes an extra template freeze argument',
+    path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
+    code: 'GRAPH_KERNEL_INPUT_PROVENANCE',
+    from: 'template: deepFreeze({ pipeline, executorRequirements, terminalBindings }),',
+    to: 'template: deepFreeze({ pipeline, executorRequirements, terminalBindings }, pipeline),',
   },
   {
     name: 'assembly swaps incoming index provenance',
@@ -855,9 +921,9 @@ test.each([
     path: 'src/definition/compilation/normalize-pipeline-node.ts',
     changes: [
       {
-        from: 'export const normalizePipelineNode = (node: PipelineNode): PipelineNode => {\n',
+        from: 'export const normalizePipelineNode = (node: PipelineNode): CompiledNode => {\n',
         to:
-          'export const normalizePipelineNode = (node: PipelineNode): PipelineNode => {\n' +
+          'export const normalizePipelineNode = (node: PipelineNode): CompiledNode => {\n' +
           "  const decoy = () => ({ subject: node.subject.normalize('NFC') });\n" +
           '  void decoy;\n',
       },
@@ -947,15 +1013,13 @@ test.each([
     path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
     changes: [
       {
-        from: '  return {\n    ok: true,\n    pipeline: deepFreeze({',
+        from: '  const pipeline: CompiledPipeline = deepFreeze({',
         to:
           '  const decoy = () => ({\n' +
           '    pipeline: deepFreeze({ edges: graph.edges, ...buildIndexes(nodes, graph) }),\n' +
           '  });\n' +
           '  void decoy;\n' +
-          '  return {\n' +
-          '    ok: true,\n' +
-          '    pipeline: ({',
+          '  const pipeline: CompiledPipeline = ({',
       },
     ],
   },
@@ -976,8 +1040,8 @@ test.each([
   {
     name: 'assembly spread overrides the proven pipeline in the same return object',
     path: 'src/definition/compilation/assemble-compiled-pipeline.ts',
-    from: '      ...buildIndexes(nodes, graph),\n    }),\n  };\n};',
-    to: '      ...buildIndexes(nodes, graph),\n    }),\n    ...{ pipeline: undefined },\n  };\n};',
+    from: '    pipeline,\n    template: deepFreeze({ pipeline, executorRequirements, terminalBindings }),\n  };',
+    to: '    pipeline,\n    template: deepFreeze({ pipeline, executorRequirements, terminalBindings }),\n    ...{ pipeline: undefined },\n  };',
   },
 ] as const)('rejects $name', async ({ path, from, to }) => {
   expect.hasAssertions();

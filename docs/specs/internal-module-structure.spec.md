@@ -294,9 +294,9 @@ on command/reduction; command inspection MUST NOT depend on application; applier
 NOT depend on drain/assembly. Private leaves MUST NOT import a barrel or root, and type
 and value cycles remain forbidden.
 
-This specification is the final five-value/86-type root manifest owner. The shipped root
+This specification is the final five-value/92-type root manifest owner. The shipped root
 allowlist is exactly `definePipeline`, `compilePipeline`,
-`decidePipeline`, `decodeCompiledPipeline`, `reducePipeline`, and 86 types, including
+`decidePipeline`, `decodeCompiledPipeline`, `reducePipeline`, and 92 types, including
 exactly the twenty reducer types in the reducer specification. Inspection results, validated contexts,
 fact-path maps, working state, diagnostic collectors, `decideValidated`, and host DTOs
 MUST remain private.

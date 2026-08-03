@@ -22,6 +22,8 @@ declare function compilePipeline(definition: PipelineDefinition): PipelineCompil
 declare function decidePipeline(pipeline: CompiledPipeline, facts: PipelineFacts): PipelineDecision;
 
 type JsonScalar = null | boolean | number | string;
+type JsonValue =
+  null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 type NodeKey = string;
 type FactKey = string;
 type CandidateKey = string;
@@ -75,6 +77,14 @@ type TaskNode = {
   readonly key: NodeKey;
   readonly outcomes: TaskRoutes;
 };
+type ScriptIdentity = { readonly id: `script:${string}`; readonly version: number };
+type ScriptNode = {
+  readonly kind: 'script';
+  readonly key: NodeKey;
+  readonly script: ScriptIdentity;
+  readonly input: JsonValue;
+  readonly outcomes: TaskRoutes;
+};
 type BranchNode = {
   readonly kind: 'branch';
   readonly key: NodeKey;
@@ -114,7 +124,14 @@ type TerminalNode = {
   readonly outcome: string;
 };
 type PipelineNode =
-  TaskNode | BranchNode | ForkNode | JoinNode | ConsensusNode | HumanGateNode | TerminalNode;
+  | TaskNode
+  | ScriptNode
+  | BranchNode
+  | ForkNode
+  | JoinNode
+  | ConsensusNode
+  | HumanGateNode
+  | TerminalNode;
 
 type PipelineDefinition = {
   readonly schemaVersion: 1;
@@ -128,10 +145,19 @@ type PipelineDefinition = {
 identity/type-inference helper. It MUST NOT validate, clone, freeze, perform I/O, or
 register the definition.
 
+A script identity MUST contain exactly `id` and `version`. `id` MUST be a string whose
+first seven code units are `script:`. `version` MUST be a positive safe integer. A
+`ScriptNode` MUST contain exactly `kind`, `key`, `script`, `input`, and `outcomes`; all
+five fields are REQUIRED. Its routes MUST contain exactly the four `TaskOutcome` keys
+and valid node-key targets. `input` MUST satisfy the same bounded portable-value
+inspection, normalization, and rejection rules as the containing definition. Unknown
+node or identity fields MUST be reported at their RFC 6901 paths.
+
 ## Compiled contract
 
 ```ts
-type CompiledNode = PipelineNode;
+type CompiledNode =
+  TaskNode | BranchNode | ForkNode | JoinNode | ConsensusNode | HumanGateNode | TerminalNode;
 type CompiledEdgeRole = 'activation' | 'readiness';
 type CompiledEdge = {
   readonly from: NodeKey;
@@ -160,6 +186,18 @@ type CompiledPipeline = {
   readonly nodeIndex: readonly CompiledNodeIndexEntry[];
   readonly outgoingIndex: readonly CompiledEdgeIndexEntry[];
   readonly incomingIndex: readonly CompiledEdgeIndexEntry[];
+};
+type ExecutorRequirement = {
+  readonly kind: 'script';
+  readonly nodeKey: NodeKey;
+  readonly script: ScriptIdentity;
+  readonly input: JsonValue;
+};
+type TerminalBindingTemplate = { readonly nodeKey: NodeKey; readonly outcome: string };
+type PipelineExecutionTemplate = {
+  readonly pipeline: CompiledPipeline;
+  readonly executorRequirements: readonly ExecutorRequirement[];
+  readonly terminalBindings: readonly TerminalBindingTemplate[];
 };
 
 type DefinitionFaultCode =
@@ -192,7 +230,11 @@ type DefinitionFault = {
   readonly message: string;
 };
 type PipelineCompilation =
-  | { readonly ok: true; readonly pipeline: CompiledPipeline }
+  | {
+      readonly ok: true;
+      readonly pipeline: CompiledPipeline;
+      readonly template: PipelineExecutionTemplate;
+    }
   | { readonly ok: false; readonly faults: readonly DefinitionFault[] };
 ```
 
@@ -200,6 +242,24 @@ type PipelineCompilation =
 retained input and recursively freeze successful output. Compiled data MUST contain only
 portable JSON-compatible values: no `Map`, `Set`, function, symbol, `undefined`, class
 instance, hash, generated ID, timestamp, host binding, or execution plan.
+
+Compilation MUST lower each valid `ScriptNode` to a `TaskNode` with the same key and a
+newly owned copy of the same four routes. No script identity or input may appear in the
+`CompiledPipeline`; existing task-only consumers therefore continue to consume the
+success `pipeline` field unchanged. In the same successful result, compilation MUST
+produce one unresolved `ExecutorRequirement` per source script node and one
+`TerminalBindingTemplate` per terminal node. Requirements MUST sort by `nodeKey`.
+Terminal bindings MUST sort by `nodeKey` and then `outcome`, all in Unicode code-point
+order. The template's `pipeline` MUST be the identical object referenced by the sibling
+success `pipeline` field.
+
+The compiler MUST snapshot script identity and normalized input into newly owned data;
+it MUST neither retain nor freeze caller-owned objects. The template, its arrays, every
+requirement and binding, their nested script identities and inputs, and the shared
+compiled pipeline MUST be recursively frozen. Requirements and terminal bindings are
+declarative and unresolved: this package MUST NOT select an executor, adapter, host,
+model, prompt, workspace, terminal-state mapping, or runtime identity, and MUST NOT
+execute scripts.
 
 Nodes and facts MUST sort by key. Cases, branches, candidates, resolutions, and edges
 MUST sort by semantic name and then target. Topological ties MUST sort by `NodeKey`.
@@ -302,10 +362,12 @@ It contributed these types: `JsonScalar`, `NodeKey`, `FactKey`, `CandidateKey`,
 `AllJoinPolicy`, `AnyJoinPolicy`, `ThresholdJoinPolicy`, `JoinPolicy`, `JoinOutcome`,
 `JoinRoutes`, `UnanimousConsensusPolicy`, `QuorumConsensusPolicy`,
 `ThresholdConsensusPolicy`, `ConsensusPolicy`, `ConsensusOutcome`, `ConsensusRoutes`,
-`HumanGateRoute`, `TaskNode`, `BranchNode`, `ForkNode`, `JoinNode`, `ConsensusNode`,
+`HumanGateRoute`, `TaskNode`, `JsonValue`, `ScriptIdentity`, `ScriptNode`, `BranchNode`,
+`ForkNode`, `JoinNode`, `ConsensusNode`,
 `HumanGateNode`, `TerminalNode`, `PipelineNode`, `PipelineDefinition`, `CompiledNode`,
 `CompiledEdgeRole`, `CompiledEdge`, `CompiledForkBranch`, `CompiledForkRegion`,
 `CompiledNodeIndexEntry`, `CompiledEdgeIndexEntry`, `CompiledPipeline`,
+`ExecutorRequirement`, `TerminalBindingTemplate`, `PipelineExecutionTemplate`,
 `DefinitionFaultCode`, `DefinitionFault`, `PipelineCompilation`, `NodeFact`,
 `PipelineValueFact`, `CandidateVerdict`, `GateResolution`, `PipelineFacts`,
 `ActivationCause`, `WaitReason`, `DecisionFaultCode`, `DecisionFault`,
@@ -314,5 +376,5 @@ It contributed these types: `JsonScalar`, `NodeKey`, `FactKey`, `CandidateKey`,
 
 This partial manifest is not the final global root. The decoder/reducer specifications
 add their shipped exports, and the internal module structure specification owns the exact
-final five-value/86-type root manifest. Limits, validators, comparators, fault-ordering
+final five-value/92-type root manifest. Limits, validators, comparators, fault-ordering
 helpers, and graph algorithms MUST NOT be runtime exports.

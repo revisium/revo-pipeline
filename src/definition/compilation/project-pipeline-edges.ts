@@ -1,8 +1,8 @@
 import { compareUnicodeCodePoints } from '../../policy/index.js';
-import type { CompiledEdge, PipelineNode } from '../../spec/index.js';
+import type { CompiledEdge, CompiledNode } from '../../spec/index.js';
 import type { CompilerSemanticGraph } from '../contracts/compiler-semantic-graph.js';
 
-const edgesForNode = (node: PipelineNode): CompiledEdge[] => {
+const edgesForNode = (node: CompiledNode): CompiledEdge[] => {
   const edge = (outcome: string, to: string): CompiledEdge => ({
     from: node.key,
     outcome,
@@ -47,7 +47,7 @@ const edgeComparator = (left: CompiledEdge, right: CompiledEdge): number =>
   compareUnicodeCodePoints(left.branch ?? '', right.branch ?? '');
 
 export const projectPipelineEdges = (
-  nodes: readonly PipelineNode[],
+  nodes: readonly CompiledNode[],
 ): Pick<CompilerSemanticGraph, 'edges'> => ({
   edges: nodes.flatMap(edgesForNode).sort(edgeComparator),
 });

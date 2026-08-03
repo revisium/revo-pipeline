@@ -3,7 +3,7 @@
 `@revisium/revo-pipeline` is a zero-runtime-dependency, pure ESM library.
 
 ```text
-PipelineDefinition --compilePipeline--> CompiledPipeline
+PipelineDefinition --compilePipeline--> CompiledPipeline + unresolved PipelineExecutionTemplate
 unknown JSON --decodeCompiledPipeline--> CompiledPipelineDecoding
 CompiledPipeline + PipelineFacts --decidePipeline--> PipelineDecision
 CompiledPipeline + PipelineSnapshot + PipelineCommand --reducePipeline--> PipelineReduction
@@ -13,6 +13,12 @@ The package owns validation, canonical graph data, task/branch/fork/join/consens
 human-gate/terminal semantics, and ordered atomic effect data. The host owns runs,
 persistence, transactions, compare-and-swap, clocks, retries, authorization, agents,
 scripts, and applying effects.
+
+Native script definitions are authoring sugar at this boundary: compilation lowers them
+to ordinary task nodes in `CompiledPipeline` and separately returns copied, frozen,
+unresolved executor requirements. Task-only definitions and consumers of
+`compilation.pipeline` remain compatible. The package never resolves or runs a script;
+see [ADR 0003](./adr/0003-native-script-definitions-and-unresolved-execution-templates.md).
 
 One reducer occurrence is one finite DAG traversal. Occurrence keys isolate executions;
 bounded rework uses compile-time unrolling into distinct forward-only nodes. After a compare-and-swap

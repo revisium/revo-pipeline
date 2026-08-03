@@ -11,7 +11,7 @@
     },
     "node": ">=24.11.1 <25",
     "pnpm": "11.13.0",
-    "productionTreeSha256": "81e04568af318f7c7146d741ee8c43a7aa223237e1643a47c1cb481550c3ed93",
+    "productionTreeSha256": "ed752ef65c754585f44a582e20fe3f6f24dd3388b5c53b0ea1193c39da4286a6",
     "graphFlowDigests": {
       "owners": {
         "src/definition/compile-pipeline.ts#compilePipeline": "5e601cebbdf06ebe1882a7a46b2ce1485ed27c331eafd94b4eca0362259c1669",
@@ -47,11 +47,11 @@
     },
     {
       "path": "corpus/outputs/compiler.json",
-      "sha256": "4afe08b99ab6d8f4e70542039590f8712ce63d1f05a095e6253111a8bbd0032c"
+      "sha256": "1f1ef2a02a33ad0584efddbb270df4a20fd3cf230d9dc2a5ad49d6a9814f23f9"
     },
     {
       "path": "corpus/outputs/decisions.json",
-      "sha256": "751dd621c9910f466c53804f6c302c917778a5d622e71794dbb3ee8d1c4fcf83"
+      "sha256": "d90c16a5d02786209ce22a67b8ef3a0d1f04db03eb7ca97e62bf39b673bcdf93"
     },
     {
       "path": "corpus/outputs/properties.json",
@@ -65,12 +65,12 @@
     },
     "verifier": {
       "path": "scripts/verify-characterization.ts",
-      "sha256": "1f28b1273d11d614d5175f96589d73e9a2469d7c03de2b0adf910c68885ba93f"
+      "sha256": "1597d67ecd1c4e6df5dbeb15f8eded3b46b324ca9f7ca8d760d2e035ae4bdc25"
     },
     "propertyEvaluator": {
       "path": "test/characterization/evaluate-properties.ts",
       "sha256": "1fd0d2ad9b7308e6c5854a3cf4f9eca07ee6c8d427ea16267220d4d3a5c65c8b"
     }
   },
-  "rootDigest": "29186644fb2b3b9bf1ccd1fc7ccb7805815b12232e5225886222ccf2e13bb08e"
+  "rootDigest": "3f98846bd74ed4875f3b2e14d701ec2a36c320c4e00db9d5dbf54b017d4bed10"
 }

@@ -507,5 +507,5 @@ PR7 proved exact signatures and narrowing; all commands and effects; occurrence
 isolation and hostile shapes; replay, conflicts, settledness; finite two- and maximum-N
 unrolling including fork/join/final-gate/exhaustion behavior; all faults and bounds;
 513/514 boundaries; bidirectional effect/snapshot consistency; all node/policy families;
-determinism, deep ownership, and no I/O/state/dependency; and exact five-value/86-type
+determinism, deep ownership, and no I/O/state/dependency; and exact five-value/92-type
 manifests with private seams absent.

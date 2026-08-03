@@ -6,8 +6,15 @@ import {
   decodeCompiledPipeline,
   definePipeline,
   reducePipeline,
+  type CompiledPipeline,
+  type ExecutorRequirement,
+  type JsonValue,
   type PipelineFacts,
+  type PipelineExecutionTemplate,
   type PipelineSnapshot,
+  type ScriptIdentity,
+  type ScriptNode,
+  type TerminalBindingTemplate,
 } from '../../src/index.js';
 
 const definition = definePipeline({
@@ -104,4 +111,38 @@ test('supports the documented deterministic public root workflow with isolated c
     application: 'unchanged',
     batch: { kind: 'atomic', items: [] },
   });
+});
+
+test('exposes the script execution template through the public package surface', () => {
+  const script: ScriptIdentity = { id: 'script:system/echo', version: 1 };
+  const input: JsonValue = { message: 'Hello' };
+  const scriptNode: ScriptNode = {
+    kind: 'script',
+    key: 'echo',
+    script,
+    input,
+    outcomes: { completed: 'done', failed: 'done', cancelled: 'done', skipped: 'done' },
+  };
+  const compilation = compilePipeline(
+    definePipeline({
+      schemaVersion: 1,
+      entry: 'echo',
+      facts: [],
+      nodes: [scriptNode, { kind: 'terminal', key: 'done', outcome: 'succeeded' }],
+    }),
+  );
+  expect(compilation).toMatchObject({
+    ok: true,
+    template: { executorRequirements: [{ nodeKey: 'echo' }] },
+  });
+  if (!compilation.ok) {
+    return;
+  }
+  const pipeline: CompiledPipeline = compilation.pipeline;
+  const template: PipelineExecutionTemplate = compilation.template;
+  const requirement: ExecutorRequirement = template.executorRequirements[0]!;
+  const terminal: TerminalBindingTemplate = template.terminalBindings[0]!;
+  expect(template.pipeline).toBe(pipeline);
+  expect(requirement).toEqual({ kind: 'script', nodeKey: 'echo', script, input });
+  expect(terminal).toEqual({ nodeKey: 'done', outcome: 'succeeded' });
 });

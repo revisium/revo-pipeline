@@ -1,5 +1,5 @@
 import { compareUnicodeCodePoints, isValidKey } from '../../policy/index.js';
-import type { NodeFact, PipelineNode } from '../../spec/index.js';
+import type { CompiledNode, NodeFact } from '../../spec/index.js';
 import type { DecisionContext } from '../context/decision-context.js';
 import type { DecisionFaultCollector } from './decision-fault-collector.js';
 type IndexedFact<T> = { readonly fact: T; readonly sourceIndex: number };
@@ -12,7 +12,7 @@ const hasExactFields = (value: Record<string, unknown>, fields: readonly string[
   const expected = [...fields].sort(compareUnicodeCodePoints);
   return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 };
-const nodeOutcomeExists = (node: PipelineNode, outcome: string): boolean => {
+const nodeOutcomeExists = (node: CompiledNode, outcome: string): boolean => {
   if (node.kind === 'task' || node.kind === 'join' || node.kind === 'consensus') {
     return Object.hasOwn(node.outcomes, outcome);
   }

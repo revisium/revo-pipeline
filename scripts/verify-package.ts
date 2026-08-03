@@ -255,8 +255,8 @@ if (process.argv[1]?.endsWith('scripts/verify-package.ts')) {
       );
       assert.equal(
         namedExports(rootDeclaration).length,
-        91,
-        'Packed declarations must expose exactly five values and 86 types.',
+        97,
+        'Packed declarations must expose exactly five values and 92 types.',
       );
       const declarations = preparedAccess.readDeclarationManifest();
       const occurrenceDeclaration = declarations.find(

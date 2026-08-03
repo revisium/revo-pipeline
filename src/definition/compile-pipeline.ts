@@ -1,6 +1,10 @@
 import type { DefinitionFault, DefinitionFaultCode, PipelineCompilation } from '../errors/index.js';
 import { compareUnicodeCodePoints, DEFINITION_FAULT_PHASES, orderFaults } from '../policy/index.js';
-import type { PipelineDefinition } from '../spec/index.js';
+import type {
+  ExecutorRequirement,
+  PipelineDefinition,
+  TerminalBindingTemplate,
+} from '../spec/index.js';
 import { assembleCompiledPipeline } from './compilation/assemble-compiled-pipeline.js';
 import { classifyForkRegions } from './compilation/classify-fork-regions.js';
 import { normalizePipelineNode } from './compilation/normalize-pipeline-node.js';
@@ -61,5 +65,27 @@ export const compilePipeline = (definition: PipelineDefinition): PipelineCompila
     graph,
     nodes: copiedNodes,
     regions: classifiedRegions,
+    executorRequirements: sourceNodesToExecutorRequirements(sourceNodes),
+    terminalBindings: nodes
+      .filter((node) => node.kind === 'terminal')
+      .map(({ key, outcome }): TerminalBindingTemplate => ({ nodeKey: key, outcome }))
+      .sort(
+        (left, right) =>
+          compareUnicodeCodePoints(left.nodeKey, right.nodeKey) ||
+          compareUnicodeCodePoints(left.outcome, right.outcome),
+      ),
   });
 };
+
+const sourceNodesToExecutorRequirements = (
+  nodes: ReadonlyMap<string, PipelineDefinition['nodes'][number]>,
+): readonly ExecutorRequirement[] =>
+  [...nodes.values()]
+    .filter((node) => node.kind === 'script')
+    .sort((left, right) => compareUnicodeCodePoints(left.key, right.key))
+    .map((node) => ({
+      kind: 'script',
+      nodeKey: node.key,
+      script: { ...node.script },
+      input: node.input,
+    }));
