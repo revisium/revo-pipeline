@@ -340,6 +340,16 @@ describe('core pipeline transitions', () => {
     });
   });
 
+  test('rejects a compiled payload whose stored topological order disagrees with the graph', () => {
+    const pipeline = linear();
+    const tampered: CompiledPipeline = structuredClone(pipeline);
+    Reflect.set(tampered, 'topologicalOrder', [...tampered.topologicalOrder].reverse());
+    expect(decidePipeline(tampered, facts())).toMatchObject({
+      kind: 'reject',
+      faults: [{ code: 'PIPELINE_INVALID' }],
+    });
+  });
+
   test('rejects a value fact string beyond the display bound', () => {
     const pipeline = compile({
       schemaVersion: 1,
@@ -350,13 +360,16 @@ describe('core pipeline transitions', () => {
         { kind: 'terminal', key: 'finish', outcome: 'done' },
       ],
     });
-    expect(decidePipeline(pipeline, facts([], [{ key: 'note', value: 'x'.repeat(512) }]))).toEqual({
+    const bound = PIPELINE_LIMITS.portable.displayCodePoints;
+    expect(
+      decidePipeline(pipeline, facts([], [{ key: 'note', value: 'x'.repeat(bound) }])),
+    ).toEqual({
       kind: 'activate',
       cause: { kind: 'entry' },
       nodeKeys: ['start'],
     });
     expect(
-      decidePipeline(pipeline, facts([], [{ key: 'note', value: 'x'.repeat(513) }])),
+      decidePipeline(pipeline, facts([], [{ key: 'note', value: 'x'.repeat(bound + 1) }])),
     ).toMatchObject({ kind: 'reject', faults: [{ code: 'FACT_LIMIT', path: '/values/0/value' }] });
   });
 

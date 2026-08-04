@@ -11,7 +11,16 @@ export const buildDecisionContext = (pipeline: CompiledPipeline): DecisionContex
     return undefined;
   }
   const kernel = built.kernel;
-  if (topologicalOrder(kernel) === null) {
+  const computedOrder = topologicalOrder(kernel);
+  if (computedOrder === null) {
+    return undefined;
+  }
+  if (
+    pipeline.topologicalOrder.length !== computedOrder.length ||
+    computedOrder.some((offset, position) => {
+      return kernel.nodeKeys[offset] !== pipeline.topologicalOrder[position];
+    })
+  ) {
     return undefined;
   }
   const regionOwnerByNode = new Map<string, string>();
