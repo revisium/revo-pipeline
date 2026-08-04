@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { compilePipeline } from '../../../src/definition/index.js';
+import { PIPELINE_LIMITS } from '../../../src/policy/index.js';
 import type {
   CompiledPipeline,
   NodeFact,
@@ -384,7 +385,47 @@ describe('core pipeline transitions', () => {
         : [];
     expect(decision.kind).toBe('reject');
     expect(codes).toContain('FACT_LIMIT');
+    expect(codes).toContain('FACT_LIMIT/values');
     expect(codes).toContain('FACT_LIMIT/nodes');
+    expect(codes).toContain('FACT_LIMIT/candidateVerdicts');
+    expect(codes).toContain('FACT_LIMIT/gateResolutions');
+  });
+
+  test('accepts every collection at its exact bound and faults each at bound plus one', () => {
+    const pipeline = linear();
+    const within = {
+      values: [],
+      nodes: [
+        { key: 'start', state: 'enabled' as const },
+        ...Array.from({ length: 255 }, (_, index) => ({
+          key: `ghost${index}`,
+          state: 'enabled' as const,
+        })),
+      ],
+      candidateVerdicts: [],
+      gateResolutions: [],
+    };
+    const atBound = decidePipeline(pipeline, within);
+    expect(atBound.kind).toBe('reject');
+    const boundCodes =
+      atBound.kind === 'reject' ? atBound.faults.map((fault) => `${fault.code}${fault.path}`) : [];
+    expect(boundCodes).not.toContain('FACT_LIMIT/nodes');
+    for (const field of ['values', 'nodes', 'candidateVerdicts', 'gateResolutions'] as const) {
+      const limit = PIPELINE_LIMITS.facts[field === 'nodes' ? 'nodes' : field];
+      const overflow = {
+        values: [],
+        nodes: [],
+        candidateVerdicts: [],
+        gateResolutions: [],
+        [field]: Array.from({ length: limit + 1 }, () => ({})),
+      };
+      const decision = decidePipeline(pipeline, overflow);
+      const codes =
+        decision.kind === 'reject'
+          ? decision.faults.map((fault) => `${fault.code}${fault.path}`)
+          : [];
+      expect(codes).toContain(`FACT_LIMIT/${field}`);
+    }
   });
 
   test('faults precede an otherwise reached terminal and multiple terminals are rejected', () => {
