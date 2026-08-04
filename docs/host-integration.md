@@ -21,11 +21,12 @@ The integration loop is fact-driven:
      enabled fact with its terminal outcome and add an enabled fact for every
      key in `activate` together. Persisting the outcome without its targets
      produces a snapshot `decidePipeline` rejects with `FACT_CAUSAL`.
-   - `wait` — wait for the next external fact, append it, and decide again.
-     Wait inputs are task outcomes, consensus verdicts, human-gate
-     resolutions, **and** `PipelineValueFact` entries (a
-     `branch-fact-missing` wait resolves only when the host supplies the
-     declared value fact).
+   - `wait` — wait for the next external fact, record it, and decide again.
+     A task outcome **replaces** the node's enabled fact with its terminal
+     fact (a second fact for the same key is rejected as `FACT_DUPLICATE`);
+     consensus verdicts, human-gate resolutions, and `PipelineValueFact`
+     entries are appended (a `branch-fact-missing` wait resolves only when
+     the host supplies the declared value fact).
    - `terminal` — the run is settled with the terminal outcome.
    - `reject` — the fact set is inconsistent; this is a host defect, not user
      input to retry.

@@ -14,6 +14,14 @@ import {
   type TerminalBindingTemplate,
 } from '../../src/index.js';
 
+const isCompiledPipeline = (value: unknown): value is CompiledPipeline =>
+  typeof value === 'object' &&
+  value !== null &&
+  !Array.isArray(value) &&
+  'schemaVersion' in value &&
+  'nodes' in value &&
+  'edges' in value;
+
 const definition = definePipeline({
   schemaVersion: 1,
   entry: 'approval',
@@ -76,8 +84,12 @@ test('drives compiled pipelines through pure decisions on the public surface', (
   expect(decidePipeline(pipeline, resolvedFacts)).toEqual(expected);
   expect(decidePipeline(pipeline, resolvedFacts)).toEqual(expected);
 
-  const roundTripped: CompiledPipeline = structuredClone(pipeline);
-  expect(decidePipeline(roundTripped, resolvedFacts)).toEqual(expected);
+  const serialized: unknown = JSON.parse(JSON.stringify(pipeline));
+  expect(isCompiledPipeline(serialized)).toBe(true);
+  if (!isCompiledPipeline(serialized)) {
+    return;
+  }
+  expect(decidePipeline(serialized, resolvedFacts)).toEqual(expected);
 });
 
 test('exposes the script execution template through the public package surface', () => {

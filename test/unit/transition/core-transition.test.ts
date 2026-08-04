@@ -428,6 +428,108 @@ describe('core pipeline transitions', () => {
     }
   });
 
+  test('truncates beyond 100 faults to the first 99 plus a root sentinel', () => {
+    const pipeline = linear();
+    const foreign = Array.from({ length: 150 }, (_, index) => ({
+      key: `ghost${index}`,
+      state: 'enabled' as const,
+    }));
+    const decision = decidePipeline(pipeline, facts(foreign));
+    expect(decision.kind).toBe('reject');
+    const faultList = decision.kind === 'reject' ? decision.faults : [];
+    expect(faultList).toHaveLength(100);
+    expect(faultList.slice(0, 99).every((fault) => fault.code === 'FACT_FOREIGN')).toBe(true);
+    expect(faultList[99]).toMatchObject({ code: 'FACT_LIMIT', path: '' });
+  });
+
+  test('valid executions never observe noop or an empty activation', () => {
+    const gated = compile({
+      schemaVersion: 1,
+      entry: 'approval',
+      facts: [],
+      nodes: [
+        {
+          kind: 'humanGate',
+          key: 'approval',
+          subject: 'Approve',
+          resolutions: [{ resolution: 'approved', to: 'finish' }],
+        },
+        { kind: 'terminal', key: 'finish', outcome: 'done' },
+      ],
+    });
+    const forked = compile({
+      schemaVersion: 1,
+      entry: 'fork',
+      facts: [],
+      nodes: [
+        {
+          kind: 'fork',
+          key: 'fork',
+          join: 'join',
+          branches: [
+            { name: 'first', entry: 'left', exit: 'left' },
+            { name: 'second', entry: 'right', exit: 'right' },
+          ],
+        },
+        { kind: 'task', key: 'left', outcomes: taskRoutes('join') },
+        { kind: 'task', key: 'right', outcomes: taskRoutes('join') },
+        {
+          kind: 'join',
+          key: 'join',
+          fork: 'fork',
+          policy: { kind: 'all' },
+          outcomes: { completed: 'finish', rejected: 'finish', insufficient: 'finish' },
+        },
+        { kind: 'terminal', key: 'finish', outcome: 'done' },
+      ],
+    });
+    for (const pipeline of [linear(), branching(), gated, forked]) {
+      const nodes = new Map<string, NodeFact>();
+      const values: PipelineValueFact[] = [];
+      const gateResolutions: { nodeKey: string; resolution: string }[] = [];
+      const observedKinds: string[] = [];
+      let emptyActivations = 0;
+      for (let step = 0; step < 64; step += 1) {
+        const decision = decidePipeline(pipeline, {
+          values,
+          nodes: [...nodes.values()],
+          candidateVerdicts: [],
+          gateResolutions,
+        });
+        observedKinds.push(decision.kind);
+        if (decision.kind === 'activate') {
+          emptyActivations += decision.nodeKeys.length === 0 ? 1 : 0;
+          decision.nodeKeys.forEach((key) => nodes.set(key, { key, state: 'enabled' }));
+        } else if (decision.kind === 'select') {
+          nodes.set(decision.nodeKey, {
+            key: decision.nodeKey,
+            state: 'terminal',
+            outcome: decision.outcome,
+          });
+          decision.activate.forEach((key) => nodes.set(key, { key, state: 'enabled' }));
+        } else if (decision.kind === 'wait') {
+          if (decision.reason === 'task-incomplete') {
+            nodes.set(decision.nodeKey, {
+              key: decision.nodeKey,
+              state: 'terminal',
+              outcome: 'completed',
+            });
+          } else if (decision.reason === 'branch-fact-missing') {
+            values.push({ key: 'choice', value: true });
+          } else {
+            gateResolutions.push({ nodeKey: decision.nodeKey, resolution: 'approved' });
+          }
+        } else {
+          break;
+        }
+      }
+      expect(observedKinds).not.toContain('noop');
+      expect(observedKinds).not.toContain('reject');
+      expect(emptyActivations).toBe(0);
+      expect(observedKinds.at(-1)).toBe('terminal');
+    }
+  });
+
   test('faults precede an otherwise reached terminal and multiple terminals are rejected', () => {
     const pipeline = branching();
     const reached: NodeFact[] = [
