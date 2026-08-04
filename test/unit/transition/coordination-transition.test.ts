@@ -11,12 +11,7 @@ import type {
   PipelineDefinition,
   PipelineFacts,
 } from '../../../src/spec/index.js';
-import { decidePipeline, decodeCompiledPipeline } from '../../../src/transition/index.js';
-
-const validateCompiledPipeline = (input: unknown) => {
-  const decoded = decodeCompiledPipeline(input);
-  return decoded.ok ? decoded : { ok: false as const };
-};
+import { decidePipeline } from '../../../src/transition/index.js';
 
 const taskRoutes = (to: string) => ({
   cancelled: to,
@@ -384,66 +379,6 @@ describe('fork and join coordination', () => {
       kind: 'terminal',
       nodeKey: 'end',
       outcome: 'done',
-    });
-  });
-
-  test('JSON-round-tripped coordination graph retains exact region integrity', () => {
-    const pipeline = joinPipeline({ kind: 'all' });
-    const roundTrip: unknown = JSON.parse(JSON.stringify(pipeline));
-    expect(validateCompiledPipeline(roundTrip).ok).toBe(true);
-    const tampered = structuredClone(pipeline);
-    Reflect.set(tampered.forkRegions[0]!.branches[0]!, 'members', []);
-    expect(validateCompiledPipeline(tampered)).toEqual({ ok: false });
-    const plausible = structuredClone(pipeline);
-    const members = plausible.forkRegions[0]?.branches[0]?.members ?? [];
-    Reflect.set(
-      plausible.forkRegions[0]!.branches[0]!,
-      'members',
-      members.map((member, index) => (index === members.length - 1 ? 'fork' : member)),
-    );
-    expect(validateCompiledPipeline(plausible)).toEqual({ ok: false });
-  });
-
-  test.each([
-    [
-      'readiness role',
-      (pipeline: CompiledPipeline) => {
-        const readiness = pipeline.edges.find((edge) => edge.role === 'readiness');
-        if (readiness) {
-          Reflect.set(readiness, 'role', 'activation');
-        }
-      },
-    ],
-    [
-      'readiness owner',
-      (pipeline: CompiledPipeline) => {
-        const readiness = pipeline.edges.find((edge) => edge.role === 'readiness');
-        if (readiness) {
-          Reflect.set(readiness, 'fork', null);
-        }
-      },
-    ],
-    [
-      'region branch identity',
-      (pipeline: CompiledPipeline) =>
-        Reflect.set(pipeline.forkRegions[0]!.branches[0]!, 'name', 'invented'),
-    ],
-    [
-      'join threshold',
-      (pipeline: CompiledPipeline) => {
-        const join = pipeline.nodes.find((node) => node.kind === 'join');
-        if (join?.kind === 'join') {
-          Reflect.set(join, 'policy', { kind: 'threshold', count: 3 });
-        }
-      },
-    ],
-  ])('rejects coordination integrity tamper: %s', (_label, mutate) => {
-    const pipeline = structuredClone(joinPipeline({ kind: 'threshold', count: 2 }));
-    mutate(pipeline);
-    expect(validateCompiledPipeline(pipeline)).toEqual({ ok: false });
-    expect(decidePipeline(pipeline, facts())).toMatchObject({
-      kind: 'reject',
-      faults: [{ code: 'PIPELINE_INVALID' }],
     });
   });
 

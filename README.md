@@ -2,7 +2,7 @@
 
 # @revisium/revo-pipeline
 
-**Portable pipeline definitions, deterministic compilation, and pure transitions for Revo.**
+**Portable pipeline definitions, deterministic compilation, and pure decisions for Revo.**
 
 [![CI](https://github.com/revisium/revo-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/revisium/revo-pipeline/actions/workflows/ci.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=revisium_revo-pipeline&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=revisium_revo-pipeline)
@@ -12,20 +12,19 @@
 </div>
 
 > [!IMPORTANT]
-> Pre-release package. It is not published to npm; the API remains under review.
+> Pre-release package. The API remains under review.
 
 ## About
 
-`@revisium/revo-pipeline` owns readonly pipeline definitions, deterministic compilation,
-canonical decoding, pure semantic decisions, and pure command reduction. It has no runtime dependencies
-(zero) and performs no I/O.
+`@revisium/revo-pipeline` is a pure pipeline graph kernel: readonly pipeline
+definitions, author-input validation, deterministic compilation, and pure
+semantic decisions. It has no runtime dependencies (zero) and performs no I/O.
 
-The host owns runs, persistence, transactions, compare-and-swap, clocks, retries,
-authorization, agents, scripts, and effect application.
+The host owns runs, durable execution, persistence, retries, authorization,
+agents, scripts, and effect application. The host feeds facts in; the kernel
+answers with one decision at a time.
 
 ## Installation
-
-After a version is published:
 
 ```bash
 corepack pnpm add @revisium/revo-pipeline
@@ -36,17 +35,8 @@ from its root only.
 
 ## Quick start
 
-<!-- package-example:start:task-branch-terminal -->
-
 ```ts
-import {
-  compilePipeline,
-  decidePipeline,
-  decodeCompiledPipeline,
-  definePipeline,
-  reducePipeline,
-  type PipelineSnapshot,
-} from '@revisium/revo-pipeline';
+import { compilePipeline, decidePipeline, definePipeline } from '@revisium/revo-pipeline';
 
 const definition = definePipeline({
   schemaVersion: 1,
@@ -70,31 +60,22 @@ const definition = definePipeline({
 const compilation = compilePipeline(definition);
 if (!compilation.ok) throw new Error(compilation.faults[0]?.code);
 
-const decoding = decodeCompiledPipeline(JSON.parse(JSON.stringify(compilation.pipeline)));
-if (!decoding.ok) throw new Error(decoding.faults[0]?.code);
-
 const facts = { values: [], nodes: [], candidateVerdicts: [], gateResolutions: [] };
-console.log(decidePipeline(decoding.pipeline, facts));
-
-const initial: PipelineSnapshot = {
-  schemaVersion: 1,
-  occurrenceKey: 'example',
-  phase: 'uninitialized',
-  values: [],
-  nodes: [],
-  candidateVerdicts: [],
-  gateResolutions: [],
-  terminal: null,
-};
-console.log(
-  reducePipeline(decoding.pipeline, initial, { schemaVersion: 1, kind: 'init', values: [] }),
-);
+console.log(decidePipeline(compilation.pipeline, facts));
+// { kind: 'activate', cause: { kind: 'entry' }, nodeKeys: ['work'] }
 ```
 
-<!-- package-example:end:task-branch-terminal -->
+The host records each new fact (a task outcome, a consensus verdict, a gate
+resolution) and calls `decidePipeline` again. Decisions are pure: the same
+pipeline and the same facts always produce the same decision, which makes the
+kernel safe to drive from a deterministic-replay engine.
 
-Script nodes pin an exact script identity and portable JSON input. A successful compilation
-also exposes the host-owned execution template:
+`compilePipeline` output is canonical JSON data. Persist it with a digest pin
+and hand it back to `decidePipeline` as-is; the kernel treats the compiled
+pipeline as trusted input produced by its own compiler.
+
+Script nodes pin an exact script identity and portable JSON input. A successful
+compilation also exposes the host-owned execution template:
 
 ```ts
 const scriptCompilation = compilePipeline(
@@ -117,11 +98,10 @@ const scriptCompilation = compilePipeline(
 if (scriptCompilation.ok) console.log(scriptCompilation.template.executorRequirements);
 ```
 
-Script authoring is backward-compatible with the pure graph contract: compilation lowers
-each script node to a task in `compilation.pipeline`, while `compilation.template`
-references that same pipeline and carries only unresolved host requirements. This package
-does not resolve or execute scripts. Task-only definitions and pipeline consumers do not
-need to adopt the template.
+Compilation lowers each script node to a task in `compilation.pipeline`, while
+`compilation.template` references that same pipeline and carries only unresolved
+host requirements. This package does not resolve or execute scripts. Task-only
+definitions and pipeline consumers do not need to adopt the template.
 
 ## Complete public API
 
@@ -132,22 +112,13 @@ export declare function definePipeline<const Definition extends PipelineDefiniti
 
 export declare function compilePipeline(definition: PipelineDefinition): PipelineCompilation;
 
-export declare function decodeCompiledPipeline(input: unknown): CompiledPipelineDecoding;
-
 export declare function decidePipeline(
   pipeline: CompiledPipeline,
   facts: PipelineFacts,
 ): PipelineDecision;
-
-export declare function reducePipeline(
-  pipeline: CompiledPipeline,
-  snapshot: PipelineSnapshot,
-  command: PipelineCommand,
-): PipelineReduction;
 ```
 
-Narrow compiler, decoder, and reducer results by `ok`. Narrow decisions by `kind`.
-Use `reducePipeline` for a durable host's command-to-settled-state seam. Exact types,
+Narrow compiler results by `ok`. Narrow decisions by `kind`. Exact types,
 faults, ordering, bounds, and semantics live in the accepted specifications.
 
 ## Documentation

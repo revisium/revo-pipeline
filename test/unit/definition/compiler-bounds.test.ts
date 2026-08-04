@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { compilePipeline } from '../../../src/definition/index.js';
-import { inspectPortableValue, PIPELINE_LIMITS } from '../../../src/policy/index.js';
+import { PIPELINE_LIMITS } from '../../../src/policy/index.js';
 import type { PipelineDefinition, PipelineNode } from '../../../src/spec/index.js';
 
 const terminal = { kind: 'terminal', key: 'finish', outcome: 'done' } as const;
@@ -17,47 +17,6 @@ const codes = (definition: PipelineDefinition): readonly string[] => {
 };
 
 describe('exact compiler bounds', () => {
-  test('enforces portable depth, own-key and visit bounds independently', () => {
-    const nested = (depth: number): unknown => (depth === 0 ? null : { child: nested(depth - 1) });
-    expect(inspectPortableValue(nested(8)).ok).toBe(true);
-    expect(inspectPortableValue(nested(9))).toEqual({
-      ok: false,
-      issue: { code: 'depth', path: '/child/child/child/child/child/child/child/child/child' },
-    });
-    expect(
-      inspectPortableValue(
-        Object.fromEntries(Array.from({ length: 32 }, (_, index) => [`k${index}`, null])),
-      ).ok,
-    ).toBe(true);
-    expect(
-      inspectPortableValue(
-        Object.fromEntries(Array.from({ length: 33 }, (_, index) => [`k${index}`, null])),
-      ),
-    ).toEqual({
-      ok: false,
-      issue: { code: 'object-keys', path: '' },
-    });
-    expect(
-      inspectPortableValue(
-        Array.from({ length: 16_383 }, () => null),
-        {
-          maxArrayLength: 16_384,
-        },
-      ).ok,
-    ).toBe(true);
-    expect(
-      inspectPortableValue(
-        Array.from({ length: 16_384 }, () => null),
-        {
-          maxArrayLength: 16_384,
-        },
-      ),
-    ).toEqual({
-      ok: false,
-      issue: { code: 'visited-values', path: '/16383' },
-    });
-  });
-
   test('accepts exact name/display bounds and rejects overages', () => {
     const make = (key: string, outcome: string): PipelineDefinition => ({
       schemaVersion: 1,

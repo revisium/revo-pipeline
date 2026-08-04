@@ -8,9 +8,9 @@ src/policy/      constants and bounded pure utilities
 src/errors/      type-only faults and results
 src/graph/       topology and graph algorithms
 src/definition/  validation and deterministic compilation
-src/transition/  decoding, decisions, and reduction
+src/transition/  pure decisions from facts
 src/index.ts     curated public root
-scripts/         architecture, coverage, and package verification
+scripts/         local Sonar helpers
 test/            behavior, structure, and package tests
 docs/specs/      normative accepted contracts
 docs/adr/        accepted architecture decisions
@@ -22,4 +22,4 @@ internal layers never import the package root.
 
 The root exports only definition, transition, spec, and error contracts. Package
 exports, not folders, define the public API. Tests consume the root or curated layer
-barrels. Structural scripts enforce the exact rules.
+barrels. dependency-cruiser and Oxlint enforce the layer rules.

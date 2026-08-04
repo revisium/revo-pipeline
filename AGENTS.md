@@ -27,6 +27,5 @@ or CLI dependencies.
 
 - Architecture or public API changes require an accepted ADR/spec before implementation.
 - Add behavior tests at the owning boundary before production behavior.
-- Maintain the layer matrix and exact negative probes.
 - Run `corepack pnpm verify` before handoff.
 - Do not commit, push, merge, tag, release, or publish without the applicable approval.

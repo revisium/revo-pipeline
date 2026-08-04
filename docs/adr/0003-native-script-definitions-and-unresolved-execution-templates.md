@@ -28,12 +28,8 @@ by node key and then outcome.
 ## Compatibility and ownership
 
 Task-only authoring and all consumers of `compilation.pipeline` keep the existing pure
-`CompiledPipeline` shape. There are still five runtime exports; the public root adds six
-types and now contains 92 types. Host execution remains absent.
-
-ADR 0002 continues to own portable compiled-pipeline decoding and pure reduction. This
-decision does not add script data to `CompiledPipeline`, decoding, decisions, snapshots,
-commands, effects, or reduction.
+`CompiledPipeline` shape. Host execution remains absent. This decision does not add
+script data to `CompiledPipeline`, decisions, or facts.
 
 ## Alternatives rejected
 

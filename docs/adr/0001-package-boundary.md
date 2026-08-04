@@ -20,10 +20,9 @@ on pipeline; the reverse dependency is forbidden.
 The accepted [definition contract](../specs/pipeline-definition-v1.spec.md) owns the
 public vocabulary, compilation rules, graph validity, bounds, and export manifest. The
 accepted [transition contract](../specs/pipeline-transition-v1.spec.md) owns facts,
-decision precedence, node policies, causal closure, diagnostics, and totality. The
-accepted [module contract](../specs/internal-module-structure.spec.md) owns dependency
-direction and enforcement. Those specifications are normative; this ADR records only
-the boundary rationale.
+decision precedence, node policies, causal closure, diagnostics, and totality.
+Dependency direction is enforced per [ADR 0004](./0004-behavior-first-architecture-validation.md).
+Those specifications are normative; this ADR records only the boundary rationale.
 
 ## Alternatives considered
 
@@ -39,9 +38,8 @@ the boundary rationale.
 ## Consequences
 
 - Different hosts can reuse one deterministic language without duplicating graph policy.
-- Hosts must map durable state into complete fact snapshots and own atomic application,
-  conflict retries, cancellation, and unfinished work.
-- Canonical compiled data and integrity validation increase payload size and per-decision
-  work.
+- Hosts must record complete fact sets and own durable execution, retries,
+  cancellation, and unfinished work.
+- Canonical compiled data increases payload size; hosts pin it with a digest.
 - The intentionally limited v1 language trades expressiveness for a smaller, verifiable
   first contract.

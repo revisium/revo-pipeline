@@ -247,38 +247,15 @@ An enabled gate with no resolution MUST wait with `gate-unresolved`. Exactly one
 resolution MUST select its route. Authorization, durable answer storage, compare-and-set,
 notification, timeout, and identity MUST remain host-owned.
 
-## Compiled integrity and portable input
+## Compiled input
 
-JSON-round-tripped compiled data MUST be supported. Before fact evaluation,
-`decidePipeline` MUST boundedly validate compiled structure and canonical indexes.
-Malformed, altered, stale, or noncanonical compiled data MUST return `PIPELINE_INVALID`.
-All offsets MUST be zero-based safe integers and MUST agree with their canonical arrays,
-keys, and endpoints. This is integrity validation, not cryptographic provenance.
-
-Arrays MUST be prechecked by ordinary `length`. An oversized array MUST produce one
-container limit fault without own-key reflection, descriptor or element inspection, or
-descendant faults. An in-range array MUST perform exactly one `Reflect.ownKeys`, whose
-`O(K)` time and memory cost for `K` own keys is unavoidable. Before sorting, descriptors,
-or element reads, key count MUST equal `length + 1`; mismatch MUST produce one container
-type fault and prune descendants. Matching keys MUST be exactly `length` plus canonical
-decimal indices, and numeric descriptors MUST be inspected in index order without
-invoking accessors. Sparse arrays and extra string, symbol, or noncanonical index
-properties MUST reject. The reflection cost of adversarial in-range arrays with extra
-keys is outside the bounded-work claim; all subsequent work remains bounded.
-
-Plain objects MUST use one ECMAScript own-key reflection operation. Because ECMAScript
-has no bounded own-key iterator, that operation necessarily costs `O(K)` time and memory
-for `K` own keys. More than 32 reflected keys MUST produce one container limit fault with
-no descriptor or descendant inspection. This initial reflection cost is outside the
-bounded semantic-traversal claim.
-
-Within the key limit, validators MUST inspect descriptors in canonical order before any
-values. Ordinary JSON-compatible primitives, dense arrays, and plain objects are
-supported. Sparse arrays, accessors, symbols, non-enumerable properties, custom
-prototypes, functions, `undefined`, and fractional/unsafe/non-finite numbers MUST reject
-without invoking getters or setters. Traversal MUST stop at the depth, visited-value,
-and collection limits. Proxies are outside the portable contract; a throwing proxy trap
-MAY propagate.
+`decidePipeline` accepts compiled data produced by `compilePipeline`, including
+JSON-round-tripped copies. The compiled pipeline is trusted input: hosts persist
+it with a digest pin and pass it back unchanged. `decidePipeline` MUST rebuild
+its graph kernel from the compiled nodes and edges; if the edge set does not
+form a valid acyclic kernel, it MUST return `PIPELINE_INVALID` and no other
+fault. `decidePipeline` performs no structural re-validation beyond that kernel
+construction and no reflection-hardened input capture.
 
 ## Fact and diagnostic limits
 
@@ -291,14 +268,11 @@ MAY propagate.
 | total facts across all four arrays                |                   1,664 |
 | key or semantic name                              |  64 Unicode code points |
 | fact string, outcome, or resolution display value | 512 Unicode code points |
-| input depth / object own keys                     |                  8 / 32 |
-| visited input values                              |                  16,384 |
 | RFC 6901 path / message                           |  1,024 / 512 characters |
-| canonical offending-value rendering               |          128 characters |
 | returned faults                                   |                     100 |
 
-For non-pruned input, validators MUST collect the complete fault set permitted by depth,
-collection, and visit limits. Decision faults MUST globally sort by this explicit code
+Validators MUST collect the complete fault set permitted by the collection
+limits. Decision faults MUST globally sort by this explicit code
 priority:
 
 1. `PIPELINE_INVALID`
@@ -328,15 +302,15 @@ Implementation MUST test:
   losing-branch work;
 - faults-before-actions, actions-before-waits, causal activation/readiness edges,
   autonomous atomic targets, candidate/gate prerequisites, foreign/duplicate/premature
-  facts, and compiled round-trip/tamper;
+  facts, and compiled round-trip;
 - branch missing/present/default/type-sensitive equality and unreachable default;
 - all join statuses and `all`, `any`, and threshold accepted/rejected/skipped/pending/
   impossible partitions;
 - unanimous, quorum, and threshold consensus for every outcome, irreversible decisions,
   abstentions, ties, incomplete and impossible states;
 - unresolved/resolved human gates and invalid resolutions;
-- every definition/fact/traversal/diagnostic bound, limit-plus-sentinel behavior,
-  descriptor rejection without accessor invocation, stable ordering and truncation;
+- every definition/fact/diagnostic bound, limit-plus-sentinel behavior, stable
+  ordering and truncation;
 - permutation determinism, repeated evaluation, mutation isolation, deep freeze, and
   zero runtime dependencies.
 
@@ -344,15 +318,9 @@ The package owns only this calculation. Durable runs, node instances, attempts, 
 events, CAS, leases, retries, resume, queues, authorization, and atomic decision
 application MUST remain outside it.
 
-## Shipped private shared decision seam
+## Private shared decision seam
 
-The public `decidePipeline` contract and its `noop` compatibility member remain
-unchanged. PR7 extracted the private `decideValidated` operation that evaluates one
-already inspected compiled context and validated projected facts. Both the public adapter
-and reducer drain use that single semantic evaluator.
-
-`decideValidated` MUST NOT inspect snapshots or commands, assemble effects, mutate
-working state, perform persistence, or become a layer/root export. Public
-`decidePipeline` continues to own hostile compiled and fact inspection and existing
-fault mapping. Reducer settledness, fault mapping, and `noop` rejection remain reducer
-responsibilities.
+The private `decideValidated` operation evaluates one already built decision
+context and validated facts. `decideValidated` MUST NOT perform persistence,
+mutate working state, or become a layer/root export. Public `decidePipeline`
+owns fact validation and fault mapping.

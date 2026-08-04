@@ -9,13 +9,9 @@ Supported forbidden imports, static/export-from `.js` extensions, and the 80-lin
 production callable limit are owned by pinned Oxlint. Layer direction, private/root
 boundaries, production escapes, host/external imports, resolution, and all transitive
 cycles are owned by pinned dependency-cruiser. Observable
-compiler, graph, reducer, and package lifecycle guarantees are owned by behavior,
-property, differential, and packed-consumer tests.
-
-The normalized root declaration is locked by an exact SHA-256 package contract with
-addition, removal, alias, and type/value-phase mutation evidence. Emitted `spec` and
-`errors` JavaScript must equal the compiler's empty-module output. These checks compare
-artifacts as complete text and do not parse source syntax.
+compiler, graph, and decision guarantees are owned by behavior and property
+tests; package shape and type resolution are owned by publint and
+`@arethetypeswrong/cli` against the packed artifact.
 
 Exact call spelling, statement order, aliases, dominance, same-binding identity,
 one-export leaves, exact incidental inventories, and internal barrel source shape are

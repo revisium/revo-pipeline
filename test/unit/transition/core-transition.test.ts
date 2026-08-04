@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { compilePipeline } from '../../../src/definition/index.js';
+import { PIPELINE_LIMITS } from '../../../src/policy/index.js';
 import type {
   CompiledPipeline,
   NodeFact,
@@ -8,12 +9,7 @@ import type {
   PipelineFacts,
   PipelineValueFact,
 } from '../../../src/spec/index.js';
-import { decidePipeline, decodeCompiledPipeline } from '../../../src/transition/index.js';
-
-const validateCompiledPipeline = (input: unknown) => {
-  const decoded = decodeCompiledPipeline(input);
-  return decoded.ok ? decoded : { ok: false as const };
-};
+import { decidePipeline } from '../../../src/transition/index.js';
 
 const taskRoutes = (to: string) => ({
   cancelled: to,
@@ -330,6 +326,223 @@ describe('core pipeline transitions', () => {
     ).toMatchObject({ kind: 'reject', faults: [{ code: 'FACT_TYPE' }] });
   });
 
+  test('rejects a compiled payload whose edge set contains a cycle', () => {
+    const pipeline = linear();
+    const cyclic: CompiledPipeline = structuredClone(pipeline);
+    const forward = cyclic.edges[0]!;
+    Reflect.set(cyclic, 'edges', [
+      ...cyclic.edges,
+      { ...forward, from: forward.to, to: forward.from },
+    ]);
+    expect(decidePipeline(cyclic, facts())).toMatchObject({
+      kind: 'reject',
+      faults: [{ code: 'PIPELINE_INVALID' }],
+    });
+  });
+
+  test('rejects a compiled payload whose stored topological order disagrees with the graph', () => {
+    const pipeline = linear();
+    const tampered: CompiledPipeline = structuredClone(pipeline);
+    Reflect.set(tampered, 'topologicalOrder', [...tampered.topologicalOrder].reverse());
+    expect(decidePipeline(tampered, facts())).toMatchObject({
+      kind: 'reject',
+      faults: [{ code: 'PIPELINE_INVALID' }],
+    });
+  });
+
+  test('rejects a value fact string beyond the display bound', () => {
+    const pipeline = compile({
+      schemaVersion: 1,
+      entry: 'start',
+      facts: [{ key: 'note', type: 'string' }],
+      nodes: [
+        { kind: 'task', key: 'start', outcomes: taskRoutes('finish') },
+        { kind: 'terminal', key: 'finish', outcome: 'done' },
+      ],
+    });
+    const bound = PIPELINE_LIMITS.portable.displayCodePoints;
+    expect(
+      decidePipeline(pipeline, facts([], [{ key: 'note', value: 'x'.repeat(bound) }])),
+    ).toEqual({
+      kind: 'activate',
+      cause: { kind: 'entry' },
+      nodeKeys: ['start'],
+    });
+    expect(
+      decidePipeline(pipeline, facts([], [{ key: 'note', value: 'x'.repeat(bound + 1) }])),
+    ).toMatchObject({ kind: 'reject', faults: [{ code: 'FACT_LIMIT', path: '/values/0/value' }] });
+  });
+
+  test('faults the aggregate fact bound from raw collection lengths', () => {
+    const pipeline = linear();
+    const oversized = {
+      values: Array.from({ length: 129 }, (_, index) => ({ key: `v${index}`, value: true })),
+      nodes: Array.from({ length: 257 }, (_, index) => ({
+        key: `n${index}`,
+        state: 'enabled' as const,
+      })),
+      candidateVerdicts: Array.from({ length: 1_025 }, () => ({
+        nodeKey: 'start',
+        candidate: 'a',
+        verdict: 'approve' as const,
+      })),
+      gateResolutions: Array.from({ length: 257 }, () => ({
+        nodeKey: 'start',
+        resolution: 'done',
+      })),
+    };
+    const decision = decidePipeline(pipeline, oversized);
+    const codes =
+      decision.kind === 'reject'
+        ? decision.faults.map((fault) => `${fault.code}${fault.path}`)
+        : [];
+    expect(decision.kind).toBe('reject');
+    expect(codes).toContain('FACT_LIMIT');
+    expect(codes).toContain('FACT_LIMIT/values');
+    expect(codes).toContain('FACT_LIMIT/nodes');
+    expect(codes).toContain('FACT_LIMIT/candidateVerdicts');
+    expect(codes).toContain('FACT_LIMIT/gateResolutions');
+  });
+
+  test('accepts every collection at its exact bound and faults each at bound plus one', () => {
+    const pipeline = linear();
+    const within = {
+      values: [],
+      nodes: [
+        { key: 'start', state: 'enabled' as const },
+        ...Array.from({ length: 255 }, (_, index) => ({
+          key: `ghost${index}`,
+          state: 'enabled' as const,
+        })),
+      ],
+      candidateVerdicts: [],
+      gateResolutions: [],
+    };
+    const atBound = decidePipeline(pipeline, within);
+    expect(atBound.kind).toBe('reject');
+    const boundCodes =
+      atBound.kind === 'reject' ? atBound.faults.map((fault) => `${fault.code}${fault.path}`) : [];
+    expect(boundCodes).not.toContain('FACT_LIMIT/nodes');
+    for (const field of ['values', 'nodes', 'candidateVerdicts', 'gateResolutions'] as const) {
+      const limit = PIPELINE_LIMITS.facts[field === 'nodes' ? 'nodes' : field];
+      const overflow = {
+        values: [],
+        nodes: [],
+        candidateVerdicts: [],
+        gateResolutions: [],
+        [field]: Array.from({ length: limit + 1 }, () => ({})),
+      };
+      const decision = decidePipeline(pipeline, overflow);
+      const codes =
+        decision.kind === 'reject'
+          ? decision.faults.map((fault) => `${fault.code}${fault.path}`)
+          : [];
+      expect(codes).toContain(`FACT_LIMIT/${field}`);
+    }
+  });
+
+  test('truncates beyond 100 faults to the first 99 plus a root sentinel', () => {
+    const pipeline = linear();
+    const foreign = Array.from({ length: 150 }, (_, index) => ({
+      key: `ghost${index}`,
+      state: 'enabled' as const,
+    }));
+    const decision = decidePipeline(pipeline, facts(foreign));
+    expect(decision.kind).toBe('reject');
+    const faultList = decision.kind === 'reject' ? decision.faults : [];
+    expect(faultList).toHaveLength(100);
+    expect(faultList.slice(0, 99).every((fault) => fault.code === 'FACT_FOREIGN')).toBe(true);
+    expect(faultList[99]).toMatchObject({ code: 'FACT_LIMIT', path: '' });
+  });
+
+  test('valid executions never observe noop or an empty activation', () => {
+    const gated = compile({
+      schemaVersion: 1,
+      entry: 'approval',
+      facts: [],
+      nodes: [
+        {
+          kind: 'humanGate',
+          key: 'approval',
+          subject: 'Approve',
+          resolutions: [{ resolution: 'approved', to: 'finish' }],
+        },
+        { kind: 'terminal', key: 'finish', outcome: 'done' },
+      ],
+    });
+    const forked = compile({
+      schemaVersion: 1,
+      entry: 'fork',
+      facts: [],
+      nodes: [
+        {
+          kind: 'fork',
+          key: 'fork',
+          join: 'join',
+          branches: [
+            { name: 'first', entry: 'left', exit: 'left' },
+            { name: 'second', entry: 'right', exit: 'right' },
+          ],
+        },
+        { kind: 'task', key: 'left', outcomes: taskRoutes('join') },
+        { kind: 'task', key: 'right', outcomes: taskRoutes('join') },
+        {
+          kind: 'join',
+          key: 'join',
+          fork: 'fork',
+          policy: { kind: 'all' },
+          outcomes: { completed: 'finish', rejected: 'finish', insufficient: 'finish' },
+        },
+        { kind: 'terminal', key: 'finish', outcome: 'done' },
+      ],
+    });
+    for (const pipeline of [linear(), branching(), gated, forked]) {
+      const nodes = new Map<string, NodeFact>();
+      const values: PipelineValueFact[] = [];
+      const gateResolutions: { nodeKey: string; resolution: string }[] = [];
+      const observedKinds: string[] = [];
+      let emptyActivations = 0;
+      for (let step = 0; step < 64; step += 1) {
+        const decision = decidePipeline(pipeline, {
+          values,
+          nodes: [...nodes.values()],
+          candidateVerdicts: [],
+          gateResolutions,
+        });
+        observedKinds.push(decision.kind);
+        if (decision.kind === 'activate') {
+          emptyActivations += decision.nodeKeys.length === 0 ? 1 : 0;
+          decision.nodeKeys.forEach((key) => nodes.set(key, { key, state: 'enabled' }));
+        } else if (decision.kind === 'select') {
+          nodes.set(decision.nodeKey, {
+            key: decision.nodeKey,
+            state: 'terminal',
+            outcome: decision.outcome,
+          });
+          decision.activate.forEach((key) => nodes.set(key, { key, state: 'enabled' }));
+        } else if (decision.kind === 'wait') {
+          if (decision.reason === 'task-incomplete') {
+            nodes.set(decision.nodeKey, {
+              key: decision.nodeKey,
+              state: 'terminal',
+              outcome: 'completed',
+            });
+          } else if (decision.reason === 'branch-fact-missing') {
+            values.push({ key: 'choice', value: true });
+          } else {
+            gateResolutions.push({ nodeKey: decision.nodeKey, resolution: 'approved' });
+          }
+        } else {
+          break;
+        }
+      }
+      expect(observedKinds).not.toContain('noop');
+      expect(observedKinds).not.toContain('reject');
+      expect(emptyActivations).toBe(0);
+      expect(observedKinds.at(-1)).toBe('terminal');
+    }
+  });
+
   test('faults precede an otherwise reached terminal and multiple terminals are rejected', () => {
     const pipeline = branching();
     const reached: NodeFact[] = [
@@ -345,20 +558,6 @@ describe('core pipeline transitions', () => {
     expect(
       decidePipeline(pipeline, facts([...reached, { key: 'no', state: 'enabled' }])),
     ).toMatchObject({ kind: 'reject', faults: [{ code: 'FACT_CAUSAL' }] });
-  });
-
-  test('validates JSON-round-tripped compiled data and rejects integrity drift', () => {
-    const pipeline = linear();
-    const roundTrip: unknown = JSON.parse(JSON.stringify(pipeline));
-    expect(validateCompiledPipeline(roundTrip)).toEqual({ ok: true, pipeline: roundTrip });
-
-    const tampered = structuredClone(pipeline);
-    Reflect.set(tampered.edges[0]!, 'outcome', 'invented');
-    expect(validateCompiledPipeline(tampered)).toEqual({ ok: false });
-    expect(decidePipeline(tampered, facts())).toMatchObject({
-      kind: 'reject',
-      faults: [{ code: 'PIPELINE_INVALID' }],
-    });
   });
 
   test('accepts coordination graphs in the internal evaluator', () => {

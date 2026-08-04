@@ -3,19 +3,24 @@ import { expect, test } from 'vitest';
 import {
   compilePipeline,
   decidePipeline,
-  decodeCompiledPipeline,
   definePipeline,
-  reducePipeline,
   type CompiledPipeline,
   type ExecutorRequirement,
   type JsonValue,
   type PipelineFacts,
   type PipelineExecutionTemplate,
-  type PipelineSnapshot,
   type ScriptIdentity,
   type ScriptNode,
   type TerminalBindingTemplate,
 } from '../../src/index.js';
+
+const isCompiledPipeline = (value: unknown): value is CompiledPipeline =>
+  typeof value === 'object' &&
+  value !== null &&
+  !Array.isArray(value) &&
+  'schemaVersion' in value &&
+  'nodes' in value &&
+  'edges' in value;
 
 const definition = definePipeline({
   schemaVersion: 1,
@@ -36,57 +41,14 @@ const definition = definePipeline({
   ],
 });
 
-test('keeps accepted decode, decision, and reduction topology/indexes in agreement', () => {
+test('drives compiled pipelines through pure decisions on the public surface', () => {
   expect(definition.entry).toBe('approval');
   const compilation = compilePipeline(definition);
   expect(compilation.ok).toBe(true);
   if (!compilation.ok) {
     return;
   }
-  const decoding = decodeCompiledPipeline(JSON.parse(JSON.stringify(compilation.pipeline)));
-  expect(decoding.ok).toBe(true);
-  if (!decoding.ok) {
-    return;
-  }
-  const pipeline = decoding.pipeline;
-  const acceptedGraph: Pick<
-    CompiledPipeline,
-    'edges' | 'topologicalOrder' | 'nodeIndex' | 'outgoingIndex' | 'incomingIndex'
-  > = structuredClone({
-    edges: pipeline.edges,
-    topologicalOrder: pipeline.topologicalOrder,
-    nodeIndex: pipeline.nodeIndex,
-    outgoingIndex: pipeline.outgoingIndex,
-    incomingIndex: pipeline.incomingIndex,
-  });
-  expect(acceptedGraph).toEqual({
-    edges: compilation.pipeline.edges,
-    topologicalOrder: compilation.pipeline.topologicalOrder,
-    nodeIndex: compilation.pipeline.nodeIndex,
-    outgoingIndex: compilation.pipeline.outgoingIndex,
-    incomingIndex: compilation.pipeline.incomingIndex,
-  });
-  const snapshot: PipelineSnapshot = {
-    schemaVersion: 1,
-    occurrenceKey: 'public-consumer',
-    phase: 'uninitialized',
-    values: [],
-    nodes: [],
-    candidateVerdicts: [],
-    gateResolutions: [],
-    terminal: null,
-  };
-  const command = { schemaVersion: 1 as const, kind: 'init' as const, values: [] };
-  const initialization = reducePipeline(pipeline, snapshot, command);
-  expect(initialization).toMatchObject({
-    ok: true,
-    application: 'applied',
-    status: 'waiting',
-    batch: { kind: 'atomic' },
-  });
-  if (!initialization.ok) {
-    return;
-  }
+  const pipeline = compilation.pipeline;
   const emptyFacts: PipelineFacts = {
     values: [],
     nodes: [],
@@ -122,19 +84,12 @@ test('keeps accepted decode, decision, and reduction topology/indexes in agreeme
   expect(decidePipeline(pipeline, resolvedFacts)).toEqual(expected);
   expect(decidePipeline(pipeline, resolvedFacts)).toEqual(expected);
 
-  const replay = reducePipeline(pipeline, initialization.snapshot, command);
-  expect(replay).toEqual({
-    ...initialization,
-    application: 'unchanged',
-    batch: { kind: 'atomic', items: [] },
-  });
-  expect({
-    edges: pipeline.edges,
-    topologicalOrder: pipeline.topologicalOrder,
-    nodeIndex: pipeline.nodeIndex,
-    outgoingIndex: pipeline.outgoingIndex,
-    incomingIndex: pipeline.incomingIndex,
-  }).toEqual(acceptedGraph);
+  const serialized: unknown = JSON.parse(JSON.stringify(pipeline));
+  expect(isCompiledPipeline(serialized)).toBe(true);
+  if (!isCompiledPipeline(serialized)) {
+    return;
+  }
+  expect(decidePipeline(serialized, resolvedFacts)).toEqual(expected);
 });
 
 test('exposes the script execution template through the public package surface', () => {
