@@ -1,8 +1,0 @@
-export type DecodeFaultCode =
-  | 'DECODE_TYPE'
-  | 'DECODE_LIMIT'
-  | 'DECODE_SCHEMA'
-  | 'DECODE_REFERENCE'
-  | 'DECODE_GRAPH'
-  | 'DECODE_CANONICAL'
-  | 'DECODE_DIAGNOSTIC_LIMIT';

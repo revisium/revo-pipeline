@@ -8,11 +8,9 @@ The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**, 
 **MAY** in this document are to be interpreted as described in BCP 14 (RFC 2119 and
 RFC 8174) when, and only when, they appear in all capitals.
 
-This specification fixed the definition/transition slice before implementation. Its
-bootstrap guard required `src/index.ts` to remain exactly `export {};` until that slice;
-the slice now ships. Decoder and reducer additions are owned by their Accepted
-specifications, while the [internal module structure](./internal-module-structure.spec.md)
-owns the final root manifest.
+This specification owns the definition/compilation slice. The
+[transition specification](./pipeline-transition-v1.spec.md) owns facts and
+decisions; together they define the complete root manifest.
 
 ## Public contract
 
@@ -374,7 +372,6 @@ It contributed these types: `JsonScalar`, `NodeKey`, `FactKey`, `CandidateKey`,
 `ActivateDecision`, `SelectDecision`, `WaitDecision`, `TerminalDecision`,
 `NoopDecision`, `RejectDecision`, and `PipelineDecision`.
 
-This partial manifest is not the final global root. The decoder/reducer specifications
-add their shipped exports, and the internal module structure specification owns the exact
-final five-value/92-type root manifest. Limits, validators, comparators, fault-ordering
-helpers, and graph algorithms MUST NOT be runtime exports.
+Together with the transition specification this manifest is the complete root.
+Limits, validators, comparators, fault-ordering helpers, and graph algorithms
+MUST NOT be runtime exports.

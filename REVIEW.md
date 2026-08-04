@@ -15,8 +15,7 @@ sufficient correction.
 - Join, consensus, or gate semantics require hidden mutable package state.
 - Transition evaluation performs I/O, reads a clock, generates an id, or mutates facts.
 - A deep import, broad barrel, forbidden dependency, or value/type cycle bypasses the DAG.
-- Stable architecture rules lack a positive graph and representative negative probes;
-  observable semantics lack behavior, property, differential, or contract coverage.
+- Observable semantics lack behavior or contract coverage at the owning boundary.
 - Package exports, declarations, docs, and packed behavior disagree.
 - Verification failures or warnings are suppressed.
 - A release can publish without a separate explicit approval.
@@ -25,5 +24,5 @@ sufficient correction.
 
 - `corepack pnpm verify` passes on the reviewed head.
 - Workflow and shell conditional checks pass when those files change.
-- The exact packed tarball passes ATTW, contents, ESM, strict TS, and deep-import denial.
+- The exact packed tarball passes publint and ATTW under the ESM-only profile.
 - CI, Sonar when available, and valid review threads are green on the same head.

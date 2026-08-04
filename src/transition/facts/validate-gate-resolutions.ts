@@ -9,7 +9,6 @@ import type { DecisionContext } from '../context/decision-context.js';
 import type { DecisionFaultCollector } from './decision-fault-collector.js';
 type IndexedFact<T> = { readonly fact: T; readonly sourceIndex: number };
 
-const INVALID_PORTABLE_ENTRY = Symbol.for('revo-pipeline.invalid-portable-fact');
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const hasExactFields = (value: Record<string, unknown>, fields: readonly string[]): boolean => {
@@ -26,9 +25,6 @@ export const validateGateResolutions = (
   const seen = new Set<string>();
   const validated: IndexedFact<GateResolution>[] = [];
   input.forEach((entry, index) => {
-    if (entry === INVALID_PORTABLE_ENTRY) {
-      return;
-    }
     const path = `/gateResolutions/${index}`;
     if (
       !isRecord(entry) ||

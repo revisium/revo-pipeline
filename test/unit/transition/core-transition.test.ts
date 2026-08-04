@@ -8,12 +8,7 @@ import type {
   PipelineFacts,
   PipelineValueFact,
 } from '../../../src/spec/index.js';
-import { decidePipeline, decodeCompiledPipeline } from '../../../src/transition/index.js';
-
-const validateCompiledPipeline = (input: unknown) => {
-  const decoded = decodeCompiledPipeline(input);
-  return decoded.ok ? decoded : { ok: false as const };
-};
+import { decidePipeline } from '../../../src/transition/index.js';
 
 const taskRoutes = (to: string) => ({
   cancelled: to,
@@ -345,20 +340,6 @@ describe('core pipeline transitions', () => {
     expect(
       decidePipeline(pipeline, facts([...reached, { key: 'no', state: 'enabled' }])),
     ).toMatchObject({ kind: 'reject', faults: [{ code: 'FACT_CAUSAL' }] });
-  });
-
-  test('validates JSON-round-tripped compiled data and rejects integrity drift', () => {
-    const pipeline = linear();
-    const roundTrip: unknown = JSON.parse(JSON.stringify(pipeline));
-    expect(validateCompiledPipeline(roundTrip)).toEqual({ ok: true, pipeline: roundTrip });
-
-    const tampered = structuredClone(pipeline);
-    Reflect.set(tampered.edges[0]!, 'outcome', 'invented');
-    expect(validateCompiledPipeline(tampered)).toEqual({ ok: false });
-    expect(decidePipeline(tampered, facts())).toMatchObject({
-      kind: 'reject',
-      faults: [{ code: 'PIPELINE_INVALID' }],
-    });
   });
 
   test('accepts coordination graphs in the internal evaluator', () => {

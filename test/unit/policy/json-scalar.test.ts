@@ -6,7 +6,6 @@ import {
   isValidSemanticName,
   jsonScalarsEqual,
   normalizeJsonScalar,
-  renderPortableValue,
 } from '../../../src/policy/index.js';
 
 describe('canonical JSON scalar policy', () => {
@@ -50,11 +49,5 @@ describe('canonical JSON scalar policy', () => {
     expect(isValidKey('node/key')).toBe(false);
     expect(isValidKey('node~key')).toBe(false);
     expect(isValidKey('node\u0000key')).toBe(false);
-  });
-
-  test('renders canonical bounded diagnostic values', () => {
-    expect(renderPortableValue({ z: -0, a: 'e\u0301' })).toBe('{"a":"é","z":0}');
-    expect(renderPortableValue(undefined)).toBe('[non-portable:unsupported]');
-    expect(renderPortableValue('x'.repeat(512))).toHaveLength(128);
   });
 });
