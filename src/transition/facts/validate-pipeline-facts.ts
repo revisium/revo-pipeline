@@ -51,10 +51,13 @@ export const validatePipelineFacts = (
   );
   const nodes = collection(input['nodes'], '/nodes', PIPELINE_LIMITS.facts.nodes, faults);
   const values = collection(input['values'], '/values', PIPELINE_LIMITS.facts.values, faults);
-  if (
-    values.length + nodes.length + verdicts.length + resolutions.length >
-    PIPELINE_LIMITS.facts.total
-  ) {
+  const rawLength = (value: unknown): number => (Array.isArray(value) ? value.length : 0);
+  const total =
+    rawLength(input['values']) +
+    rawLength(input['nodes']) +
+    rawLength(input['candidateVerdicts']) +
+    rawLength(input['gateResolutions']);
+  if (total > PIPELINE_LIMITS.facts.total) {
     faults.add('FACT_LIMIT', '', 'Aggregate fact limit exceeded.');
     return undefined;
   }

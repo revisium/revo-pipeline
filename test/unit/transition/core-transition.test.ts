@@ -325,6 +325,68 @@ describe('core pipeline transitions', () => {
     ).toMatchObject({ kind: 'reject', faults: [{ code: 'FACT_TYPE' }] });
   });
 
+  test('rejects a compiled payload whose edge set contains a cycle', () => {
+    const pipeline = linear();
+    const cyclic: CompiledPipeline = structuredClone(pipeline);
+    const forward = cyclic.edges[0]!;
+    Reflect.set(cyclic, 'edges', [
+      ...cyclic.edges,
+      { ...forward, from: forward.to, to: forward.from },
+    ]);
+    expect(decidePipeline(cyclic, facts())).toMatchObject({
+      kind: 'reject',
+      faults: [{ code: 'PIPELINE_INVALID' }],
+    });
+  });
+
+  test('rejects a value fact string beyond the display bound', () => {
+    const pipeline = compile({
+      schemaVersion: 1,
+      entry: 'start',
+      facts: [{ key: 'note', type: 'string' }],
+      nodes: [
+        { kind: 'task', key: 'start', outcomes: taskRoutes('finish') },
+        { kind: 'terminal', key: 'finish', outcome: 'done' },
+      ],
+    });
+    expect(decidePipeline(pipeline, facts([], [{ key: 'note', value: 'x'.repeat(512) }]))).toEqual({
+      kind: 'activate',
+      cause: { kind: 'entry' },
+      nodeKeys: ['start'],
+    });
+    expect(
+      decidePipeline(pipeline, facts([], [{ key: 'note', value: 'x'.repeat(513) }])),
+    ).toMatchObject({ kind: 'reject', faults: [{ code: 'FACT_LIMIT', path: '/values/0/value' }] });
+  });
+
+  test('faults the aggregate fact bound from raw collection lengths', () => {
+    const pipeline = linear();
+    const oversized = {
+      values: Array.from({ length: 129 }, (_, index) => ({ key: `v${index}`, value: true })),
+      nodes: Array.from({ length: 257 }, (_, index) => ({
+        key: `n${index}`,
+        state: 'enabled' as const,
+      })),
+      candidateVerdicts: Array.from({ length: 1_025 }, () => ({
+        nodeKey: 'start',
+        candidate: 'a',
+        verdict: 'approve' as const,
+      })),
+      gateResolutions: Array.from({ length: 257 }, () => ({
+        nodeKey: 'start',
+        resolution: 'done',
+      })),
+    };
+    const decision = decidePipeline(pipeline, oversized);
+    const codes =
+      decision.kind === 'reject'
+        ? decision.faults.map((fault) => `${fault.code}${fault.path}`)
+        : [];
+    expect(decision.kind).toBe('reject');
+    expect(codes).toContain('FACT_LIMIT');
+    expect(codes).toContain('FACT_LIMIT/nodes');
+  });
+
   test('faults precede an otherwise reached terminal and multiple terminals are rejected', () => {
     const pipeline = branching();
     const reached: NodeFact[] = [

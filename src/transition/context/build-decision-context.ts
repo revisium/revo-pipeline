@@ -1,4 +1,4 @@
-import { buildGraphKernel } from '../../graph/index.js';
+import { buildGraphKernel, topologicalOrder } from '../../graph/index.js';
 import type { CompiledPipeline } from '../../spec/index.js';
 import type { DecisionContext } from './decision-context.js';
 
@@ -11,6 +11,9 @@ export const buildDecisionContext = (pipeline: CompiledPipeline): DecisionContex
     return undefined;
   }
   const kernel = built.kernel;
+  if (topologicalOrder(kernel) === null) {
+    return undefined;
+  }
   const regionOwnerByNode = new Map<string, string>();
   pipeline.forkRegions.forEach((region) => {
     region.branches.forEach((branch) => {

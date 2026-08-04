@@ -1,4 +1,4 @@
-import { compareUnicodeCodePoints, isValidKey } from '../../policy/index.js';
+import { compareUnicodeCodePoints, isValidKey, PIPELINE_LIMITS } from '../../policy/index.js';
 import type { PipelineValueFact } from '../../spec/index.js';
 import type { DecisionContext } from '../context/decision-context.js';
 import type { DecisionFaultCollector } from './decision-fault-collector.js';
@@ -45,6 +45,13 @@ export const validateValueFacts = (
       (typeof value === 'number' && Number.isSafeInteger(value));
     if (!validScalar || actualType !== definition.type) {
       faults.add('FACT_TYPE', `${path}/value`, 'Value fact type mismatch.');
+      return;
+    }
+    if (
+      typeof value === 'string' &&
+      Array.from(value.normalize('NFC')).length > PIPELINE_LIMITS.portable.displayCodePoints
+    ) {
+      faults.add('FACT_LIMIT', `${path}/value`, 'Value fact string limit exceeded.');
       return;
     }
     values.push({ key, value });
