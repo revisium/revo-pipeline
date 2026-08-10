@@ -1,46 +1,104 @@
 # Host integration
 
-The package is a pure semantic component. A durable host owns authorization,
-persistence, runs, retries, effect execution, and the record of facts.
+## Lifecycle
 
-The integration loop is fact-driven:
+The host contract remains Draft through `rp-06`. The `rp-00` reset exports no runtime
+API, so no host may integrate with this checkout as a package. The flow below defines the
+consumer boundary that `rp-03` through `rp-06` must prove.
 
-1. Compile the pipeline once at authoring time; persist the compiled JSON with a
-   digest pin.
-2. Start a run with the pinned compiled pipeline and the initial fact set
-   (usually empty; known `PipelineValueFact` inputs may be present from the
-   start).
-3. Call `decidePipeline(pipeline, facts)` and act on the decision:
-   - `activate` — first record an enabled `NodeFact` for **every** returned
-     node key as one durable fact update, then dispatch only the externally
-     executable kinds (tasks, scripts, consensus candidates). Branches, gates,
-     joins, and terminals progress through facts alone; omitting their enabled
-     facts causes repeated activation or a run that can never reach its
-     terminal.
-   - `select` — apply as **one atomic fact update**: replace the selector's
-     enabled fact with its terminal outcome and add an enabled fact for every
-     key in `activate` together. Persisting the outcome without its targets
-     produces a snapshot `decidePipeline` rejects with `FACT_CAUSAL`.
-   - `wait` — wait for the next external fact, record it, and decide again.
-     A task outcome **replaces** the node's enabled fact with its terminal
-     fact (a second fact for the same key is rejected as `FACT_DUPLICATE`);
-     consensus verdicts, human-gate resolutions, and `PipelineValueFact`
-     entries are appended (a `branch-fact-missing` wait resolves only when
-     the host supplies the declared value fact).
-   - `terminal` — the run is settled with the terminal outcome.
-   - `reject` — the fact set is inconsistent; this is a host defect, not user
-     input to retry.
-4. Record every fact update durably before acting on the decision it produced,
-   so a restarted host replays the same fact order and reaches the same
-   decisions.
+## Host flow
 
-Decisions are pure and deterministic: identical pipeline and facts always yield
-the identical decision. Hosts built on deterministic-replay engines can hold
-facts in workflow state and re-derive everything else.
+1. A versioned playbook supplies a validated `PipelineSourcePackage`.
+2. A selected profile supplies `ProfileMaterialization`. It selects only an allowed
+   `single` or `consensus` strategy for agent slots and abstract participant binding
+   keys. Source owns the exact policy, range, remaining behavior, and routes.
+3. `compilePipeline(source, materialization)` links calls, rejects recursion, validates
+   scope/dataflow/bounds, structurally lowers source, and returns immutable program,
+   requirements, provenance, and digests.
+4. `revo-core` resolves abstract requirements to exact immutable agent assemblies,
+   scripts, effects, tools, permissions, and execution policy. It constructs and
+   persists a plan using the contract owned by `revo-run`.
+5. `revo-run` validates program, requirements, and provenance, recomputes the digest over
+   exactly that bundle, persists the trusted `{program,programDigest}` pair and kernel
+   state, and drives durable effects around pure transitions.
 
-Human-gate identity, authentication, authorization, inboxes, audit storage,
-notifications, timeouts, and retry policy remain host-owned. The package
-validates only fact semantics against the compiled pipeline.
+The final `./kernel` API described below is introduced only by `rp-06`:
 
-Exact decision, fault, ordering, and bound behavior is normative in the
-[transition specification](./specs/pipeline-transition-v1.spec.md).
+```ts
+const kernelProgram = { program: plan.program, programDigest: plan.programDigest };
+const initial = createInitialPipelineState(kernelProgram, plan.input);
+let state = initial.state;
+
+await checkpointKernelState(state);
+await applyCommandsWithDbos(plan, initial.commands);
+
+while (state.status === 'running' || state.status === 'cancelling') {
+  const event = await receiveSemanticEvent();
+  const transition = advancePipeline(kernelProgram, state, event);
+
+  if (transition.kind === 'rejected') {
+    await recordHostProtocolFault(transition.faults);
+    continue;
+  }
+
+  state = transition.state;
+  await checkpointKernelState(state);
+  await applyCommandsWithDbos(plan, transition.commands);
+}
+```
+
+The sketch describes ownership, not a transaction recipe. The host must preserve
+causation between each structural command reference and its returned semantic event.
+Admission, not the kernel, validates and hashes the complete compiler bundle. Invalid
+initial input produces a failed state and fail command; a program-digest mismatch rejects
+advancement with unchanged state and no commands.
+
+## Command application
+
+The kernel may emit `dispatchActivity`, `scheduleWait`, `openHumanGate`,
+`cancelPending`, `complete`, `fail`, or `cancel`. Command references contain no run
+identity and are unique only within one machine state. `revo-run` namespaces them by
+`(runId, commandRef)` and maps them to dynamic workflow, execution, and attempt IDs.
+
+- `dispatchActivity` resolves one plan binding and runs one agent, script, or effect.
+- `scheduleWait` maps semantic waiting to DBOS time or durable signal registration.
+- `openHumanGate` creates the durable gate/inbox/audit surface and applies host-owned
+  authorization and arbitration.
+- `cancelPending` cooperatively cancels referenced runtime work.
+- Terminal commands settle the run and publish terminal events.
+
+The host returns only semantic events: activity succeeded/failed/cancelled, wait
+completed/signal received/cancelled, gate resolved/cancelled, and cancellation
+requested. Attempts, retryable error classification, timeout mechanics, reconciliation,
+worker leases, and provider responses are not kernel events or state.
+
+## Runtime responsibilities
+
+`revo-run` owns durable delivery, event deduplication, retries and backoff, attempt and
+effect identities, timers, cooperative cancellation, ambiguous-effect reconciliation,
+DBOS lifecycle, global capacity, projections, event cursors, and subscriptions. The
+kernel owns deterministic semantic progress, early parallel decisions, drain/cancel
+intent and acknowledgements, map-local concurrency, structural references, and terminal
+outcome selection.
+
+Votes are explicit successful activity outputs: `approve`, `reject`, or `abstain`.
+Activity failure is never a vote. Each frame owns immutable scope input and exact
+terminal results. Child completion copies into the parent before live frames are pruned;
+the run event/attempt log remains the durable audit authority.
+
+Run and region cancellation are nonterminal until all pending work acknowledges.
+Independent sibling regions may have concurrent cancellation sets. Once run
+cancellation is selected, no new region cancellation begins. Duplicate or late
+acknowledgements are idempotent, and no terminal state retains detached work.
+
+## Direct-cutover rule
+
+No adapter, converter, dual-read mode, compatibility alias, deprecated bridge, hidden
+interpreter, or preservation layer is allowed. The 103-row ownership matrix preserves
+semantic intent through 54 pipeline-evidence and 49 host/cross-package evidence
+obligations; it does not preserve data structures or request 103 pipeline
+implementations.
+
+The package remains publication-blocked throughout `rp-00` through `rp-05`. Only
+`rp-06` may expose the exact root and `./kernel` manifests after all conformance and
+consumer-readiness gates pass. Publication remains a later human decision.

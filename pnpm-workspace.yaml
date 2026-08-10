@@ -1,5 +1,5 @@
 allowBuilds:
-  esbuild: false # tsx uses the platform package; no install script is required
+  esbuild@0.28.1: false # Vitest/Vite use the platform package; no install script is required.
 minimumReleaseAgeExclude:
   - dependency-cruiser@18.1.1
 packageExtensions:

@@ -5,24 +5,29 @@ sufficient correction.
 
 ## Blocking findings
 
-- Shipped code or README claims a Draft API exists.
-- Pipeline decisions depend on identifiers, time, persistence, CAS, attempts, leases,
-  retries, resume mechanics, or host bindings.
-- The package imports `@revisium/revo-run`, an agent/script package, Prisma, DBOS, a
-  queue, or a host framework.
-- `CompiledPipeline` contains orchestrator model/profile/prompt/workspace bindings or is
-  described as a host-specific `ExecutionPlan`.
-- Join, consensus, or gate semantics require hidden mutable package state.
-- Transition evaluation performs I/O, reads a clock, generates an id, or mutates facts.
-- A deep import, broad barrel, forbidden dependency, or value/type cycle bypasses the DAG.
+- The package can publish, exposes a runtime value, or contains a release/publish
+  workflow before `rp-06`.
+- `package.json` regains a public entrypoint, files manifest, publish configuration,
+  prepack hook, or production dependency during `rp-00`.
+- A Draft root or `./kernel` API is exposed before `rp-06`.
+- An adapter, converter, dual reader, deprecated alias, compatibility package, hidden
+  interpreter, or runtime node-kind plugin is introduced.
+- Source or IR contains a kind outside the exact 12-kind or nine-kind closed vocabulary.
+- Pipeline decisions depend on run IDs, time, persistence, DBOS, attempts, leases,
+  retries, authorization, resolved bindings, or other host state.
+- A deep import, broad barrel, forbidden dependency, value/type cycle, or unresolved
+  import bypasses the approved DAG.
 - Observable semantics lack behavior or contract coverage at the owning boundary.
-- Package exports, declarations, docs, and packed behavior disagree.
+- The 103-row ownership matrix has a gap, duplicate, extra ID, or owner-count drift.
 - Verification failures or warnings are suppressed.
-- A release can publish without a separate explicit approval.
 
 ## Required evidence
 
-- `corepack pnpm verify` passes on the reviewed head.
+- `corepack pnpm verify` passes on the reviewed tree.
+- Publication-block verification proves the private manifest, absent public exports,
+  absent production dependencies, absent release workflows, and minimal source state.
 - Workflow and shell conditional checks pass when those files change.
-- The exact packed tarball passes publint and ATTW under the ESM-only profile.
-- CI, Sonar when available, and valid review threads are green on the same head.
+- The matrix contains exactly 103 unique IDs with compiler 22, kernel 32, core 7, and run
+  42; evidence counts remain pipeline 54 and host/cross-package 49.
+- CI, configured Sonar analysis, and valid review threads are green on the same exact
+  head after publication to a review branch.
