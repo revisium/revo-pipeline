@@ -64,10 +64,16 @@ describe('portable JSON values', () => {
     ['symbol', Symbol('value')],
     ['bigint', 1n],
     ['decomposed string', 'e\u0301'],
-    ['unpaired surrogate', '\ud800'],
+    ['unpaired high surrogate', '\ud800'],
+    ['unpaired low surrogate', '\udc00'],
     ['custom prototype', new Date(0)],
   ])('rejects %s without rendering the value', (_name, value) => {
     expect(failure(value)).toEqual({ code: 'CANONICAL_INPUT', path: '' });
+  });
+
+  it('accepts a valid astral pair and neighboring surrogate pairs', () => {
+    expect(normalizePortableValue('😀')).toEqual({ ok: true, value: '😀' });
+    expect(normalizePortableValue('😀🚀')).toEqual({ ok: true, value: '😀🚀' });
   });
 
   it('rejects accessors without invoking them and reports an escaped stable path', () => {

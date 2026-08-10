@@ -104,8 +104,7 @@ const inspectArray = (
   }
   const keys = readOwnKeys(value);
   if (
-    keys === null ||
-    keys.length !== length + 1 ||
+    keys?.length !== length + 1 ||
     !keys.includes('length') ||
     keys.some((key) => typeof key !== 'string')
   ) {

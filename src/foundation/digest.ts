@@ -15,13 +15,14 @@ export const DIGEST_DOMAINS = Object.freeze([
 
 export type DigestDomain = (typeof DIGEST_DOMAINS)[number];
 export type Digest = `sha256:${string}`;
+const digestDomainValues: readonly string[] = DIGEST_DOMAINS;
 
 export type DigestResult =
   | { readonly ok: true; readonly digest: Digest }
   | { readonly ok: false; readonly failure: PipelineFailure };
 
 const isDigestDomain = (value: unknown): value is DigestDomain =>
-  typeof value === 'string' && DIGEST_DOMAINS.some((domain) => domain === value);
+  typeof value === 'string' && digestDomainValues.includes(value);
 
 const assertDigestDomain: (value: unknown) => asserts value is DigestDomain = (value) => {
   if (!isDigestDomain(value)) {
