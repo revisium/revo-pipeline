@@ -1,7 +1,8 @@
 {
   "name": "@revisium/revo-pipeline",
   "version": "0.0.0",
-  "description": "Portable pipeline definition, compilation, and transition semantics for Revo.",
+  "private": true,
+  "description": "Publication-blocked greenfield pipeline language, compiler, and kernel for Revo.",
   "homepage": "https://github.com/revisium/revo-pipeline#readme",
   "bugs": {
     "url": "https://github.com/revisium/revo-pipeline/issues"
@@ -11,25 +12,8 @@
     "type": "git",
     "url": "git+https://github.com/revisium/revo-pipeline.git"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
   "type": "module",
   "sideEffects": false,
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "scripts": {
     "clean": "rm -rf dist coverage",
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
@@ -41,23 +25,20 @@
     "test:cov": "vitest run --coverage",
     "test:architecture": "depcruise --config .dependency-cruiser.cjs src test",
     "verify:architecture": "pnpm run test:architecture",
-    "verify:package": "pnpm run build && publint && attw --pack . --profile esm-only",
+    "verify:package": "pnpm run build && node scripts/verify-publication-block.mjs --verify",
     "verify": "pnpm run format:check && pnpm run typecheck && pnpm run lint && pnpm run test:cov && pnpm run verify:architecture && pnpm run verify:package",
     "sonar:local": "bash scripts/sonar-local.sh",
     "sonar:issues:local": "bash scripts/sonar-issues-local.sh",
     "ci:local:sonar": "bash scripts/ci-local-sonar.sh",
-    "prepack": "pnpm run build"
+    "prepublishOnly": "node scripts/verify-publication-block.mjs"
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "0.18.5",
     "@types/node": "24.13.3",
     "@vitest/coverage-v8": "4.1.9",
     "dependency-cruiser": "18.1.1",
     "oxfmt": "0.58.0",
     "oxlint": "1.73.0",
     "oxlint-tsgolint": "0.24.0",
-    "publint": "0.3.21",
-    "tsx": "4.23.1",
     "typescript": "7.0.2",
     "vitest": "4.1.9"
   },

@@ -2,7 +2,7 @@
 
 # @revisium/revo-pipeline
 
-**Portable pipeline definitions, deterministic compilation, and pure decisions for Revo.**
+**Portable pipeline source, deterministic compilation, and a pure command-producing kernel.**
 
 [![CI](https://github.com/revisium/revo-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/revisium/revo-pipeline/actions/workflows/ci.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=revisium_revo-pipeline&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=revisium_revo-pipeline)
@@ -12,125 +12,89 @@
 </div>
 
 > [!IMPORTANT]
-> Pre-release package. The API remains under review.
+> Publication is blocked. The reset package has no runtime exports and is not an
+> installable consumer API.
 
-## About
+## Status
 
-`@revisium/revo-pipeline` is a pure pipeline graph kernel: readonly pipeline
-definitions, author-input validation, deterministic compilation, and pure
-semantic decisions. It has no runtime dependencies (zero) and performs no I/O.
+Accepted [ADR 0005](docs/adr/0005-greenfield-language-compiler-kernel-cutover.md)
+establishes a direct greenfield cutover to one source-language/compiler/closed-IR/pure-
+kernel architecture. There is no adapter, converter, dual reader, deprecated alias,
+compatibility window, hidden interpreter, or runtime node-kind plugin.
 
-The host owns runs, durable execution, persistence, retries, authorization,
-agents, scripts, and effect application. The host feeds facts in; the kernel
-answers with one decision at a time.
+The six normative contracts remain Draft through `rp-06`:
 
-## Installation
+- [Pipeline Source v1](docs/specs/pipeline-source-v1.spec.md)
+- [Pipeline Materialization v1](docs/specs/pipeline-materialization-v1.spec.md)
+- [Pipeline Program v1](docs/specs/pipeline-program-v1.spec.md)
+- [Pipeline Machine v1](docs/specs/pipeline-machine-v1.spec.md)
+- [Pipeline Canonicalization v1](docs/specs/pipeline-canonicalization-v1.spec.md)
+- [Pipeline Conformance v1](docs/specs/pipeline-conformance-v1.spec.md)
 
-```bash
-corepack pnpm add @revisium/revo-pipeline
+`rp-00` is the physical reset, documentation baseline, and fail-closed publication
+block. `src/index.ts` is deliberately inert. The final `.` and `./kernel` exports are
+introduced only by `rp-06` after conformance and consumer readiness are proved. Lifecycle
+acceptance still does not publish a release; publication remains a separate human gate.
+
+## Contract shape
+
+The source language has exactly 12 node kinds: `agent`, `script`, `effect`, `choice`,
+`parallel`, `repeat`, `map`, `wait`, `humanGate`, `consensus`, `call`, and `end`.
+Compilation produces exactly nine IR node kinds: `activity`, `choice`, `call`,
+`parallel`, `repeat`, `map`, `wait`, `humanGate`, and `end`. Control flow uses targets
+and structured regions; there is no sequence node.
+
+The intended flow is:
+
+```text
+PipelineSourcePackage + ProfileMaterialization
+                       |
+                       v
+             compile/link/materialize
+                       |
+                       v
+PipelineProgram + ProgramRequirements + ProgramProvenance + programDigest
+                       |
+                       v
+           pure state transition + host commands
 ```
 
-Requires Node.js `>=24.11.1 <25`. The package is strict ESM and supports named imports
-from its root only.
+The package performs no I/O. `revo-core` resolves exact bindings and constructs a plan;
+`revo-run` owns durable execution, attempts, retries, timers, reconciliation,
+authorization, events, subscriptions, and dynamic identities.
 
-## Quick start
+The [ownership matrix](docs/conformance/revo-run-intent-ownership.md) has 103 unique
+traceability rows: compiler 22, kernel 32, core 7, and run 42. Those rows partition into
+pipeline evidence 54 and host evidence 49; host evidence includes core/run
+cross-package fixtures. They are traceability requirements, not 103 pipeline
+implementations.
 
-```ts
-import { compilePipeline, decidePipeline, definePipeline } from '@revisium/revo-pipeline';
+## Sequential master plan
 
-const definition = definePipeline({
-  schemaVersion: 1,
-  entry: 'work',
-  facts: [],
-  nodes: [
-    {
-      kind: 'task',
-      key: 'work',
-      outcomes: {
-        completed: 'done',
-        failed: 'done',
-        cancelled: 'done',
-        skipped: 'done',
-      },
-    },
-    { kind: 'terminal', key: 'done', outcome: 'done' },
-  ],
-});
+1. `rp-00` — physical reset, accepted architecture docs, Draft specs, and publication
+   block.
+2. `rp-01` — foundation primitives and exact production dependencies.
+3. `rp-02` — source language and profile materialization.
+4. `rp-03` — compiler, linker, Program IR, provenance, and digests.
+5. `rp-04` — base pure kernel.
+6. `rp-05` — structured coordination, cancellation, waits, and gates.
+7. `rp-06` — conformance, consumer readiness, final exports, and lifecycle acceptance.
 
-const compilation = compilePipeline(definition);
-if (!compilation.ok) throw new Error(compilation.faults[0]?.code);
-
-const facts = { values: [], nodes: [], candidateVerdicts: [], gateResolutions: [] };
-console.log(decidePipeline(compilation.pipeline, facts));
-// { kind: 'activate', cause: { kind: 'entry' }, nodeKeys: ['work'] }
-```
-
-The host records each new fact (a task outcome, a consensus verdict, a gate
-resolution) and calls `decidePipeline` again. Decisions are pure: the same
-pipeline and the same facts always produce the same decision, which makes the
-kernel safe to drive from a deterministic-replay engine.
-
-`compilePipeline` output is canonical JSON data. Persist it with a digest pin
-and hand it back to `decidePipeline` as-is; the kernel treats the compiled
-pipeline as trusted input produced by its own compiler.
-
-Script nodes pin an exact script identity and portable JSON input. A successful
-compilation also exposes the host-owned execution template:
-
-```ts
-const scriptCompilation = compilePipeline(
-  definePipeline({
-    schemaVersion: 1,
-    entry: 'echo',
-    facts: [],
-    nodes: [
-      {
-        kind: 'script',
-        key: 'echo',
-        script: { id: 'script:system/echo', version: 1 },
-        input: { message: 'Hello' },
-        outcomes: { completed: 'done', failed: 'done', cancelled: 'done', skipped: 'done' },
-      },
-      { kind: 'terminal', key: 'done', outcome: 'succeeded' },
-    ],
-  }),
-);
-if (scriptCompilation.ok) console.log(scriptCompilation.template.executorRequirements);
-```
-
-Compilation lowers each script node to a task in `compilation.pipeline`, while
-`compilation.template` references that same pipeline and carries only unresolved
-host requirements. This package does not resolve or execute scripts. Task-only
-definitions and pipeline consumers do not need to adopt the template.
-
-## Complete public API
-
-```ts
-export declare function definePipeline<const Definition extends PipelineDefinition>(
-  definition: Definition,
-): Definition;
-
-export declare function compilePipeline(definition: PipelineDefinition): PipelineCompilation;
-
-export declare function decidePipeline(
-  pipeline: CompiledPipeline,
-  facts: PipelineFacts,
-): PipelineDecision;
-```
-
-Narrow compiler results by `ok`. Narrow decisions by `kind`. Exact types,
-faults, ordering, bounds, and semantics live in the accepted specifications.
+Every intermediate state remains nonpublishable.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Host integration](docs/host-integration.md)
-- [Accepted specifications](docs/specs/)
-- [Architecture decisions](docs/adr/)
+- [Specifications](docs/specs/)
+- [Architecture decision](docs/adr/0005-greenfield-language-compiler-kernel-cutover.md)
+- [Intent ownership](docs/conformance/revo-run-intent-ownership.md)
 - [Repository map](REPOSITORY.md)
 - [Verification](VERIFICATION.md)
 
 ## Development
+
+Requires Node.js `>=24.11.1 <25` and pnpm 11.13.0 through Corepack.
 
 ```bash
 corepack pnpm install --frozen-lockfile
