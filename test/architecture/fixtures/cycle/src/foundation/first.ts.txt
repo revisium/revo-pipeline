@@ -1,0 +1,1 @@
+export { second as first } from './second.js';

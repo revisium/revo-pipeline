@@ -1,0 +1,3 @@
+import './foundation/index.js';
+
+export {};

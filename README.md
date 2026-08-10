@@ -12,8 +12,8 @@
 </div>
 
 > [!IMPORTANT]
-> Publication is blocked. The reset package has no runtime exports and is not an
-> installable consumer API.
+> Publication is blocked. The active `rp-01` foundation is private, the root module has
+> no runtime exports, and this is not an installable consumer API.
 
 ## Status
 
@@ -31,10 +31,14 @@ The six normative contracts remain Draft through `rp-06`:
 - [Pipeline Canonicalization v1](docs/specs/pipeline-canonicalization-v1.spec.md)
 - [Pipeline Conformance v1](docs/specs/pipeline-conformance-v1.spec.md)
 
-`rp-00` is the physical reset, documentation baseline, and fail-closed publication
-block. `src/index.ts` is deliberately inert. The final `.` and `./kernel` exports are
-introduced only by `rp-06` after conformance and consumer readiness are proved. Lifecycle
-acceptance still does not publish a release; publication remains a separate human gate.
+`rp-01` is the active work item. It implements bounded portable values, identifiers,
+RFC 6901 pointers, diagnostics, closed TypeBox object helpers, RFC 8785 canonicalization,
+and all seven domain-separated SHA-256 primitives under the private `foundation` layer.
+Its production dependencies are exactly `typebox@1.3.10` and `canonicalize@3.0.0`;
+hashing uses `node:crypto`. `src/index.ts` remains deliberately inert. The final `.` and
+`./kernel` exports are introduced only by `rp-06` after conformance and consumer
+readiness are proved. Lifecycle acceptance still does not publish a release;
+publication remains a separate human gate.
 
 ## Contract shape
 
@@ -69,6 +73,12 @@ pipeline evidence 54 and host evidence 49; host evidence includes core/run
 cross-package fixtures. They are traceability requirements, not 103 pipeline
 implementations.
 
+The machine-readable [layer manifest](architecture/layers.json) activates only
+`foundation` at `rp-01`. Source, materialization, program, compiler, kernel, and
+extensions remain future private records; their directories do not exist yet. Imports
+between active layers must use the target layer's curated `index.ts`, same-layer peer
+imports are allowed, and no layer may import the inert root module.
+
 ## Sequential master plan
 
 1. `rp-00` — physical reset, accepted architecture docs, Draft specs, and publication
@@ -85,6 +95,7 @@ Every intermediate state remains nonpublishable.
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Delivery plan and specification traceability](docs/delivery-plan.md)
 - [Host integration](docs/host-integration.md)
 - [Specifications](docs/specs/)
 - [Architecture decision](docs/adr/0005-greenfield-language-compiler-kernel-cutover.md)
@@ -100,5 +111,8 @@ Requires Node.js `>=24.11.1 <25` and pnpm 11.13.0 through Corepack.
 corepack pnpm install --frozen-lockfile
 corepack pnpm verify
 ```
+
+Focused foundation work can use `corepack pnpm exec vitest run test/foundation` before
+the required full gate. Architecture and package checks remain part of `verify`.
 
 Publishing, tagging, releasing, and merging require separate approval.

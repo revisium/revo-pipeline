@@ -1,0 +1,210 @@
+import { PIPELINE_LIMITS } from './bounds.js';
+import { isJsonPointer, type JsonPointer } from './json-pointer.js';
+import { compareUnicodeCodePoints } from './unicode.js';
+
+export type PipelineDiagnosticFamily =
+  | 'SOURCE'
+  | 'MATERIALIZATION'
+  | 'LINK'
+  | 'DATA'
+  | 'BOUND'
+  | 'REQUIREMENT'
+  | 'LOWERING'
+  | 'CANONICAL';
+
+export type PipelineDiagnostic = {
+  readonly family: PipelineDiagnosticFamily;
+  readonly code: PipelineDiagnosticCode;
+  readonly path: JsonPointer;
+  readonly message: string;
+};
+
+type PipelineDiagnosticDefinition = {
+  readonly family: PipelineDiagnosticFamily;
+  readonly code: string;
+  readonly message: string;
+};
+
+const definition = (
+  family: PipelineDiagnosticFamily,
+  code: string,
+  message: string,
+): PipelineDiagnosticDefinition => Object.freeze({ family, code, message });
+
+export const PIPELINE_DIAGNOSTIC_CATALOG = Object.freeze({
+  SOURCE_DIAGNOSTIC_LIMIT: definition(
+    'SOURCE',
+    'SOURCE_DIAGNOSTIC_LIMIT',
+    'The diagnostic limit was exceeded.',
+  ),
+  SOURCE_GATE_ANSWER_BIJECTION: definition(
+    'SOURCE',
+    'SOURCE_GATE_ANSWER_BIJECTION',
+    'The human-gate answers and routes do not form an exact bijection.',
+  ),
+  MATERIALIZATION_POLICY_COUNT: definition(
+    'MATERIALIZATION',
+    'MATERIALIZATION_POLICY_COUNT',
+    'The materialized participant count does not satisfy the source policy.',
+  ),
+  LINK_MODULE_MISSING: definition('LINK', 'LINK_MODULE_MISSING', 'A called module is missing.'),
+  LINK_RECURSION: definition('LINK', 'LINK_RECURSION', 'The module call graph is recursive.'),
+  DATA_DOMINANCE: definition('DATA', 'DATA_DOMINANCE', 'A data reference is not dominated.'),
+  DATA_FAILED_EXIT_SCHEMA: definition(
+    'DATA',
+    'DATA_FAILED_EXIT_SCHEMA',
+    'A failed exit does not use the exact pipeline failure schema.',
+  ),
+  DATA_POINTER_MISSING: definition(
+    'DATA',
+    'DATA_POINTER_MISSING',
+    'A runtime JSON Pointer target is missing.',
+  ),
+  DATA_POINTER_STATIC: definition(
+    'DATA',
+    'DATA_POINTER_STATIC',
+    'A static JSON Pointer target is invalid.',
+  ),
+  DATA_SCHEMA_INCOMPATIBLE: definition(
+    'DATA',
+    'DATA_SCHEMA_INCOMPATIBLE',
+    'The producer and consumer schemas are incompatible.',
+  ),
+  DATA_SCHEMA_MISMATCH: definition(
+    'DATA',
+    'DATA_SCHEMA_MISMATCH',
+    'The mapped value does not satisfy its schema.',
+  ),
+  DATA_SCOPE: definition('DATA', 'DATA_SCOPE', 'A data reference escapes its valid scope.'),
+  BOUND_EXCEEDED: definition('BOUND', 'BOUND_EXCEEDED', 'A declared pipeline bound was exceeded.'),
+  BOUND_OVERFLOW: definition('BOUND', 'BOUND_OVERFLOW', 'A composed pipeline bound overflowed.'),
+  REQUIREMENT_CONFLICT: definition(
+    'REQUIREMENT',
+    'REQUIREMENT_CONFLICT',
+    'Requirement declarations conflict.',
+  ),
+  REQUIREMENT_MISSING: definition(
+    'REQUIREMENT',
+    'REQUIREMENT_MISSING',
+    'A required declaration is missing.',
+  ),
+  REQUIREMENT_UNUSED: definition(
+    'REQUIREMENT',
+    'REQUIREMENT_UNUSED',
+    'A requirement declaration is unused.',
+  ),
+  LOWERING_ID_COLLISION: definition(
+    'LOWERING',
+    'LOWERING_ID_COLLISION',
+    'Deterministic lowering produced a duplicate identifier.',
+  ),
+  CANONICAL_INPUT: definition('CANONICAL', 'CANONICAL_INPUT', 'The canonical input is invalid.'),
+});
+
+export type PipelineDiagnosticCode = keyof typeof PIPELINE_DIAGNOSTIC_CATALOG;
+
+const familyPriority: Readonly<Record<PipelineDiagnosticFamily, number>> = Object.freeze({
+  SOURCE: 0,
+  MATERIALIZATION: 1,
+  LINK: 2,
+  DATA: 3,
+  BOUND: 4,
+  REQUIREMENT: 5,
+  LOWERING: 6,
+  CANONICAL: 7,
+});
+
+const createdDiagnostics = new WeakSet<object>();
+
+const invalidDiagnostic = (): never => {
+  throw new TypeError('Invalid pipeline diagnostic input.');
+};
+
+const isDiagnosticCode = (value: unknown): value is PipelineDiagnosticCode =>
+  typeof value === 'string' && Object.hasOwn(PIPELINE_DIAGNOSTIC_CATALOG, value);
+
+const isCreatedDiagnostic = (value: unknown): value is PipelineDiagnostic =>
+  typeof value === 'object' && value !== null && createdDiagnostics.has(value);
+
+export const createPipelineDiagnostic = (
+  code: PipelineDiagnosticCode,
+  path: JsonPointer,
+): PipelineDiagnostic => {
+  if (!isDiagnosticCode(code) || !isJsonPointer(path)) {
+    return invalidDiagnostic();
+  }
+  const catalogEntry = PIPELINE_DIAGNOSTIC_CATALOG[code];
+  const diagnostic = Object.freeze({
+    family: catalogEntry.family,
+    code,
+    path,
+    message: catalogEntry.message,
+  });
+  createdDiagnostics.add(diagnostic);
+  return diagnostic;
+};
+
+export const comparePipelineDiagnostics = (
+  left: PipelineDiagnostic,
+  right: PipelineDiagnostic,
+): number => {
+  if (!isCreatedDiagnostic(left) || !isCreatedDiagnostic(right)) {
+    return invalidDiagnostic();
+  }
+  return (
+    familyPriority[left.family] - familyPriority[right.family] ||
+    compareUnicodeCodePoints(left.path, right.path) ||
+    compareUnicodeCodePoints(left.code, right.code)
+  );
+};
+
+const copyDiagnosticList = (input: readonly PipelineDiagnostic[]): PipelineDiagnostic[] => {
+  try {
+    if (!Array.isArray(input) || Reflect.getPrototypeOf(input) !== Array.prototype) {
+      return invalidDiagnostic();
+    }
+    const lengthDescriptor = Reflect.getOwnPropertyDescriptor(input, 'length');
+    if (!lengthDescriptor || !('value' in lengthDescriptor)) {
+      return invalidDiagnostic();
+    }
+    const length: unknown = lengthDescriptor.value;
+    const keys = Reflect.ownKeys(input);
+    if (
+      typeof length !== 'number' ||
+      !Number.isSafeInteger(length) ||
+      keys.length !== length + 1 ||
+      keys.some((key) => typeof key !== 'string')
+    ) {
+      return invalidDiagnostic();
+    }
+
+    const copy: PipelineDiagnostic[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(input, String(index));
+      if (
+        !descriptor?.enumerable ||
+        !('value' in descriptor) ||
+        !isCreatedDiagnostic(descriptor.value)
+      ) {
+        return invalidDiagnostic();
+      }
+      copy.push(descriptor.value);
+    }
+    return copy;
+  } catch {
+    return invalidDiagnostic();
+  }
+};
+
+export const finalizePipelineDiagnostics = (
+  diagnostics: readonly PipelineDiagnostic[],
+): readonly PipelineDiagnostic[] => {
+  const ordered = copyDiagnosticList(diagnostics).sort(comparePipelineDiagnostics);
+  if (ordered.length <= PIPELINE_LIMITS.diagnostics) {
+    return Object.freeze(ordered);
+  }
+  return Object.freeze([
+    ...ordered.slice(0, PIPELINE_LIMITS.diagnostics - 1),
+    createPipelineDiagnostic('SOURCE_DIAGNOSTIC_LIMIT', ''),
+  ]);
+};
