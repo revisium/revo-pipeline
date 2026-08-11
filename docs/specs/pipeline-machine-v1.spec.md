@@ -11,8 +11,8 @@ RFC 8174) when, and only when, they appear in all capitals.
 ## Scope and exact functions
 
 This specification defines the final pure machine API. It remains Draft and unavailable
-until `rp-06`. TypeBox schemas are authoritative and every object rejects unknown
-fields.
+from the package root while conformance is incomplete. TypeBox schemas are authoritative
+and every object rejects unknown fields.
 
 ```ts
 type KernelProgram = {

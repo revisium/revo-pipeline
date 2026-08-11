@@ -19,6 +19,10 @@ type InspectionContext = {
   visitedValues: number;
 };
 
+export type PortableNormalizationSession = {
+  readonly normalize: (input: unknown, path: JsonPointer) => PortableValueResult;
+};
+
 const rejected = (path: JsonPointer): PortableValueResult => ({
   ok: false,
   failure: { code: 'CANONICAL_INPUT', path },
@@ -215,8 +219,16 @@ const inspectValue = (
   }
 };
 
+export const createPortableNormalizationSession = (): PortableNormalizationSession => {
+  const context: InspectionContext = { activeObjects: new WeakSet(), visitedValues: 0 };
+  return Object.freeze({
+    normalize: (input: unknown, path: JsonPointer): PortableValueResult =>
+      inspectValue(input, path, 0, context),
+  });
+};
+
 export const normalizePortableValue = (input: unknown): PortableValueResult =>
-  inspectValue(input, '', 0, { activeObjects: new WeakSet(), visitedValues: 0 });
+  createPortableNormalizationSession().normalize(input, '');
 
 export const isPortableValue = (input: unknown): input is JsonValue =>
   normalizePortableValue(input).ok;

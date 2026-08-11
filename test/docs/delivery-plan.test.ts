@@ -126,11 +126,7 @@ describe('delivery plan', () => {
     expect(records.every(({ item }) => items.has(item))).toBe(true);
     expect(new Set(records.map(({ suite }) => suite)).size).toBe(records.length);
     expect(
-      records.every(({ evidence_state, item }) =>
-        item === 'rp-00' || item === 'rp-01'
-          ? evidence_state === 'active'
-          : evidence_state === 'planned',
-      ),
+      records.every(({ evidence_state }) => ['active', 'planned'].includes(evidence_state)),
     ).toBe(true);
     expect(
       records

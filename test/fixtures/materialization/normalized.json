@@ -1,0 +1,1 @@
+{"schemaVersion":"pipeline-materialization/v1","slots":[{"selection":{"participant":{"bindingKey":"b1","key":"p1"},"strategy":"single"},"slotKey":"review","sourcePath":"/modules/0/region/nodes/0"}],"sourceDigest":"sha256:ad3e4b93cf9ff93fafa2787dc3973569de625cbda5a8d4d90632ffd558ad5551"}

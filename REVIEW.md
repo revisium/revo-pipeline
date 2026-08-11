@@ -6,11 +6,11 @@ sufficient correction.
 ## Blocking findings
 
 - The package can publish, exposes a runtime value, or contains a release/publish
-  workflow before `rp-06`.
+  workflow before readiness acceptance.
 - `package.json` gains a public entrypoint, files manifest, publish configuration,
   prepack hook, or a production dependency other than exact `typebox@1.3.10` and
-  `canonicalize@3.0.0` during `rp-01`.
-- A Draft root or `./kernel` API is exposed before `rp-06`.
+  `canonicalize@3.0.0` before readiness acceptance.
+- A Draft root or `./kernel` API is exposed before readiness acceptance.
 - An adapter, converter, dual reader, deprecated alias, compatibility package, hidden
   interpreter, or runtime node-kind plugin is introduced.
 - Source or IR contains a kind outside the exact 12-kind or nine-kind closed vocabulary.
@@ -32,14 +32,14 @@ sufficient correction.
 - Diagnostics accept a code outside the fixed catalog, an invalid JSON Pointer, an
   arbitrary message, extra fields, accessors, or proxy-backed entries.
 - Canonicalization runs on rejected input, uses a digest domain outside the exact seven,
-  omits the length-delimited prefix, truncates SHA-256, or introduces an `rp-06` public
+  omits the length-delimited prefix, truncates SHA-256, or introduces a readiness-gated public
   digest wrapper.
 - The package stops being ESM, the resolved source graph adds a Node core dependency
   beyond the current crypto use or a classified nonproduction package, or dependency
   rules omit cycle, root/private, unresolved-local, DAG, production-package, or
   curated-index enforcement.
 - `.github/workflows/` contains a release/publish workflow or anything beyond the
-  reviewed `ci.yml` during `rp-01`.
+  reviewed `ci.yml` before readiness acceptance.
 - Observable semantics lack behavior or contract coverage at the owning boundary.
 - The 103-row ownership matrix has a gap, duplicate, extra ID, or owner-count drift.
 - Verification failures or warnings are suppressed.
@@ -54,6 +54,10 @@ sufficient correction.
   the fixed diagnostic catalog/order/truncation/redaction, defensive TypeBox closure,
   exact RFC 8785 edge and round-trip bytes, runtime digest-domain rejection, and
   normative vectors.
+- Source and materialization suites cover the exact 12-kind contracts, keyed-set
+  normalization, local and nested CFG semantics, selector contexts, finite choice
+  coverage, canonical agent paths, source-relative slot totality/policies, exact
+  diagnostics, and normative source/materialization digest vectors.
 - Architecture suites pin the active manifest/filesystem and use representative
   dependency-cruiser fixtures for the DAG, cycles, root/deep imports, resolution, Node
   core use, and resolved production-versus-development package boundaries.

@@ -29,7 +29,7 @@
     "sonar:local": "bash scripts/sonar-local.sh",
     "sonar:issues:local": "bash scripts/sonar-issues-local.sh",
     "ci:local:sonar": "bash scripts/ci-local-sonar.sh",
-    "prepublishOnly": "node -e \"console.error('Publication is blocked until rp-06 conformance and readiness are complete.'); process.exit(1)\""
+    "prepublishOnly": "node -e \"console.error('Publication is blocked until conformance and readiness are complete.'); process.exit(1)\""
   },
   "dependencies": {
     "canonicalize": "3.0.0",

@@ -42,7 +42,7 @@ describe('publication block', () => {
       return;
     }
     expect(packageJson.scripts.prepublishOnly).toBe(
-      `node -e "console.error('Publication is blocked until rp-06 conformance and readiness are complete.'); process.exit(1)"`,
+      `node -e "console.error('Publication is blocked until conformance and readiness are complete.'); process.exit(1)"`,
     );
     expect(Object.hasOwn(packageJson.scripts, 'prepack')).toBe(false);
   });
@@ -55,7 +55,7 @@ describe('publication block', () => {
 
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}\n${result.stderr}`).toContain(
-      'Publication is blocked until rp-06 conformance and readiness are complete.',
+      'Publication is blocked until conformance and readiness are complete.',
     );
   });
 
@@ -63,7 +63,7 @@ describe('publication block', () => {
     expect(readdirSync(join(repositoryRoot, '.github', 'workflows'))).toEqual(['ci.yml']);
   });
 
-  it('has no root runtime exports during rp-01', () => {
+  it('has no root runtime exports while the package is private', () => {
     expect(Object.keys(runtimeSurface)).toEqual([]);
   });
 });

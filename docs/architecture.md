@@ -4,8 +4,9 @@
 
 [ADR 0005](./adr/0005-greenfield-language-compiler-kernel-cutover.md) is Accepted and
 sets the direct-cutover architecture. The six contracts in `docs/specs/` remain Draft
-through `rp-06`. `rp-01` activates only the private foundation layer while retaining the
-inert root module and unconditional publication refusal; it exposes no consumer API.
+until conformance and consumer readiness are accepted. The private foundation, source,
+and materialization layers are active while the root module stays inert and publication
+remains unconditionally blocked; there is no consumer API.
 
 ## System shape
 
@@ -15,9 +16,9 @@ a closed Program IR, and advances that program as a pure state machine. It perfo
 I/O and knows no runtime provider, model, DBOS workflow, attempt, database, queue, or
 subscription.
 
-Starting in `rp-01`, its only production dependencies are exact `typebox@1.3.10` and
+Its only production dependencies are exact `typebox@1.3.10` and
 `canonicalize@3.0.0`; hashing uses `node:crypto`. `fast-check`, Ajv, XState, and
-host/runtime libraries are not installed in `rp-01`.
+host/runtime libraries are not installed.
 
 ```text
 playbook PipelineSourcePackage + portable ProfileMaterialization
@@ -48,11 +49,11 @@ forms lower to ordinary IR structure, so neither `agent` nor `consensus` is an I
 Arrows mean “imports or depends on.” Every layer is private unless Conformance v1 names
 it in the final manifest.
 
-`architecture/layers.json` is the canonical machine-readable record for activation,
+`architecture/layers.json` is the canonical machine-readable record for state,
 paths, dependency direction, and visibility. Dependency-cruiser derives graph rules
-from it, while concise contract tests pin the current activation and filesystem. At
-`rp-01`, foundation is active; all six later records are future and have no source
-directories.
+from it, while concise contract tests pin the current state and filesystem. Foundation,
+source, and materialization are active; the four later records are
+future and have no source directories.
 
 ```text
 source -------------> foundation
@@ -88,7 +89,7 @@ These checks prevent ordinary architecture drift in a reviewed change. They do n
 every possible source spelling and are not a security sandbox against a contributor who
 changes code, configuration, and verification together.
 
-## Active `rp-01` foundation
+## Implemented private foundation, source, and materialization
 
 The foundation owns bounded portable JSON cloning/freezing, NFC and surrogate checks,
 identifiers, RFC 6901 pointers, fixed limits and overflow-safe arithmetic, the exact
@@ -109,12 +110,26 @@ Closed object schemas accept no structural options and allow only `$id`, `title`
 come only from the closed specification code catalog, contain exact frozen fields and a
 valid pointer, and never accept caller messages or accessor-backed entries. The private
 digest primitive checks the exact seven domains at runtime for both canonical input and
-raw canonical bytes; it does not add the final `rp-06` public digest wrappers.
+raw canonical bytes; it does not add readiness-gated public digest wrappers.
 
 The only production dependencies are exact `typebox@1.3.10` and
 `canonicalize@3.0.0`. Ajv, XState, `fast-check`, and host/runtime packages are absent.
 The current foundation implementation uses `node:crypto` for SHA-256; dependency-cruiser
 flags resolved imports of other Node core modules.
+
+Source owns the TypeBox-derived 12-kind authoring graph, ValueSchema, selectors,
+mappings, recursive regions, and deterministic normalization. Its current semantic pass
+is intentionally local: it validates each region's entry and targets, reachability and
+the ability to exit, nested-region exits and selector contexts, human-gate answer
+bijections, and the finite coverage required by `choice.otherwise: null`. Cross-module
+linking, call recursion, dominance, general dataflow/schema compatibility, composed
+bounds, Program lowering, and compiler-bundle digests remain compiler-layer work.
+
+Materialization owns only the portable, source-pinned selection envelope. It requires
+exactly one canonical-path entry for every reachable agent slot, accepts only a strategy
+declared by that source node, and rechecks source-owned participant policies. Slot keys
+are path-local, so distinct agent paths may deliberately share one slot key. Normalized
+source and materialization documents have separate domain-separated digests.
 
 Publication remains blocked by `private: true`, absent public entrypoints, and an
 unconditional failing `prepublishOnly` hook. A concise contract test checks the ordinary
@@ -123,7 +138,7 @@ and `ci.yml` as the only workflow. Review remains responsible for workflow chang
 
 ## Public boundary
 
-There is no public runtime boundary through `rp-01`. At `rp-06`, the root export becomes
+There is no public runtime boundary. After readiness acceptance, the root export becomes
 the exact schema/identity-helper/compiler/digest manifest declared by Conformance v1,
 and `@revisium/revo-pipeline/kernel` becomes the exact narrow Program IR and pure machine
 manifest. No other deep import is public. Earlier work items must not expose either
@@ -186,24 +201,7 @@ separate pipeline implementations.
 
 The delivery-plan requirement table assigns a stable ID, specification section, group,
 owner, item, suite, and evidence state. A structural test checks its 62 unique rows,
-derives coverage of all 48 specification sections, and resolves active `rp-00`/`rp-01`
-suite paths and markers without duplicating the table. Later labels are documentation-
-only planned evidence. Canonical byte/domain primitives land in foundation, while
-artifact, base-machine, and coordination semantics remain assigned to `rp-03`, `rp-04`,
-and `rp-05` without creating their future layers early.
-
-## Sequential delivery
-
-- `rp-00`: physical reset, architecture/docs baseline, Draft specs, and publication
-  block.
-- `rp-01`: portable foundation, schemas, canonicalization, hashing, diagnostics, and
-  bounds.
-- `rp-02`: source language, agent slots, and profile materialization.
-- `rp-03`: compiler/linker, Program IR, requirements, provenance, and digests.
-- `rp-04`: base pure kernel for activity, choice, call, end, data, and base cancellation.
-- `rp-05`: parallel, consensus lowering, repeat, map, wait, gate, and coordination.
-- `rp-06`: conformance, cross-package readiness, final manifests, and lifecycle
-  acceptance.
-
-All work items before `rp-06` remain nonpublishable. `rp-06` readiness does not itself
-publish; release remains a separate human gate.
+derives coverage of all 48 specification sections, and resolves active suite paths and
+markers without duplicating the table. Planned evidence creates no future layers early.
+The canonical schedule and history live only in the delivery plan and ADR 0005.
+Readiness acceptance does not itself publish; release remains a separate human gate.

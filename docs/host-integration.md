@@ -2,9 +2,9 @@
 
 ## Lifecycle
 
-The host contract remains Draft through `rp-06`. The `rp-00` reset exports no runtime
-API, so no host may integrate with this checkout as a package. The flow below defines the
-consumer boundary that `rp-03` through `rp-06` must prove.
+The host contract remains Draft, and this checkout exports no root runtime API. The flow
+below defines the consumer boundary that the complete implementation and conformance
+evidence must prove.
 
 ## Host flow
 
@@ -22,7 +22,7 @@ consumer boundary that `rp-03` through `rp-06` must prove.
    exactly that bundle, persists the trusted `{program,programDigest}` pair and kernel
    state, and drives durable effects around pure transitions.
 
-The final `./kernel` API described below is introduced only by `rp-06`:
+The final `./kernel` API described below is not currently exported:
 
 ```ts
 const kernelProgram = { program: plan.program, programDigest: plan.programDigest };
@@ -99,6 +99,6 @@ semantic intent through 54 pipeline-evidence and 49 host/cross-package evidence
 obligations; it does not preserve data structures or request 103 pipeline
 implementations.
 
-The package remains publication-blocked throughout `rp-00` through `rp-05`. Only
-`rp-06` may expose the exact root and `./kernel` manifests after all conformance and
-consumer-readiness gates pass. Publication remains a later human decision.
+The package remains publication-blocked until the exact root and `./kernel` manifests
+pass all conformance and consumer-readiness gates. Publication remains a later human
+decision.

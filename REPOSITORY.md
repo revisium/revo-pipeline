@@ -1,13 +1,17 @@
 # Repository Structure
 
-`@revisium/revo-pipeline` is in publication-blocked `rp-01` foundation delivery.
+`@revisium/revo-pipeline` has private foundation, source, and materialization layers and remains publication-blocked.
 
 ```text
-architecture/layers.json  canonical layer activation, DAG, and visibility manifest
+architecture/layers.json  canonical layer state, DAG, and visibility manifest
 src/index.ts               inert root module with no runtime exports
 src/foundation/            active private portable/schema/canonical/digest primitives
+src/source/                active private source contracts, normalization, and semantics
+src/materialization/       active private profile-materialization contracts and validation
 scripts/              local Sonar helpers
 test/foundation/      foundation behavior and normative digest-vector suites
+test/source/          source contract, graph, selector, normalization, and digest suites
+test/materialization/ materialization contract, source-relative, and digest suites
 test/architecture/    manifest, filesystem, and dependency-rule fixtures
 test/docs/            delivery-plan traceability checks
 test/package/         publication-block and empty-root-surface tests
@@ -37,8 +41,8 @@ extensions/tooling -> source + materialization + compiler (compile time only)
 ```
 
 `architecture/layers.json` owns this DAG without duplicating it in dependency-cruiser
-configuration. At `rp-01`, only `src/foundation/` exists. Vitest pins the current manifest
-and filesystem, while dependency-cruiser checks the resolved graph for cycles, root and
+configuration. The active `src/foundation/`, `src/source/`, and `src/materialization/`
+exist. Vitest pins the current manifest and filesystem, while dependency-cruiser checks the resolved graph for cycles, root and
 deep cross-layer imports, unresolved local imports, DAG violations, Node core drift, and
 classified nonproduction dependencies. Its resolved production-package allowlist comes
 from `package.json`. Same-layer peer imports remain valid, and the current implementation
@@ -47,24 +51,17 @@ uses `node:crypto` for SHA-256.
 The package is ESM. TypeScript, oxlint, Vitest, dependency-cruiser, build, and audit are
 normal contributor guardrails, not a source-syntax parser or a security sandbox against
 coordinated changes to code, configuration, and checks. Workflow changes are reviewed;
-the ordinary `rp-01` contract keeps `ci.yml` as the sole workflow.
+the ordinary repository contract keeps `ci.yml` as the sole workflow.
 
 Every layer remains private. The root authoring/compiler manifest and narrow `./kernel`
-machine manifest described by Conformance v1 are final `rp-06` surfaces, not reset
+machine manifest described by Conformance v1 are readiness-gated surfaces, not reset
 exports. No folder path becomes a public deep import.
 
 Dependency-cruiser derives layer rules from the manifest, enforces no cycles, keeps
 resolved local source imports inside `src`, and rejects unresolved source imports.
 
-## Work-item sequence
-
-`rp-00` reset/docs/block → **`rp-01` foundation (active)** → `rp-02`
-source/materialization →
-`rp-03` compiler/program/digests → `rp-04` base kernel → `rp-05` coordination/waits →
-`rp-06` conformance/readiness.
-
 Direct cutover means no compatibility layer or parallel implementation is allowed at
-any point. The package remains nonpublishable until the `rp-06` gates and a later
+any point. The package remains nonpublishable until readiness gates and a later
 separate publication approval.
 
 See `docs/delivery-plan.md` for objective, scope, out-of-scope, acceptance, dependencies,
