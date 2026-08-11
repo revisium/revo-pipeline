@@ -139,44 +139,114 @@ const nodesThatCanExit = (
   return canExit;
 };
 
-const cyclicNodes = (
+type FinishTask = { readonly key: string; readonly expanded: boolean };
+
+const scheduleFinishVisit = (
+  key: string,
   reachable: ReadonlySet<string>,
   edges: ReadonlyMap<string, readonly Target[]>,
-): ReadonlySet<string> => {
+  visited: Set<string>,
+  pending: FinishTask[],
+): void => {
+  if (visited.has(key)) {
+    return;
+  }
+  visited.add(key);
+  pending.push({ key, expanded: true });
+  for (const target of edges.get(key) ?? []) {
+    if (reachable.has(target.key) && !visited.has(target.key)) {
+      pending.push({ key: target.key, expanded: false });
+    }
+  }
+};
+
+const appendFinishOrder = (
+  start: string,
+  reachable: ReadonlySet<string>,
+  edges: ReadonlyMap<string, readonly Target[]>,
+  visited: Set<string>,
+  finished: string[],
+): void => {
+  const pending: FinishTask[] = [{ key: start, expanded: false }];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) {
+      break;
+    }
+    if (current.expanded) {
+      finished.push(current.key);
+    } else {
+      scheduleFinishVisit(current.key, reachable, edges, visited, pending);
+    }
+  }
+};
+
+const finishOrder = (
+  reachable: ReadonlySet<string>,
+  edges: ReadonlyMap<string, readonly Target[]>,
+): readonly string[] => {
   const visited = new Set<string>();
   const finished: string[] = [];
   for (const start of reachable) {
-    const pending: { readonly key: string; readonly expanded: boolean }[] = [
-      { key: start, expanded: false },
-    ];
-    while (pending.length > 0) {
-      const current = pending.pop();
-      if (current === undefined) {
-        break;
-      }
-      if (current.expanded) {
-        finished.push(current.key);
-        continue;
-      }
-      if (visited.has(current.key)) {
-        continue;
-      }
-      visited.add(current.key);
-      pending.push({ key: current.key, expanded: true });
-      for (const target of edges.get(current.key) ?? []) {
-        if (reachable.has(target.key) && !visited.has(target.key)) {
-          pending.push({ key: target.key, expanded: false });
-        }
-      }
-    }
+    appendFinishOrder(start, reachable, edges, visited, finished);
   }
+  return finished;
+};
 
+const reverseEdges = (
+  reachable: ReadonlySet<string>,
+  edges: ReadonlyMap<string, readonly Target[]>,
+): ReadonlyMap<string, readonly string[]> => {
   const reverse = new Map<string, string[]>([...reachable].map((key) => [key, []]));
   for (const key of reachable) {
     for (const target of edges.get(key) ?? []) {
       reverse.get(target.key)?.push(key);
     }
   }
+  return reverse;
+};
+
+const collectComponent = (
+  start: string,
+  reverse: ReadonlyMap<string, readonly string[]>,
+  assigned: Set<string>,
+): readonly string[] => {
+  const component: string[] = [];
+  const pending = [start];
+  assigned.add(start);
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) {
+      break;
+    }
+    component.push(current);
+    for (const predecessor of reverse.get(current) ?? []) {
+      if (!assigned.has(predecessor)) {
+        assigned.add(predecessor);
+        pending.push(predecessor);
+      }
+    }
+  }
+  return component;
+};
+
+const isCyclicComponent = (
+  component: readonly string[],
+  edges: ReadonlyMap<string, readonly Target[]>,
+): boolean => {
+  if (component.length > 1) {
+    return true;
+  }
+  const key = component[0];
+  return key !== undefined && (edges.get(key) ?? []).some((target) => target.key === key);
+};
+
+const cyclicNodes = (
+  reachable: ReadonlySet<string>,
+  edges: ReadonlyMap<string, readonly Target[]>,
+): ReadonlySet<string> => {
+  const finished = finishOrder(reachable, edges);
+  const reverse = reverseEdges(reachable, edges);
   const assigned = new Set<string>();
   const cyclic = new Set<string>();
   for (let index = finished.length - 1; index >= 0; index -= 1) {
@@ -184,27 +254,8 @@ const cyclicNodes = (
     if (start === undefined || assigned.has(start)) {
       continue;
     }
-    const component: string[] = [];
-    const pending = [start];
-    assigned.add(start);
-    while (pending.length > 0) {
-      const current = pending.pop();
-      if (current === undefined) {
-        break;
-      }
-      component.push(current);
-      for (const predecessor of reverse.get(current) ?? []) {
-        if (!assigned.has(predecessor)) {
-          assigned.add(predecessor);
-          pending.push(predecessor);
-        }
-      }
-    }
-    if (
-      component.length > 1 ||
-      (component[0] !== undefined &&
-        (edges.get(component[0]) ?? []).some(({ key }) => key === component[0]))
-    ) {
+    const component = collectComponent(start, reverse, assigned);
+    if (isCyclicComponent(component, edges)) {
       for (const key of component) {
         cyclic.add(key);
       }

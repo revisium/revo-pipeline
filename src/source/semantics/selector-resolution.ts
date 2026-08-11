@@ -95,6 +95,56 @@ export const validateSelectors = (
   }
 };
 
+const resolvedSchema = (schema: ValueSchema): SelectorSchemaResolution => ({ ok: true, schema });
+
+const unavailableSelector = (): SelectorSchemaResolution => ({ ok: false, reason: 'scope' });
+
+const optionalSchema = (schema: ValueSchema | undefined): SelectorSchemaResolution =>
+  schema === undefined ? unavailableSelector() : resolvedSchema(schema);
+
+const nodeOutputBaseSchema = (
+  nodeKey: string,
+  environment: SelectorEnvironment,
+  resolvingMaps: ReadonlySet<SourceNode>,
+): SelectorSchemaResolution => {
+  const node = environment.nodes.get(nodeKey);
+  if (node === undefined || resolvingMaps.has(node)) {
+    return unavailableSelector();
+  }
+  if (node.kind !== 'map') {
+    return optionalSchema(sourceNodeOutputSchema(node) ?? undefined);
+  }
+  const nextResolving = new Set(resolvingMaps).add(node);
+  const mapItems = resolveMapItemsSchema(node, environment, nextResolving);
+  return mapItems.ok
+    ? optionalSchema(sourceNodeOutputSchema(node, mapItems.value) ?? undefined)
+    : mapItems;
+};
+
+const repeatBaseSchema = (
+  selector: Extract<ValueSelector, { readonly kind: 'repeat' }>,
+  environment: SelectorEnvironment,
+): SelectorSchemaResolution => {
+  if (environment.repeat === undefined) {
+    return unavailableSelector();
+  }
+  return resolvedSchema(
+    selector.value === 'iteration'
+      ? environment.repeat.iteration
+      : environment.repeat.previousOutput,
+  );
+};
+
+const mapBaseSchema = (
+  selector: Extract<ValueSelector, { readonly kind: 'map' }>,
+  environment: SelectorEnvironment,
+): SelectorSchemaResolution => {
+  if (environment.map === undefined) {
+    return unavailableSelector();
+  }
+  return resolvedSchema(selector.value === 'item' ? environment.map.item : environment.map.itemKey);
+};
+
 const selectorBaseSchema = (
   selector: ValueSelector,
   environment: SelectorEnvironment,
@@ -102,55 +152,23 @@ const selectorBaseSchema = (
 ): SelectorSchemaResolution => {
   switch (selector.kind) {
     case 'literal':
-      return { ok: true, schema: literalValueSchema(selector.value) };
+      return resolvedSchema(literalValueSchema(selector.value));
     case 'moduleInput':
-      return { ok: true, schema: environment.moduleInput };
+      return resolvedSchema(environment.moduleInput);
     case 'scopeInput':
-      return { ok: true, schema: environment.scopeInput };
+      return resolvedSchema(environment.scopeInput);
     case 'regionOutput':
-      return environment.regionOutput === undefined
-        ? { ok: false, reason: 'scope' }
-        : { ok: true, schema: environment.regionOutput };
+      return optionalSchema(environment.regionOutput);
     case 'nodeFailure':
       return environment.nodes.has(selector.node)
-        ? { ok: true, schema: PipelineFailureValueSchema }
-        : { ok: false, reason: 'scope' };
-    case 'nodeOutput': {
-      const node = environment.nodes.get(selector.node);
-      if (node === undefined || resolvingMaps.has(node)) {
-        return { ok: false, reason: 'scope' };
-      }
-      if (node.kind === 'map') {
-        const nextResolving = new Set(resolvingMaps).add(node);
-        const mapItems = resolveMapItemsSchema(node, environment, nextResolving);
-        if (!mapItems.ok) {
-          return mapItems;
-        }
-        const schema = sourceNodeOutputSchema(node, mapItems.value);
-        return schema === null ? { ok: false, reason: 'scope' } : { ok: true, schema };
-      }
-      const schema = sourceNodeOutputSchema(node);
-      return schema === null ? { ok: false, reason: 'scope' } : { ok: true, schema };
-    }
+        ? resolvedSchema(PipelineFailureValueSchema)
+        : unavailableSelector();
+    case 'nodeOutput':
+      return nodeOutputBaseSchema(selector.node, environment, resolvingMaps);
     case 'repeat':
-      if (environment.repeat === undefined) {
-        return { ok: false, reason: 'scope' };
-      }
-      return {
-        ok: true,
-        schema:
-          selector.value === 'iteration'
-            ? environment.repeat.iteration
-            : environment.repeat.previousOutput,
-      };
+      return repeatBaseSchema(selector, environment);
     case 'map':
-      if (environment.map === undefined) {
-        return { ok: false, reason: 'scope' };
-      }
-      return {
-        ok: true,
-        schema: selector.value === 'item' ? environment.map.item : environment.map.itemKey,
-      };
+      return mapBaseSchema(selector, environment);
   }
   throw new TypeError('Unexpected schema-validated selector.');
 };

@@ -170,7 +170,7 @@ const arrayAlternatives = (
 ): readonly Extract<ValueSchema, { readonly type: 'array' }>[] | null => {
   if ('anyOf' in schema) {
     const alternatives = schema.anyOf.map(arrayAlternatives);
-    return alternatives.some((alternative) => alternative === null)
+    return alternatives.includes(null)
       ? null
       : alternatives.flatMap((alternative) => alternative ?? []);
   }

@@ -28,7 +28,7 @@ const mergeIntervals = (intervals: readonly NumericInterval[]): readonly Numeric
 export const finiteDomainOf = (schema: ValueSchema): FiniteDomain | null => {
   if ('anyOf' in schema) {
     const domains = schema.anyOf.map(finiteDomainOf);
-    if (domains.some((domain) => domain === null)) {
+    if (domains.includes(null)) {
       return null;
     }
     return Object.freeze({

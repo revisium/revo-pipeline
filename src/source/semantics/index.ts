@@ -192,7 +192,7 @@ export const validateSourceSemantics = (
     collector.add('BOUND_EXCEEDED', '/modules');
   }
   return Object.freeze(
-    registry.agents.sort((left, right) =>
+    registry.agents.toSorted((left, right) =>
       compareUnicodeCodePoints(left.sourcePath, right.sourcePath),
     ),
   );

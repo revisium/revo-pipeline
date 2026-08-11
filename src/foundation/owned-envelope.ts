@@ -211,6 +211,75 @@ const enqueueContainer = (
   return null;
 };
 
+type PrimitiveDisposition =
+  | { readonly kind: 'container'; readonly input: object }
+  | { readonly kind: 'normalized' }
+  | { readonly kind: 'failure'; readonly result: OwnedEnvelopeResult };
+
+const normalizePrimitive = (
+  input: unknown,
+  path: JsonPointer,
+  assign: Assignment,
+): PrimitiveDisposition => {
+  if (input === null || typeof input === 'boolean') {
+    assign(input);
+    return { kind: 'normalized' };
+  }
+  if (typeof input === 'number') {
+    if (!Number.isSafeInteger(input)) {
+      return { kind: 'failure', result: failure('CANONICAL_INPUT', path) };
+    }
+    assign(Object.is(input, -0) ? 0 : input);
+    return { kind: 'normalized' };
+  }
+  if (typeof input === 'string') {
+    if (!isNfcString(input)) {
+      return { kind: 'failure', result: failure('CANONICAL_INPUT', path) };
+    }
+    assign(input);
+    return { kind: 'normalized' };
+  }
+  return typeof input === 'object'
+    ? { kind: 'container', input }
+    : { kind: 'failure', result: failure('CANONICAL_INPUT', path) };
+};
+
+const processVisitTask = (
+  task: VisitTask,
+  activeObjects: WeakSet<object>,
+  maximumArrayItems: number,
+  tasks: InspectionTask[],
+): OwnedEnvelopeResult | null => {
+  const primitive = normalizePrimitive(task.input, task.path, task.assign);
+  if (primitive.kind === 'failure') {
+    return primitive.result;
+  }
+  if (primitive.kind === 'normalized') {
+    return null;
+  }
+
+  const current = primitive.input;
+  if (activeObjects.has(current) || task.depth > OWNED_ENVELOPE_MAX_DEPTH) {
+    return failure('CANONICAL_INPUT', task.path);
+  }
+  activeObjects.add(current);
+  return enqueueContainer(current, task.path, task.assign, task.depth, maximumArrayItems, tasks);
+};
+
+const processInspectionTask = (
+  task: InspectionTask,
+  activeObjects: WeakSet<object>,
+  maximumArrayItems: number,
+  tasks: InspectionTask[],
+): OwnedEnvelopeResult | null => {
+  if (task.kind === 'visit') {
+    return processVisitTask(task, activeObjects, maximumArrayItems, tasks);
+  }
+  activeObjects.delete(task.input);
+  task.assign(Object.freeze(task.output));
+  return null;
+};
+
 export const normalizeOwnedEnvelope = (
   input: unknown,
   maximumArrayItems: number,
@@ -230,48 +299,9 @@ export const normalizeOwnedEnvelope = (
     if (task === undefined) {
       break;
     }
-    if (task.kind === 'exit') {
-      activeObjects.delete(task.input);
-      task.assign(Object.freeze(task.output));
-      continue;
-    }
-    const { input: current, path, depth, assign } = task;
-    if (current === null || typeof current === 'boolean') {
-      assign(current);
-      continue;
-    }
-    if (typeof current === 'number') {
-      if (!Number.isSafeInteger(current)) {
-        return failure('CANONICAL_INPUT', path);
-      }
-      assign(Object.is(current, -0) ? 0 : current);
-      continue;
-    }
-    if (typeof current === 'string') {
-      if (!isNfcString(current)) {
-        return failure('CANONICAL_INPUT', path);
-      }
-      assign(current);
-      continue;
-    }
-    if (typeof current !== 'object' || activeObjects.has(current)) {
-      return failure('CANONICAL_INPUT', path);
-    }
-    if (depth > OWNED_ENVELOPE_MAX_DEPTH) {
-      return failure('CANONICAL_INPUT', path);
-    }
-
-    activeObjects.add(current);
-    const containerFailure = enqueueContainer(
-      current,
-      path,
-      assign,
-      depth,
-      maximumArrayItems,
-      tasks,
-    );
-    if (containerFailure !== null) {
-      return containerFailure;
+    const taskFailure = processInspectionTask(task, activeObjects, maximumArrayItems, tasks);
+    if (taskFailure !== null) {
+      return taskFailure;
     }
   }
 
