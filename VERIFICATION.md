@@ -9,7 +9,7 @@ corepack pnpm verify
 
 `verify` is the required local gate. It checks formatting, types, lint, tests with
 coverage, dependency-cruiser architecture rules, and the TypeScript build. Vitest owns
-the foundation behavior, package, layer-manifest, and documentation contracts.
+the foundation, source, materialization, package, layer-manifest, and documentation contracts.
 
 Useful focused commands:
 
@@ -19,6 +19,7 @@ corepack pnpm typecheck
 corepack pnpm lint
 corepack pnpm test
 corepack pnpm exec vitest run test/foundation
+corepack pnpm exec vitest run test/source test/materialization
 corepack pnpm exec vitest run test/architecture test/docs test/package
 corepack pnpm verify:architecture
 corepack pnpm build
@@ -27,17 +28,16 @@ corepack pnpm build
 Package tests check the private ESM manifest, exact `typebox@1.3.10` and
 `canonicalize@3.0.0` production dependencies, absent public fields, inert root, sole
 `ci.yml` workflow, and the unconditional failing publish hook. They do not pack or
-validate a consumer API because no package API exists before `rp-06`.
+validate a consumer API because no package API exists before readiness acceptance.
 
 Run `actionlint` for workflow changes, `bash -n scripts/*.sh` for shell changes, and
 `corepack pnpm audit --prod` for manifest or dependency changes. Also run
 `git diff --check` and the direct-cutover absence/count audits when layers, lifecycle
-documents, vocabularies, or ownership evidence change. The required local audits for
-`rp-01` are:
+documents, vocabularies, or ownership evidence change. The required local layer audits are:
 
 ```bash
-test ! -d src/source && test ! -d src/materialization && test ! -d src/program
-test ! -d src/compiler && test ! -d src/kernel && test ! -d src/extensions
+test ! -d src/program && test ! -d src/compiler
+test ! -d src/kernel && test ! -d src/extensions
 test "$(ls -1 .github/workflows)" = ci.yml
 git diff --check
 ```

@@ -12,7 +12,7 @@ RFC 8174) when, and only when, they appear in all capitals.
 
 This specification defines normalization, RFC 8785 bytes, digest domains, and golden
 vectors for every public hashed artifact. It defines no `planDigest`. These APIs remain
-Draft and unavailable until `rp-06`.
+Draft and unavailable from the package root while conformance is incomplete.
 
 ## Validated canonical domain
 

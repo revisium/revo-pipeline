@@ -12,8 +12,9 @@ RFC 8174) when, and only when, they appear in all capitals.
 
 This specification defines the exact compiler result, linked Program IR, abstract
 requirements, and provenance. It defines no exact executor binding or `ExecutionPlan`.
-These APIs remain Draft and unavailable until `rp-06`. TypeBox schemas are authoritative
-and MUST reject unknown fields, versions, kinds, and policies.
+These APIs remain Draft and unavailable from the package root while conformance is
+incomplete. TypeBox schemas are authoritative and MUST reject unknown fields, versions,
+kinds, and policies.
 
 ## Compiler result
 

@@ -12,8 +12,9 @@ RFC 8174) when, and only when, they appear in all capitals.
 
 This specification defines the complete portable profile contribution accepted by the
 compiler. It selects agent-slot structure only. It does not define stored profiles,
-concrete agents, or executor bindings. This API remains Draft and unavailable until
-`rp-06`. Its TypeBox schema MUST use `additionalProperties: false` at every object.
+concrete agents, or executor bindings. This API remains Draft and unavailable from the
+package root while conformance is incomplete. Its TypeBox schema MUST use
+`additionalProperties: false` at every object.
 
 ## Exact envelope
 

@@ -12,7 +12,7 @@
 </div>
 
 > [!IMPORTANT]
-> Publication is blocked. The active `rp-01` foundation is private, the root module has
+> Publication is blocked. The implemented foundation, source, and materialization layers are private, the root module has
 > no runtime exports, and this is not an installable consumer API.
 
 ## Status
@@ -22,7 +22,7 @@ establishes a direct greenfield cutover to one source-language/compiler/closed-I
 kernel architecture. There is no adapter, converter, dual reader, deprecated alias,
 compatibility window, hidden interpreter, or runtime node-kind plugin.
 
-The six normative contracts remain Draft through `rp-06`:
+The six normative contracts remain Draft until conformance and consumer readiness are accepted:
 
 - [Pipeline Source v1](docs/specs/pipeline-source-v1.spec.md)
 - [Pipeline Materialization v1](docs/specs/pipeline-materialization-v1.spec.md)
@@ -31,12 +31,13 @@ The six normative contracts remain Draft through `rp-06`:
 - [Pipeline Canonicalization v1](docs/specs/pipeline-canonicalization-v1.spec.md)
 - [Pipeline Conformance v1](docs/specs/pipeline-conformance-v1.spec.md)
 
-`rp-01` is the active work item. It implements bounded portable values, identifiers,
-RFC 6901 pointers, diagnostics, closed TypeBox object helpers, RFC 8785 canonicalization,
-and all seven domain-separated SHA-256 primitives under the private `foundation` layer.
+The current private implementation includes the exact
+12-kind TypeBox source language, recursive local-region semantics, canonical source
+normalization and digesting, reachable agent-slot paths, and source-pinned portable
+profile materialization under private `source` and `materialization` layers.
 Its production dependencies are exactly `typebox@1.3.10` and `canonicalize@3.0.0`;
 hashing uses `node:crypto`. `src/index.ts` remains deliberately inert. The final `.` and
-`./kernel` exports are introduced only by `rp-06` after conformance and consumer
+`./kernel` exports are introduced only after conformance and consumer
 readiness are proved. Lifecycle acceptance still does not publish a release;
 publication remains a separate human gate.
 
@@ -73,24 +74,14 @@ pipeline evidence 54 and host evidence 49; host evidence includes core/run
 cross-package fixtures. They are traceability requirements, not 103 pipeline
 implementations.
 
-The machine-readable [layer manifest](architecture/layers.json) activates only
-`foundation` at `rp-01`. Source, materialization, program, compiler, kernel, and
-extensions remain future private records; their directories do not exist yet. Imports
+The machine-readable [layer manifest](architecture/layers.json) marks `foundation`,
+`source`, and `materialization` active. Program, compiler, kernel, and extensions
+remain future private records; their directories do not exist yet. Imports
 between active layers must use the target layer's curated `index.ts`, same-layer peer
 imports are allowed, and no layer may import the inert root module.
 
-## Sequential master plan
-
-1. `rp-00` — physical reset, accepted architecture docs, Draft specs, and publication
-   block.
-2. `rp-01` — foundation primitives and exact production dependencies.
-3. `rp-02` — source language and profile materialization.
-4. `rp-03` — compiler, linker, Program IR, provenance, and digests.
-5. `rp-04` — base pure kernel.
-6. `rp-05` — structured coordination, cancellation, waits, and gates.
-7. `rp-06` — conformance, consumer readiness, final exports, and lifecycle acceptance.
-
-Every intermediate state remains nonpublishable.
+The canonical sequential schedule and evidence state live only in the
+[delivery plan](docs/delivery-plan.md). Every intermediate state remains nonpublishable.
 
 ## Documentation
 
@@ -112,7 +103,7 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm verify
 ```
 
-Focused foundation work can use `corepack pnpm exec vitest run test/foundation` before
+Focused work can use `corepack pnpm exec vitest run test/foundation test/source test/materialization` before
 the required full gate. Architecture and package checks remain part of `verify`.
 
 Publishing, tagging, releasing, and merging require separate approval.

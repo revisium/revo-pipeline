@@ -11,14 +11,12 @@ const manifest: unknown = JSON.parse(
 
 const expectedManifest = {
   schemaVersion: 'revo-pipeline-layers/v1',
-  currentItem: 'rp-01',
   sourceRoot: 'src',
   rootModule: 'src/index.ts',
   layers: [
     {
       name: 'foundation',
       path: 'src/foundation',
-      activation: 'rp-01',
       state: 'active',
       public: false,
       dependencies: [],
@@ -26,23 +24,20 @@ const expectedManifest = {
     {
       name: 'source',
       path: 'src/source',
-      activation: 'rp-02',
-      state: 'future',
+      state: 'active',
       public: false,
       dependencies: ['foundation'],
     },
     {
       name: 'materialization',
       path: 'src/materialization',
-      activation: 'rp-02',
-      state: 'future',
+      state: 'active',
       public: false,
       dependencies: ['foundation', 'source'],
     },
     {
       name: 'program',
       path: 'src/program',
-      activation: 'rp-03',
       state: 'future',
       public: false,
       dependencies: ['foundation'],
@@ -50,7 +45,6 @@ const expectedManifest = {
     {
       name: 'compiler',
       path: 'src/compiler',
-      activation: 'rp-03',
       state: 'future',
       public: false,
       dependencies: ['foundation', 'source', 'materialization', 'program'],
@@ -58,7 +52,6 @@ const expectedManifest = {
     {
       name: 'kernel',
       path: 'src/kernel',
-      activation: 'rp-04',
       state: 'future',
       public: false,
       dependencies: ['foundation', 'program'],
@@ -66,7 +59,6 @@ const expectedManifest = {
     {
       name: 'extensions',
       path: 'src/extensions',
-      activation: 'rp-05',
       state: 'future',
       public: false,
       dependencies: ['source', 'materialization', 'compiler'],
@@ -75,12 +67,17 @@ const expectedManifest = {
 } as const;
 
 describe('canonical layer manifest', () => {
-  it('pins the rp-01 activation state and dependency DAG', () => {
+  it('pins the layer state and dependency DAG', () => {
     expect(manifest).toEqual(expectedManifest);
   });
 
-  it('materializes only the active foundation layer', () => {
-    expect(readdirSync(join(repositoryRoot, 'src')).toSorted()).toEqual(['foundation', 'index.ts']);
+  it('materializes only the active foundation, source, and materialization layers', () => {
+    expect(readdirSync(join(repositoryRoot, 'src')).toSorted()).toEqual([
+      'foundation',
+      'index.ts',
+      'materialization',
+      'source',
+    ]);
     expect(existsSync(join(repositoryRoot, 'src', 'foundation', 'index.ts'))).toBe(true);
     for (const layer of expectedManifest.layers.filter(({ state }) => state === 'future')) {
       expect(existsSync(join(repositoryRoot, layer.path))).toBe(false);

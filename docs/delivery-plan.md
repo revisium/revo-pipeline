@@ -3,8 +3,9 @@
 This plan turns Accepted ADR 0005 and the six Draft specifications into sequential
 `rp-00` through `rp-06` work items. It does not accept a Draft specification, create a
 future implementation placeholder, expose a package API, or authorize publication.
-`architecture/layers.json` remains the machine-readable source for layer activation,
-dependency direction, and private/public state.
+This plan owns the delivery schedule. `architecture/layers.json` remains the
+machine-readable source for current layer state, dependency direction, and
+private/public visibility.
 
 ## `rp-00` — reset and publication block
 
@@ -36,11 +37,15 @@ dependency direction, and private/public state.
 - **Objective:** implement the complete closed authoring language and portable profile
   contribution without exposing them publicly.
 - **Scope:** 12 source kinds, recursive regions, selectors, ValueSchema, source
-  validation, agent slots, the exact materialization envelope, and keyed-set normalization.
+  validation, local region graph semantics, finite `otherwise: null` choice proof,
+  canonical agent-slot paths and source digests, the exact materialization envelope,
+  source-relative slot validation, materialization digests, and keyed-set normalization.
 - **Out of scope:** Program emission, compiler-bundle digests, runtime execution, exact
   executor bindings, host policy, and public exports.
-- **Acceptance:** runtime/static schema agreement, closed-union, hostile-object,
-  materialization, diagnostic, and normalization suites pass.
+- **Acceptance:** runtime/static schema agreement, all 12 kinds, closed tagged unions,
+  local/nested CFG checks, selector contexts, finite choice coverage, hostile-object and
+  boundary handling, canonical-path/digest vectors, materialization totality/policy,
+  deterministic diagnostics, and normalization suites pass.
 - **Dependencies:** `rp-01`.
 
 ## `rp-03` — compiler and Program
@@ -95,7 +100,7 @@ dependency direction, and private/public state.
 
 Each row is one independently verifiable requirement. `group` is the specification
 workstream and `owner` is the repository layer or repository policy boundary responsible
-for the evidence. `evidence_state` is `active` only for implemented `rp-00`/`rp-01`
+for the evidence. `evidence_state` is `active` only for implemented `rp-00` through `rp-02`
 evidence and `planned` for future work. Repeated spec sections deliberately split
 foundation byte/domain evidence from compiler, base-kernel, and coordination semantics;
 planned rows reserve evidence ownership only and create no directories, APIs, or test
@@ -480,8 +485,8 @@ placeholders.
     "group": "materialization",
     "owner": "materialization",
     "item": "rp-02",
-    "suite": "materialization-contract",
-    "evidence_state": "planned"
+    "suite": "test/materialization/contract.test.ts#materialization contract",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-039",
@@ -490,8 +495,8 @@ placeholders.
     "group": "materialization",
     "owner": "materialization",
     "item": "rp-02",
-    "suite": "materialization-schema",
-    "evidence_state": "planned"
+    "suite": "test/materialization/contract.test.ts#materialization schema",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-040",
@@ -500,8 +505,8 @@ placeholders.
     "group": "materialization",
     "owner": "materialization",
     "item": "rp-02",
-    "suite": "materialization-source-validation",
-    "evidence_state": "planned"
+    "suite": "test/materialization/source-coverage.test.ts#materialization source validation",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-041",
@@ -520,8 +525,8 @@ placeholders.
     "group": "materialization",
     "owner": "materialization",
     "item": "rp-02",
-    "suite": "materialization-determinism",
-    "evidence_state": "planned"
+    "suite": "test/materialization/determinism.test.ts#materialization determinism",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-043",
@@ -630,8 +635,8 @@ placeholders.
     "group": "source",
     "owner": "source",
     "item": "rp-02",
-    "suite": "source-contract",
-    "evidence_state": "planned"
+    "suite": "test/source/contracts/contract.test.ts#source contract",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-054",
@@ -650,8 +655,8 @@ placeholders.
     "group": "source",
     "owner": "source",
     "item": "rp-02",
-    "suite": "source-selectors-mappings",
-    "evidence_state": "planned"
+    "suite": "test/source/semantics/selectors-context.test.ts#source selectors and contexts",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-056",
@@ -660,8 +665,8 @@ placeholders.
     "group": "source",
     "owner": "source",
     "item": "rp-02",
-    "suite": "source-region-schema",
-    "evidence_state": "planned"
+    "suite": "test/source/semantics/region-graph.test.ts#source region graph",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-057",
@@ -670,8 +675,8 @@ placeholders.
     "group": "source",
     "owner": "source",
     "item": "rp-02",
-    "suite": "source-node-union",
-    "evidence_state": "planned"
+    "suite": "test/source/contracts/node-union.test.ts#source node union",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-058",
@@ -680,8 +685,8 @@ placeholders.
     "group": "source",
     "owner": "source",
     "item": "rp-02",
-    "suite": "source-node-semantics",
-    "evidence_state": "planned"
+    "suite": "test/source/semantics/node-semantics.test.ts#source node semantics",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-059",

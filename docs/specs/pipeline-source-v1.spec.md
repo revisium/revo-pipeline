@@ -11,10 +11,11 @@ RFC 8174) when, and only when, they appear in all capitals.
 ## Scope
 
 This specification defines the complete public source-language document. The schemas
-and API remain Draft and unavailable until `rp-06`. TypeBox schemas are the runtime
-source of truth; the exact static shapes below MUST be derived from them. Every object
-schema MUST use `additionalProperties: false`. Unknown fields, versions, and union kinds
-MUST be rejected.
+and API remain Draft and unavailable from the package root while conformance is
+incomplete. TypeBox schemas are the runtime source of truth; the exact static shapes
+below MUST be derived from them. Every object schema MUST use
+`additionalProperties: false`. Unknown fields, versions, and union kinds MUST be
+rejected.
 
 ## Portable values and schema dialect
 
@@ -65,10 +66,15 @@ pairwise non-identical after canonicalization.
 All strings, keys, enum members, and JSON Pointer tokens MUST be NFC and reject unpaired
 surrogates. Identifiers MUST contain 1–64 Unicode code points and reject controls, `/`,
 and `~`. Display strings MUST contain at most 512 code points. Numbers MUST be finite
-safe integers; `-0` MUST normalize to `0`. Portable values MUST have depth at most 16,
-64 own keys per object, 1,024 array items, and 65,536 visited values per package.
-Accessors, symbols, sparse arrays, custom prototypes, functions, and `undefined` MUST be
-rejected without invoking getters.
+safe integers; `-0` MUST normalize to `0`. Source-envelope objects MUST have at most 64
+own keys. Source-envelope arrays use their explicit bound where one is declared and
+otherwise have at most 1,024 items. Region and RepeatCondition structural nesting MUST
+not exceed 32, and a ValueSchema tree MUST not exceed depth 16. The portable-value
+limits apply only at embedded JsonValue positions; their 65,536 visited-value allowance
+is cumulative across the package rather than restarted per literal. A valid source
+envelope may therefore exceed the general standalone portable-value depth or visited-
+value limits outside those embedded positions. Accessors, symbols, sparse arrays, custom
+prototypes, functions, and `undefined` MUST be rejected without invoking getters.
 
 ## Selectors, mappings, conditions, and targets
 
