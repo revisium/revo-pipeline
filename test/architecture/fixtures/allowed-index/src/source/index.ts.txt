@@ -1,0 +1,3 @@
+import { foundation } from '../foundation/index.js';
+
+export { foundation };

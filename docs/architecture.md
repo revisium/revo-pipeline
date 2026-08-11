@@ -4,8 +4,8 @@
 
 [ADR 0005](./adr/0005-greenfield-language-compiler-kernel-cutover.md) is Accepted and
 sets the direct-cutover architecture. The six contracts in `docs/specs/` remain Draft
-through `rp-06`. The `rp-00` repository state is an inert source module plus a
-fail-closed publication block; it exposes no consumer API.
+through `rp-06`. `rp-01` activates only the private foundation layer while retaining the
+inert root module and unconditional publication refusal; it exposes no consumer API.
 
 ## System shape
 
@@ -16,8 +16,8 @@ I/O and knows no runtime provider, model, DBOS workflow, attempt, database, queu
 subscription.
 
 Starting in `rp-01`, its only production dependencies are exact `typebox@1.3.10` and
-`canonicalize@3.0.0`; hashing uses `node:crypto`. `fast-check` is development-only. Ajv,
-XState, and host/runtime libraries are not production dependencies.
+`canonicalize@3.0.0`; hashing uses `node:crypto`. `fast-check`, Ajv, XState, and
+host/runtime libraries are not installed in `rp-01`.
 
 ```text
 playbook PipelineSourcePackage + portable ProfileMaterialization
@@ -48,6 +48,12 @@ forms lower to ordinary IR structure, so neither `agent` nor `consensus` is an I
 Arrows mean “imports or depends on.” Every layer is private unless Conformance v1 names
 it in the final manifest.
 
+`architecture/layers.json` is the canonical machine-readable record for activation,
+paths, dependency direction, and visibility. Dependency-cruiser derives graph rules
+from it, while concise contract tests pin the current activation and filesystem. At
+`rp-01`, foundation is active; all six later records are future and have no source
+directories.
+
 ```text
 source -------------> foundation
 materialization ----> foundation + source contracts
@@ -70,12 +76,54 @@ extensions/tooling -> source + materialization + compiler (compile time only)
 - **extensions/tooling** may lower built-in authoring forms before canonical source
   validation. The first alpha seam is internal and compile-time only.
 
-Stable boundaries are checked declaratively; behavior and package tests own observable
-semantics.
+Stable boundaries are checked with standard TypeScript, oxlint, Vitest, and
+dependency-cruiser behavior. Cross-layer imports target the dependency layer's curated
+`index.ts`; same-layer peer imports are allowed. Layers do not import `src/index.ts`, and
+the inert root does not import a private layer. Dependency-cruiser evaluates the resolved
+module graph, derives the layer DAG from the manifest, rejects classified nonproduction
+packages, and applies a production-package path allowlist derived from `package.json`.
+Tests and scripts retain their development tooling boundary.
+
+These checks prevent ordinary architecture drift in a reviewed change. They do not parse
+every possible source spelling and are not a security sandbox against a contributor who
+changes code, configuration, and verification together.
+
+## Active `rp-01` foundation
+
+The foundation owns bounded portable JSON cloning/freezing, NFC and surrogate checks,
+identifiers, RFC 6901 pointers, fixed limits and overflow-safe arithmetic, the exact
+`PipelineFailure` shape `{code,path}`, diagnostic definitions/order/truncation, closed
+TypeBox object construction, RFC 8785 serialization through exact `canonicalize@3.0.0`,
+and domain-separated full SHA-256 through `node:crypto`.
+
+Canonicalization validates portable input before serialization. It rejects custom
+prototypes, accessors without invocation, symbol properties, sparse arrays, cycles,
+non-NFC or unpaired strings and keys, fractional or unsafe numbers, and bound overflow;
+`-0` becomes `0`. General portable strings and keys have no display-string cap; the
+512-code-point limit belongs only to declared display strings and fixed diagnostic
+messages. Every reflection failure, including hostile or revoked proxies, becomes a
+stable redacted rejection.
+
+Closed object schemas accept no structural options and allow only `$id`, `title`, and
+`description` metadata through defensive own-data descriptors. Foundation diagnostics
+come only from the closed specification code catalog, contain exact frozen fields and a
+valid pointer, and never accept caller messages or accessor-backed entries. The private
+digest primitive checks the exact seven domains at runtime for both canonical input and
+raw canonical bytes; it does not add the final `rp-06` public digest wrappers.
+
+The only production dependencies are exact `typebox@1.3.10` and
+`canonicalize@3.0.0`. Ajv, XState, `fast-check`, and host/runtime packages are absent.
+The current foundation implementation uses `node:crypto` for SHA-256; dependency-cruiser
+flags resolved imports of other Node core modules.
+
+Publication remains blocked by `private: true`, absent public entrypoints, and an
+unconditional failing `prepublishOnly` hook. A concise contract test checks the ordinary
+reviewed state: exact production dependencies, no public package fields, an inert root,
+and `ci.yml` as the only workflow. Review remains responsible for workflow changes.
 
 ## Public boundary
 
-There is no public runtime boundary in the reset. At `rp-06`, the root export becomes
+There is no public runtime boundary through `rp-01`. At `rp-06`, the root export becomes
 the exact schema/identity-helper/compiler/digest manifest declared by Conformance v1,
 and `@revisium/revo-pipeline/kernel` becomes the exact narrow Program IR and pure machine
 manifest. No other deep import is public. Earlier work items must not expose either
@@ -135,6 +183,14 @@ compiler 22, kernel 32, core 7, and run 42. Compiler plus kernel produce 54
 pipeline-evidence obligations; core plus run produce 49 host/cross-package evidence
 obligations. These counts preserve intent and ownership; they do not request 103
 separate pipeline implementations.
+
+The delivery-plan requirement table assigns a stable ID, specification section, group,
+owner, item, suite, and evidence state. A structural test checks its 62 unique rows,
+derives coverage of all 48 specification sections, and resolves active `rp-00`/`rp-01`
+suite paths and markers without duplicating the table. Later labels are documentation-
+only planned evidence. Canonical byte/domain primitives land in foundation, while
+artifact, base-machine, and coordination semantics remain assigned to `rp-03`, `rp-04`,
+and `rp-05` without creating their future layers early.
 
 ## Sequential delivery
 

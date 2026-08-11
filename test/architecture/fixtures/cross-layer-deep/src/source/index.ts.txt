@@ -1,0 +1,3 @@
+import { identifier } from '../foundation/identifier.js';
+
+export { identifier };
