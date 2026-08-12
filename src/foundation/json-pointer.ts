@@ -8,8 +8,12 @@ export type JsonPointerLookup =
 
 const encodedTilde = /~[01]/gu;
 const invalidTilde = /~(?![01])/u;
-const canonicalArrayIndex = /^(?:0|[1-9]\d*)$/u;
+export const JSON_ARRAY_INDEX_PATTERN = String.raw`^(?:0|[1-9]\d*)$`;
+const jsonArrayIndexPattern = new RegExp(JSON_ARRAY_INDEX_PATTERN, 'u');
 const missing: JsonPointerLookup = Object.freeze({ found: false });
+
+export const isCanonicalJsonArrayIndex = (value: string): boolean =>
+  jsonArrayIndexPattern.test(value);
 
 export const escapeJsonPointerToken = (token: string): string =>
   token.replaceAll('~', '~0').replaceAll('/', '~1');
@@ -74,7 +78,7 @@ const inspectContainer = (value: object): ContainerInspection | null => {
 };
 
 const readArrayIndex = (value: object, length: number, token: string): JsonPointerLookup => {
-  if (!canonicalArrayIndex.test(token)) {
+  if (!isCanonicalJsonArrayIndex(token)) {
     return missing;
   }
   const index = Number(token);

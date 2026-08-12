@@ -100,7 +100,7 @@ fi
 issue_query_args=(
   --get "${SONAR_HOST_URL}/api/issues/search"
   --data-urlencode "componentKeys=${PROJECT_KEY}"
-  --data-urlencode "issueStatuses=OPEN"
+  --data-urlencode "issueStatuses=OPEN,CONFIRMED"
   --data-urlencode "ps=500"
   "${scope_args[@]}"
 )
@@ -109,14 +109,15 @@ if ! response="$(curl -fsS -u "${SONAR_TOKEN}:" "${issue_query_args[@]}")"; then
   exit 1
 fi
 
-node -e '
+node --input-type=module -e '
+import { actionableSonarIssues } from "./scripts/sonar-issue-status.mjs";
 const payload = JSON.parse(process.argv[1]);
-const issues = payload.issues ?? [];
+const issues = actionableSonarIssues(payload);
 if (issues.length === 0) {
   console.log("Sonar open issues: 0");
   process.exit(0);
 }
-console.error(`Sonar open issues: ${payload.total ?? issues.length}`);
+console.error(`Sonar open issues: ${issues.length}`);
 for (const issue of issues.slice(0, 50)) {
   const component = String(issue.component ?? "").replace(/^[^:]+:/, "");
   const line = issue.line ? `:${issue.line}` : "";

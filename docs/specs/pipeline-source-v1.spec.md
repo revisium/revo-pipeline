@@ -617,6 +617,12 @@ MUST NOT exceed 64 modules, 4,096 source nodes, 16,384 targets, nesting depth 32
 depth 32. Overflow-safe static/dynamic expansion MUST prove no more than the package's
 `maximumTotalActivities`, which is in `1..1000000`.
 
+For every call, the normalized keyed set of `routes.outcomes[].outcome` MUST equal the
+normalized keyed set of the called module region's exits. A missing value, extra value,
+or both produces exactly one `LINK_MODULE_OUTCOME_MISMATCH` at the call node's
+`/routes/outcomes` path, with fixed LINK-family message
+`The call outcome routes do not match the called module outcomes.`
+
 ```ts
 type PipelineDiagnosticFamily =
   | 'SOURCE'

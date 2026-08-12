@@ -58,6 +58,9 @@ sufficient correction.
   normalization, local and nested CFG semantics, selector contexts, finite choice
   coverage, canonical agent paths, source-relative slot totality/policies, exact
   diagnostics, and normative source/materialization digest vectors.
+- Program and compiler suites cover the closed nine-kind IR, linking, dataflow,
+  overflow-safe composed bounds, exact lowering, requirements, provenance, ownership,
+  and full compiler-bundle digest vectors.
 - Architecture suites pin the active manifest/filesystem and use representative
   dependency-cruiser fixtures for the DAG, cycles, root/deep imports, resolution, Node
   core use, and resolved production-versus-development package boundaries.

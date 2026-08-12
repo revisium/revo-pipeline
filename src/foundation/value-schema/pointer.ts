@@ -1,34 +1,31 @@
-import { parseJsonPointer, type JsonPointer } from '../../foundation/index.js';
-import type { ValueSchema } from '../contracts/index.js';
-import { atLeastTwoTuple } from '../internal.js';
+import { isCanonicalJsonArrayIndex, parseJsonPointer, type JsonPointer } from '../json-pointer.js';
+import type { ValueSchema } from './contracts.js';
 import { valueSchemaText } from './normalization.js';
-
-const canonicalArrayIndex = /^(?:0|[1-9]\d*)$/u;
 
 type AnyOfValueSchema = Extract<ValueSchema, { readonly anyOf: readonly ValueSchema[] }>;
 type ObjectValueSchema = Extract<ValueSchema, { readonly type: 'object' }>;
 type ArrayValueSchema = Extract<ValueSchema, { readonly type: 'array' }>;
 
-const combineProjectedAlternatives = (
-  alternatives: readonly (ValueSchema | null)[],
-  fallback: ValueSchema,
-): ValueSchema | null => {
+const combineAlternatives = (alternatives: readonly (ValueSchema | null)[]): ValueSchema | null => {
   if (alternatives.includes(null)) {
     return null;
   }
   const unique = new Map<string, ValueSchema>();
   for (const alternative of alternatives) {
     if (alternative !== null) {
-      const identity = valueSchemaText(alternative);
-      if (!unique.has(identity)) {
-        unique.set(identity, alternative);
-      }
+      unique.set(valueSchemaText(alternative), alternative);
     }
   }
   const projected = [...unique.values()];
-  return projected.length === 1
-    ? (projected[0] ?? fallback)
-    : { anyOf: atLeastTwoTuple(projected) };
+  if (projected.length === 1) {
+    return projected[0] ?? null;
+  }
+  const [first, second, ...rest] = projected;
+  if (first === undefined || second === undefined) {
+    return null;
+  }
+  const anyOf: [ValueSchema, ValueSchema, ...ValueSchema[]] = [first, second, ...rest];
+  return Object.freeze({ anyOf: Object.freeze(anyOf) });
 };
 
 const projectAlternatives = (
@@ -36,12 +33,11 @@ const projectAlternatives = (
   tokens: readonly string[],
   tokenIndex: number,
 ): ValueSchema | null =>
-  combineProjectedAlternatives(
+  combineAlternatives(
     schema.anyOf.map((alternative) => projectTokens(alternative, tokens, tokenIndex)),
-    schema,
   );
 
-const projectObjectToken = (
+const projectObject = (
   schema: ObjectValueSchema,
   token: string,
   tokens: readonly string[],
@@ -53,13 +49,13 @@ const projectObjectToken = (
     : projectTokens(property, tokens, tokenIndex + 1);
 };
 
-const projectArrayToken = (
+const projectArray = (
   schema: ArrayValueSchema,
   token: string,
   tokens: readonly string[],
   tokenIndex: number,
 ): ValueSchema | null => {
-  if (!canonicalArrayIndex.test(token)) {
+  if (!isCanonicalJsonArrayIndex(token)) {
     return null;
   }
   const index = Number(token);
@@ -84,10 +80,10 @@ function projectTokens(
     return projectAlternatives(schema, tokens, tokenIndex);
   }
   if (schema.type === 'object') {
-    return projectObjectToken(schema, token, tokens, tokenIndex);
+    return projectObject(schema, token, tokens, tokenIndex);
   }
   if (schema.type === 'array') {
-    return projectArrayToken(schema, token, tokens, tokenIndex);
+    return projectArray(schema, token, tokens, tokenIndex);
   }
   return null;
 }

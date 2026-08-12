@@ -9,7 +9,8 @@ corepack pnpm verify
 
 `verify` is the required local gate. It checks formatting, types, lint, tests with
 coverage, dependency-cruiser architecture rules, and the TypeScript build. Vitest owns
-the foundation, source, materialization, package, layer-manifest, and documentation contracts.
+the foundation, source, materialization, Program, compiler, package, layer-manifest, and
+documentation contracts.
 
 Useful focused commands:
 
@@ -20,6 +21,7 @@ corepack pnpm lint
 corepack pnpm test
 corepack pnpm exec vitest run test/foundation
 corepack pnpm exec vitest run test/source test/materialization
+corepack pnpm exec vitest run test/program test/compiler
 corepack pnpm exec vitest run test/architecture test/docs test/package
 corepack pnpm verify:architecture
 corepack pnpm build
@@ -36,7 +38,7 @@ Run `actionlint` for workflow changes, `bash -n scripts/*.sh` for shell changes,
 documents, vocabularies, or ownership evidence change. The required local layer audits are:
 
 ```bash
-test ! -d src/program && test ! -d src/compiler
+test -d src/program && test -d src/compiler
 test ! -d src/kernel && test ! -d src/extensions
 test "$(ls -1 .github/workflows)" = ci.yml
 git diff --check

@@ -1,29 +1,19 @@
-import {
-  PIPELINE_LIMITS,
-  appendJsonPointer,
-  canonicalizeOwnedValue,
-  compareUnicodeCodePoints,
-  type DiagnosticCollector,
-  type JsonPointer,
-  type JsonScalar,
-} from '../../foundation/index.js';
-import {
-  PipelineFailureValueSchema,
-  type ChoiceDomain,
-  type ValueSchema,
-} from '../contracts/index.js';
-import { atLeastTwoTuple, nonEmptyTuple } from '../internal.js';
+import { PIPELINE_LIMITS } from '../bounds.js';
+import { canonicalizeOwnedValue } from '../canonicalization.js';
+import type { DiagnosticCollector } from '../diagnostic-collector.js';
+import { appendJsonPointer, type JsonPointer } from '../json-pointer.js';
+import type { JsonScalar } from '../portable-value.js';
+import { compareUnicodeCodePoints } from '../unicode.js';
+import { type ChoiceDomain, PipelineFailureValueSchema, type ValueSchema } from './contracts.js';
 
 type StringValueSchema = Extract<ValueSchema, { readonly type: 'string' }>;
 type ArrayValueSchema = Extract<ValueSchema, { readonly type: 'array' }>;
 type ObjectValueSchema = Extract<ValueSchema, { readonly type: 'object' }>;
+type NumericValueSchema = Extract<ValueSchema, { readonly type: 'integer' | 'number' }>;
+type UnionValueSchema = Extract<ValueSchema, { readonly anyOf: readonly ValueSchema[] }>;
 
-const scalarKey = (value: JsonScalar): string => {
-  if (value === null) {
-    return 'null';
-  }
-  return `${typeof value}:${canonicalizeOwnedValue(value).text}`;
-};
+export const scalarKey = (value: JsonScalar): string =>
+  value === null ? 'null' : `${typeof value}:${canonicalizeOwnedValue(value).text}`;
 
 const compareBytes = (left: Uint8Array, right: Uint8Array): number => {
   const length = Math.min(left.byteLength, right.byteLength);
@@ -158,6 +148,56 @@ const normalizeObjectSchema = (
   });
 };
 
+const normalizeUnionSchema = (
+  schema: UnionValueSchema,
+  path: JsonPointer,
+  collector: DiagnosticCollector,
+  depth: number,
+): ValueSchema => {
+  const anyOfPath = appendJsonPointer(path, 'anyOf');
+  const anyOf = schema.anyOf.map((alternative, index) =>
+    normalizeValueSchema(
+      alternative,
+      appendJsonPointer(anyOfPath, String(index)),
+      collector,
+      depth + 1,
+    ),
+  );
+  const identities = new Set<string>();
+  for (const alternative of anyOf) {
+    const identity = valueSchemaText(alternative);
+    if (identities.has(identity)) {
+      collector.add('CANONICAL_INPUT', anyOfPath);
+    }
+    identities.add(identity);
+  }
+  const [first, second, ...rest] = anyOf;
+  if (first === undefined || second === undefined) {
+    throw new TypeError('Expected a schema-validated array with two values.');
+  }
+  const alternatives: [ValueSchema, ValueSchema, ...ValueSchema[]] = [first, second, ...rest];
+  return Object.freeze({ anyOf: Object.freeze(alternatives) });
+};
+
+const normalizeNumericSchema = (
+  schema: NumericValueSchema,
+  path: JsonPointer,
+  collector: DiagnosticCollector,
+): ValueSchema => {
+  if (
+    schema.minimum !== undefined &&
+    schema.maximum !== undefined &&
+    schema.minimum > schema.maximum
+  ) {
+    collector.add('BOUND_EXCEEDED', path);
+  }
+  return Object.freeze({
+    type: schema.type,
+    ...(schema.minimum === undefined ? {} : { minimum: schema.minimum }),
+    ...(schema.maximum === undefined ? {} : { maximum: schema.maximum }),
+  });
+};
+
 export const normalizeValueSchema = (
   schema: ValueSchema,
   path: JsonPointer,
@@ -168,45 +208,15 @@ export const normalizeValueSchema = (
     collector.add('BOUND_EXCEEDED', path);
   }
   if ('anyOf' in schema) {
-    const anyOfPath = appendJsonPointer(path, 'anyOf');
-    const anyOf = schema.anyOf.map((alternative, index) =>
-      normalizeValueSchema(
-        alternative,
-        appendJsonPointer(anyOfPath, String(index)),
-        collector,
-        depth + 1,
-      ),
-    );
-    const identities = new Set<string>();
-    for (const alternative of anyOf) {
-      const identity = valueSchemaText(alternative);
-      if (identities.has(identity)) {
-        collector.add('CANONICAL_INPUT', anyOfPath);
-      }
-      identities.add(identity);
-    }
-    return Object.freeze({ anyOf: atLeastTwoTuple(anyOf) });
+    return normalizeUnionSchema(schema, path, collector, depth);
   }
-
   switch (schema.type) {
     case 'null':
     case 'boolean':
       return Object.freeze({ type: schema.type });
     case 'integer':
-    case 'number': {
-      if (
-        schema.minimum !== undefined &&
-        schema.maximum !== undefined &&
-        schema.minimum > schema.maximum
-      ) {
-        collector.add('BOUND_EXCEEDED', path);
-      }
-      return Object.freeze({
-        type: schema.type,
-        ...(schema.minimum === undefined ? {} : { minimum: schema.minimum }),
-        ...(schema.maximum === undefined ? {} : { maximum: schema.maximum }),
-      });
-    }
+    case 'number':
+      return normalizeNumericSchema(schema, path, collector);
     case 'string':
       return normalizeStringSchema(schema, path, collector);
     case 'array':
@@ -214,7 +224,7 @@ export const normalizeValueSchema = (
     case 'object':
       return normalizeObjectSchema(schema, path, collector, depth);
   }
-  throw new TypeError('Unexpected schema-validated ValueSchema.');
+  throw new TypeError('Unexpected schema-validated value schema.');
 };
 
 export const normalizeChoiceDomain = (
@@ -226,9 +236,16 @@ export const normalizeChoiceDomain = (
     ? Object.freeze({ kind: 'equals', value: domain.value })
     : Object.freeze({
         kind: 'oneOf',
-        values: nonEmptyTuple(
-          normalizeScalarSet(domain.values, appendJsonPointer(path, 'values'), collector),
-        ),
+        values: (() => {
+          const [first, ...rest] = normalizeScalarSet(
+            domain.values,
+            appendJsonPointer(path, 'values'),
+            collector,
+          );
+          if (first === undefined) {
+            throw new TypeError('Expected a non-empty scalar set.');
+          }
+          const values: [JsonScalar, ...JsonScalar[]] = [first, ...rest];
+          return Object.freeze(values);
+        })(),
       });
-
-export { scalarKey };

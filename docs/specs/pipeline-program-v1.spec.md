@@ -391,6 +391,10 @@ A generic parallel produces an output classification from `completed`, `impossib
 `failed`, and `cancelled`; its `next` MUST be one compiler-emitted choice that alone
 routes those values to the source targets. Branch author outcomes map through the fixed
 internal `qualifies | doesNotQualify | failed | cancelled` classifications.
+That choice has exact cases, in Unicode order, `cancelled`, `completed`, `failed`, and
+`impossible`; each case key and equality value is the classification name and
+`otherwise` is null. It has lowering role `genericParallelChoice`, ordinal `0`, null
+materialization path, and is never the target entry for the source parallel.
 Its exact output is `GenericParallelOutput`. Every declared branch key MUST be present:
 an exit classified `qualifies` or `doesNotQualify` stores
 `{status:'completed',outcome,output}`; an exit classified `failed` validates its exact
@@ -410,6 +414,9 @@ participant activity's successful output schema is the enum
 `approve | reject | abstain`. Its closed policy
 classifies exactly `approved`, `rejected`, `inconclusive`, `participantFailed`, or
 `cancelled`; its `next` MUST be the one compiler-emitted choice that routes those values.
+That choice has exact cases, in Unicode order, `approved`, `cancelled`, `inconclusive`,
+`participantFailed`, and `rejected`; every key/equality value is the classification name
+and `otherwise` is null.
 Its exact output is `VoteParallelOutput`. Every participant key MUST be present as
 `vote`, `failed`, or `cancelled`; null and missing entries are forbidden. Its schema is
 compiler-derived.
@@ -434,6 +441,16 @@ participant. In both forms, the branch activity MUST reference an agent requirem
 whose `bindingKey` and input/output schemas equal those branch rules. Global identical
 requirement deduplication remains allowed; a participant binding may never be borrowed
 from another branch.
+
+Every generated agent requirement is exactly
+`{kind:'agent',key:bindingKey,bindingKey,inputSchema,outputSchema}`. Slot-consensus
+requirement source provenance is the owning agent node; explicit-consensus requirement
+source provenance is the exact participant record. For slot index `s`, aggregate
+parallel/choice materialization provenance is `/slots/{s}/selection`, single activity
+and requirement provenance is `/slots/{s}/selection/participant`, and each participant
+region/activity/end plus requirement provenance is
+`/slots/{s}/selection/participants/{i}`. Explicit-consensus materialization paths are
+all null.
 
 Participants normalize by Unicode code-point order before lowering; `i` below is their
 zero-based position in that order. Every `ProgramVoteBranch.region` has exactly:
@@ -619,6 +636,12 @@ region, activity, and all three ends use that participant's exact canonical path
 materialization; they MUST NOT use a sibling participant or only the enclosing slot
 path. Region exits normalize by Unicode outcome order, and region nodes normalize by
 full generated ID; neither storage order changes the assigned ordinals.
+
+Each source route target resolves to exactly one entry ID: single agent targets the
+`agentSingleActivity` ordinal `0`; either consensus form targets `consensusParallel`
+ordinal `0`; source parallel targets its `direct` parallel ordinal `0`; every other
+source kind targets its `direct` ordinal `0`. Generated generic-parallel and consensus
+choices are routing-only and are never target entries.
 
 Provenance arrays sort by program node ID or requirement key; path arrays sort by Unicode
 code point. Provenance MUST NOT contain local paths, timestamps, prompts, secret values,

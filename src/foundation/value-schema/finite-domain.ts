@@ -1,4 +1,4 @@
-import type { ChoiceDomain, ValueSchema } from '../contracts/index.js';
+import type { ChoiceDomain, ValueSchema } from './contracts.js';
 import { scalarKey } from './normalization.js';
 
 type NumericInterval = readonly [minimum: number, maximum: number];
@@ -47,10 +47,7 @@ export const finiteDomainOf = (schema: ValueSchema): FiniteDomain | null => {
     case 'string':
       return schema.enum === undefined
         ? null
-        : Object.freeze({
-            scalarKeys: new Set(schema.enum.map(scalarKey)),
-            numericIntervals: [],
-          });
+        : Object.freeze({ scalarKeys: new Set(schema.enum.map(scalarKey)), numericIntervals: [] });
     case 'integer':
     case 'number':
       return schema.minimum === undefined || schema.maximum === undefined
@@ -63,10 +60,8 @@ export const finiteDomainOf = (schema: ValueSchema): FiniteDomain | null => {
     case 'object':
       return null;
   }
-  throw new TypeError('Unexpected schema-validated ValueSchema.');
+  throw new TypeError('Unexpected schema-validated value schema.');
 };
-
-const intervalCardinality = ([minimum, maximum]: NumericInterval): number => maximum - minimum + 1;
 
 export const casesCoverFiniteDomain = (
   schema: ValueSchema,
@@ -90,7 +85,7 @@ export const casesCoverFiniteDomain = (
     values.filter((value): value is number => typeof value === 'number'),
   );
   const expectedCount = finite.numericIntervals.reduce(
-    (sum, interval) => sum + intervalCardinality(interval),
+    (sum, [minimum, maximum]) => sum + maximum - minimum + 1,
     0,
   );
   return (

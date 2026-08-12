@@ -13,6 +13,7 @@ export {
 } from './canonicalization.js';
 export {
   PIPELINE_DIAGNOSTIC_CATALOG,
+  PipelineDiagnosticSchema,
   comparePipelineDiagnostics,
   createPipelineDiagnostic,
   finalizePipelineDiagnostics,
@@ -23,6 +24,7 @@ export {
 export { createDiagnosticCollector, type DiagnosticCollector } from './diagnostic-collector.js';
 export {
   DIGEST_DOMAINS,
+  DIGEST_LEXICAL_PATTERN,
   computeDomainDigest,
   digestCanonicalBytes,
   isDigest,
@@ -31,11 +33,22 @@ export {
   type DigestResult,
 } from './digest.js';
 export { isDisplayString, isIdentifier } from './identifier.js';
+export {
+  ConsensusPolicySchema,
+  ParallelBranchClassificationSchema,
+  ParallelPolicySchema,
+  type ConsensusPolicy,
+  type ParallelBranchClassification,
+  type ParallelPolicy,
+  type RegionExitClassification,
+} from './policy.js';
 export { normalizeOwnedEnvelope, type OwnedEnvelopeResult } from './owned-envelope.js';
 export {
   appendJsonPointer,
   escapeJsonPointerToken,
+  isCanonicalJsonArrayIndex,
   isJsonPointer,
+  JSON_ARRAY_INDEX_PATTERN,
   parseJsonPointer,
   readJsonPointer,
   unescapeJsonPointerToken,
@@ -53,4 +66,39 @@ export {
   type PortableValueResult,
 } from './portable-value.js';
 export { closedObject, type ClosedObjectOptions } from './schema.js';
+export {
+  DigestSchema,
+  DisplayStringSchema,
+  IdentifierSchema,
+  JsonPointerSchema,
+  JsonScalarSchema,
+  JsonValueSchema,
+  SafeIntegerSchema,
+  atLeastTwoSchema,
+  immutableArraySchema,
+  nonEmptyArraySchema,
+  optionalReadonlySchema,
+  readonlySchema,
+} from './typebox.js';
 export { compareUnicodeCodePoints } from './unicode.js';
+export {
+  ChoiceDomainSchema,
+  EmptyObjectSchema,
+  PipelineFailureValueSchema,
+  ValueSchemaSchema,
+  type ChoiceDomain,
+  type ValueSchema,
+} from './value-schema/contracts.js';
+export {
+  casesCoverFiniteDomain,
+  finiteDomainOf,
+  type FiniteDomain,
+} from './value-schema/finite-domain.js';
+export {
+  compareCanonicalScalars,
+  isPipelineFailureSchema,
+  normalizeChoiceDomain,
+  normalizeValueSchema,
+  valueSchemasEqual,
+} from './value-schema/normalization.js';
+export { projectValueSchema } from './value-schema/pointer.js';

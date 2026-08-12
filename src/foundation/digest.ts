@@ -15,7 +15,9 @@ export const DIGEST_DOMAINS = Object.freeze([
 
 export type DigestDomain = (typeof DIGEST_DOMAINS)[number];
 export type Digest = `sha256:${string}`;
+export const DIGEST_LEXICAL_PATTERN = '^sha256:[0-9a-f]{64}$';
 const digestDomainValues: readonly string[] = DIGEST_DOMAINS;
+const digestLexicalPattern = new RegExp(DIGEST_LEXICAL_PATTERN, 'u');
 
 export type DigestResult =
   | { readonly ok: true; readonly digest: Digest }
@@ -52,4 +54,4 @@ export const computeDomainDigest = (domain: DigestDomain, input: unknown): Diges
 };
 
 export const isDigest = (value: unknown): value is Digest =>
-  typeof value === 'string' && /^sha256:[0-9a-f]{64}$/u.test(value);
+  typeof value === 'string' && digestLexicalPattern.test(value);

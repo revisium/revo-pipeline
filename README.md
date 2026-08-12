@@ -12,8 +12,9 @@
 </div>
 
 > [!IMPORTANT]
-> Publication is blocked. The implemented foundation, source, and materialization layers are private, the root module has
-> no runtime exports, and this is not an installable consumer API.
+> Publication is blocked. The implemented foundation, source, materialization, Program,
+> and compiler layers are private, the root module has no runtime exports, and this is
+> not an installable consumer API.
 
 ## Status
 
@@ -34,7 +35,9 @@ The six normative contracts remain Draft until conformance and consumer readines
 The current private implementation includes the exact
 12-kind TypeBox source language, recursive local-region semantics, canonical source
 normalization and digesting, reachable agent-slot paths, and source-pinned portable
-profile materialization under private `source` and `materialization` layers.
+profile materialization. It also includes the closed nine-kind Program IR and a compiler
+that links, checks dataflow and composed bounds, lowers all source forms, emits complete
+requirements/provenance, and hashes an immutable bundle.
 Its production dependencies are exactly `typebox@1.3.10` and `canonicalize@3.0.0`;
 hashing uses `node:crypto`. `src/index.ts` remains deliberately inert. The final `.` and
 `./kernel` exports are introduced only after conformance and consumer
@@ -75,7 +78,7 @@ cross-package fixtures. They are traceability requirements, not 103 pipeline
 implementations.
 
 The machine-readable [layer manifest](architecture/layers.json) marks `foundation`,
-`source`, and `materialization` active. Program, compiler, kernel, and extensions
+`source`, `materialization`, `program`, and `compiler` active. Kernel and extensions
 remain future private records; their directories do not exist yet. Imports
 between active layers must use the target layer's curated `index.ts`, same-layer peer
 imports are allowed, and no layer may import the inert root module.
@@ -103,7 +106,8 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm verify
 ```
 
-Focused work can use `corepack pnpm exec vitest run test/foundation test/source test/materialization` before
-the required full gate. Architecture and package checks remain part of `verify`.
+Focused work can use
+`corepack pnpm exec vitest run test/foundation test/source test/materialization test/program test/compiler`
+before the required full gate. Architecture and package checks remain part of `verify`.
 
 Publishing, tagging, releasing, and merging require separate approval.

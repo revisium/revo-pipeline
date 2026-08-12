@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { SourceNode } from '../../../src/source/index.js';
 import {
+  endNode,
+  nonEmptyNodes,
   sourceForNode,
   sourceNodeBuilders,
   sourceWithNodes,
@@ -92,5 +94,33 @@ describe('source selectors and contexts', () => {
       code: 'DATA_POINTER_STATIC',
       path: '/modules/0/region/nodes/0/selector/pointer',
     });
+  });
+
+  it('validates a reverse 1800-map output dependency chain without recursive resolution', () => {
+    const mapKey = (index: number): string => `map-${String(index).padStart(4, '0')}`;
+    const maps = Array.from({ length: 1800 }, (_, index) => ({
+      ...sourceNodeBuilders.map(),
+      key: mapKey(index),
+      items:
+        index === 1799
+          ? { kind: 'literal' as const, value: [{ itemKey: 'seed' }] }
+          : {
+              kind: 'nodeOutput' as const,
+              node: mapKey(index + 1),
+              pointer: '/items' as const,
+            },
+      itemKeyPointer: '/itemKey' as const,
+      routes: {
+        completed: index === 0 ? 'done' : mapKey(index - 1),
+        failed: 'failed',
+        cancelled: 'cancelled',
+      },
+    })) satisfies SourceNode[];
+    const source = sourceWithNodes(
+      nonEmptyNodes([...maps, endNode(), endNode('failed'), endNode('cancelled')]),
+      mapKey(1799),
+    );
+
+    expect(expectValidSource(source).source.modules[0]?.region.nodes).toHaveLength(1803);
   });
 });

@@ -17,6 +17,7 @@ import { valueSchemasEqual } from '../value-schema/index.js';
 import { analyzeRegionGraph } from './region-graph.js';
 import {
   bodyEnvironment,
+  createSelectorResolutionState,
   nodeSelectorGroups,
   validateChoice,
   validateSelectors,
@@ -146,6 +147,7 @@ const validateRegionSemantics = (
     ...inherited,
     scopeInput: region.inputSchema ?? EmptyObjectSchema,
     nodes: new Map(region.nodes.map((node) => [node.key, node])),
+    resolutionState: createSelectorResolutionState(),
   };
   for (const [index, node] of region.nodes.entries()) {
     const nodePath = nestedPath(path, 'nodes', String(index));
@@ -180,7 +182,12 @@ export const validateSourceSemantics = (
     validateRegionSemantics(
       module.region,
       appendJsonPointer(modulePath, 'region'),
-      { moduleInput: module.inputSchema, scopeInput: module.inputSchema, nodes: new Map() },
+      {
+        moduleInput: module.inputSchema,
+        scopeInput: module.inputSchema,
+        nodes: new Map(),
+        resolutionState: createSelectorResolutionState(),
+      },
       collector,
       registry,
     );

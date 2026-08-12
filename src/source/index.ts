@@ -58,6 +58,12 @@ export {
 } from './validate.js';
 export { type ReachableAgentSlot } from './semantics/index.js';
 export {
+  literalValueSchema,
+  mapItemsSchema,
+  sourceNodeOutputSchema,
+  type MapItemsSchema,
+} from './semantics/derived-schema.js';
+export {
   casesCoverFiniteDomain,
   compareCanonicalScalars,
   finiteDomainOf,
