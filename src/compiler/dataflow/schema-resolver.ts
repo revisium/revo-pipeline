@@ -112,24 +112,24 @@ const mapOutputDependency = (node: MapNode, input: SchemaResolverInput): MapNode
     : undefined;
 };
 
-const resolveMapItems = (
+const cacheUnresolvableMaps = (pending: readonly MapNode[], state: ResolutionState): void => {
+  for (const node of pending) {
+    state.mapItemsCache.set(node, null);
+    state.outputCache.set(node, null);
+  }
+};
+
+const collectMapDependencies = (
   node: MapNode,
   input: SchemaResolverInput,
   state: ResolutionState,
-): MapItemsSchema | null => {
-  if (state.mapItemsCache.has(node)) {
-    return state.mapItemsCache.get(node) ?? null;
-  }
-
+): readonly MapNode[] | null => {
   const pending: MapNode[] = [];
   const pendingSet = new Set<MapNode>();
   let current = node;
   while (!state.mapItemsCache.has(current)) {
     if (pendingSet.has(current)) {
-      for (const pendingNode of pending) {
-        state.mapItemsCache.set(pendingNode, null);
-        state.outputCache.set(pendingNode, null);
-      }
+      cacheUnresolvableMaps(pending, state);
       return null;
     }
     pending.push(current);
@@ -140,33 +140,72 @@ const resolveMapItems = (
     }
     current = dependency;
   }
+  return pending;
+};
 
-  for (let index = pending.length - 1; index >= 0; index -= 1) {
-    const pendingNode = pending[index];
-    if (pendingNode === undefined) {
-      continue;
-    }
-    const path = input.nodePaths.get(pendingNode.key) ?? '';
-    const schema = resolveSelector(
-      pendingNode.items,
-      appendJsonPointer(path, 'items'),
-      pendingNode.key,
-      input,
-      state,
-    );
-    const items = schema === null ? null : mapItemsSchema(schema);
-    if (schema !== null && (items === null || items.minimumItems > pendingNode.maximumItems)) {
-      input.collector.add('DATA_SCHEMA_INCOMPATIBLE', appendJsonPointer(path, 'items'));
-    }
-    const result = items === null || items.minimumItems > pendingNode.maximumItems ? null : items;
-    state.mapItemsCache.set(pendingNode, result);
-    state.outputCache.set(
-      pendingNode,
-      result === null ? null : sourceNodeOutputSchema(pendingNode, result),
-    );
+const resolvePendingMap = (
+  node: MapNode,
+  input: SchemaResolverInput,
+  state: ResolutionState,
+): void => {
+  const path = input.nodePaths.get(node.key) ?? '';
+  const schema = resolveSelector(
+    node.items,
+    appendJsonPointer(path, 'items'),
+    node.key,
+    input,
+    state,
+  );
+  const items = schema === null ? null : mapItemsSchema(schema);
+  if (schema !== null && (items === null || items.minimumItems > node.maximumItems)) {
+    input.collector.add('DATA_SCHEMA_INCOMPATIBLE', appendJsonPointer(path, 'items'));
+  }
+  const result = items === null || items.minimumItems > node.maximumItems ? null : items;
+  state.mapItemsCache.set(node, result);
+  state.outputCache.set(node, result === null ? null : sourceNodeOutputSchema(node, result));
+};
+
+const resolveMapItems = (
+  node: MapNode,
+  input: SchemaResolverInput,
+  state: ResolutionState,
+): MapItemsSchema | null => {
+  if (state.mapItemsCache.has(node)) {
+    return state.mapItemsCache.get(node) ?? null;
+  }
+
+  const pending = collectMapDependencies(node, input, state);
+  if (pending === null) {
+    return null;
+  }
+  for (const pendingNode of pending.toReversed()) {
+    resolvePendingMap(pendingNode, input, state);
   }
 
   return state.mapItemsCache.get(node) ?? null;
+};
+
+const uncachedNodeOutput = (
+  node: SourceNode,
+  input: SchemaResolverInput,
+  state: ResolutionState,
+): ValueSchema | null => {
+  const path = input.nodePaths.get(node.key) ?? '';
+  if (node.kind === 'agent') {
+    const selected = input.agentSelections.get(path)?.slot.selection;
+    if (selected?.strategy === 'single') {
+      return node.outputSchema;
+    }
+    if (selected?.strategy === 'consensus') {
+      return voteParallelOutputSchema(selected.participants.map(({ key }) => key));
+    }
+    return null;
+  }
+  if (node.kind === 'map') {
+    const items = resolveMapItems(node, input, state);
+    return items === null ? null : sourceNodeOutputSchema(node, items);
+  }
+  return sourceNodeOutputSchema(node);
 };
 
 const resolveNodeOutput = (
@@ -177,18 +216,7 @@ const resolveNodeOutput = (
   if (state.outputCache.has(node)) {
     return state.outputCache.get(node) ?? null;
   }
-  const path = input.nodePaths.get(node.key) ?? '';
-  const selected = input.agentSelections.get(path)?.slot.selection;
-  const schema =
-    node.kind === 'agent'
-      ? selected?.strategy === 'single'
-        ? node.outputSchema
-        : selected?.strategy === 'consensus'
-          ? voteParallelOutputSchema(selected.participants.map(({ key }) => key))
-          : null
-      : node.kind === 'map'
-        ? sourceNodeOutputSchema(node, resolveMapItems(node, input, state) ?? undefined)
-        : sourceNodeOutputSchema(node);
+  const schema = uncachedNodeOutput(node, input, state);
   state.outputCache.set(node, schema);
   return schema;
 };

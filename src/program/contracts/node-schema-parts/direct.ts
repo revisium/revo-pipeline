@@ -10,11 +10,7 @@ import {
   nonEmptyArraySchema,
   readonlySchema,
 } from '../../../foundation/index.js';
-import {
-  ProgramRepeatConditionSchema,
-  ProgramValueMappingSchema,
-  ProgramValueSelectorSchema,
-} from '../selectors.js';
+import { ProgramValueMappingSchema, ProgramValueSelectorSchema } from '../selectors.js';
 import { ProgramNodeIdSchema, targetRoutes } from './common.js';
 
 export const directNodeSchemas = {
@@ -114,4 +110,4 @@ export const directNodeSchemas = {
   }),
 };
 
-export { ProgramRepeatConditionSchema };
+export { ProgramRepeatConditionSchema } from '../selectors.js';

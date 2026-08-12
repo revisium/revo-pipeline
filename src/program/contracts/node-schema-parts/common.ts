@@ -3,7 +3,6 @@ import { Type, type TSchema } from 'typebox';
 import {
   DigestSchema,
   IdentifierSchema,
-  ParallelBranchClassificationSchema,
   closedObject,
   readonlySchema,
 } from '../../../foundation/index.js';
@@ -19,7 +18,7 @@ export const regionExitClassificationSchema = (classification: TSchema) =>
     classification: readonlySchema(classification),
   });
 
-export const genericBranchClassificationSchema = ParallelBranchClassificationSchema;
+export { ParallelBranchClassificationSchema as genericBranchClassificationSchema } from '../../../foundation/index.js';
 
 export const stringLiterals = (values: readonly string[]) =>
   Type.Union(values.map((value) => Type.Literal(value)));

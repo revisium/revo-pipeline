@@ -4,7 +4,6 @@ import { PIPELINE_LIMITS } from './bounds.js';
 import { DIGEST_LEXICAL_PATTERN, type Digest } from './digest.js';
 import type { JsonPointer } from './json-pointer.js';
 import type { JsonScalar, JsonValue } from './portable-value.js';
-import { closedObject } from './schema.js';
 
 export const readonlySchema = <Schema extends TSchema>(schema: Schema) => Type.Readonly(schema);
 
@@ -64,4 +63,4 @@ export const JsonValueSchema = Type.Unsafe<JsonValue>(
   Type.Cyclic(jsonValueDefinitions, 'JsonValue'),
 );
 
-export { closedObject };
+export { closedObject } from './schema.js';

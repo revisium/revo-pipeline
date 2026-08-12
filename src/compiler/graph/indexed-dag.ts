@@ -34,11 +34,7 @@ export const createIndexedDag = (
   const remainingPredecessors = new Uint32Array(predecessors.map((indexes) => indexes.length));
   const pending = keys.flatMap((_, index) => (remainingPredecessors[index] === 0 ? [index] : []));
   const topologicalOrder: number[] = [];
-  for (let pendingIndex = 0; pendingIndex < pending.length; pendingIndex += 1) {
-    const sourceIndex = pending[pendingIndex];
-    if (sourceIndex === undefined) {
-      return invalidDag();
-    }
+  for (const sourceIndex of pending) {
     topologicalOrder.push(sourceIndex);
     for (const targetIndex of outgoing[sourceIndex] ?? []) {
       remainingPredecessors[targetIndex] = (remainingPredecessors[targetIndex] ?? 0) - 1;
@@ -66,11 +62,7 @@ export const reachableFrom = (graph: IndexedDag, startIndex: number): Uint8Array
   const reachable = new Uint8Array(graph.outgoing.length);
   const pending = [startIndex];
   reachable[startIndex] = 1;
-  for (let pendingIndex = 0; pendingIndex < pending.length; pendingIndex += 1) {
-    const sourceIndex = pending[pendingIndex];
-    if (sourceIndex === undefined) {
-      return invalidDag();
-    }
+  for (const sourceIndex of pending) {
     for (const targetIndex of graph.outgoing[sourceIndex] ?? []) {
       if (reachable[targetIndex] === 0) {
         reachable[targetIndex] = 1;

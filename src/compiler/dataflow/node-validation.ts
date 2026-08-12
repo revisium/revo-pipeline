@@ -7,7 +7,7 @@ import {
   type JsonPointer,
   type ValueSchema,
 } from '../../foundation/index.js';
-import type { AgentSourceNode, SourceNode, SourceRegion } from '../../source/index.js';
+import type { SourceNode, SourceRegion } from '../../source/index.js';
 import type { LinkedSource } from '../linking/index.js';
 import { validateChoiceDomains, validateRepeatCondition } from './condition-validation.js';
 import { validateMapping } from './mapping-validation.js';
@@ -29,19 +29,8 @@ export type NodeValidationContext = {
   ) => void;
 };
 
-const validateAgent = (node: AgentSourceNode, context: NodeValidationContext): void => {
-  validateMapping(
-    node.input,
-    node.inputSchema,
-    appendJsonPointer(context.path, 'input'),
-    node.key,
-    context.resolver,
-    context.collector,
-  );
-};
-
 const validateActivity = (
-  node: Extract<SourceNode, { readonly kind: 'script' | 'effect' }>,
+  node: Extract<SourceNode, { readonly kind: 'agent' | 'script' | 'effect' }>,
   context: NodeValidationContext,
 ): void => {
   validateMapping(
@@ -258,7 +247,6 @@ export const validateNodeDataflow = (
 ): void => {
   switch (node.kind) {
     case 'agent':
-      return validateAgent(node, context);
     case 'script':
     case 'effect':
       return validateActivity(node, context);

@@ -44,7 +44,9 @@ const lowerNode = (
 };
 
 const nonEmptyNodes = (nodes: ProgramNode[]): ProgramRegion['nodes'] => {
-  const [first, ...rest] = nodes.sort((left, right) => compareUnicodeCodePoints(left.id, right.id));
+  const [first, ...rest] = nodes.toSorted((left, right) =>
+    compareUnicodeCodePoints(left.id, right.id),
+  );
   if (first === undefined) {
     throw new TypeError('Expected a validated non-empty region.');
   }

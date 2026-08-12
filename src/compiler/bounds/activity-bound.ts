@@ -8,13 +8,14 @@ import {
 } from '../../foundation/index.js';
 import type { ValidatedProfileMaterialization } from '../../materialization/index.js';
 import type {
+  AgentSlotStrategy,
   PipelineSourceModule,
   PipelineSourcePackage,
   SourceNode,
   SourceRegion,
 } from '../../source/index.js';
 import { indexAgentSelections } from '../dataflow/agent-selections.js';
-import { createIndexedDag, reachableFrom } from '../graph/indexed-dag.js';
+import { createIndexedDag, reachableFrom, type IndexedDag } from '../graph/indexed-dag.js';
 import type { LinkedSource } from '../linking/index.js';
 import { sourceRoutes } from '../source-routes.js';
 
@@ -75,6 +76,60 @@ const sum = (
   return total;
 };
 
+const selectedAgentStrategy = (
+  node: SourceNode,
+  path: JsonPointer,
+  context: BoundContext,
+): AgentSlotStrategy | undefined => {
+  if (node.kind !== 'agent') {
+    return undefined;
+  }
+  const selectedKind = context.selectedParticipants.has(path) ? 'consensus' : 'single';
+  return node.strategies.find(({ kind }) => kind === selectedKind);
+};
+
+const continuationBound = (
+  targetIndexes: Uint32Array,
+  bounds: readonly (number | null)[],
+): number | null => {
+  let maximum = 0;
+  for (const targetIndex of targetIndexes) {
+    const targetBound = bounds[targetIndex];
+    if (targetBound === null || targetBound === undefined) {
+      return null;
+    }
+    maximum = Math.max(maximum, targetBound);
+  }
+  return maximum;
+};
+
+const evaluateRegionBounds = (
+  region: SourceRegion,
+  paths: readonly JsonPointer[],
+  graph: IndexedDag,
+  reachable: Uint8Array,
+  context: BoundContext,
+): readonly (number | null)[] => {
+  const bounds = new Array<number | null>(region.nodes.length).fill(null);
+  for (const nodeIndex of graph.topologicalOrder.toReversed()) {
+    if (reachable[nodeIndex] === 0) {
+      continue;
+    }
+    const node = region.nodes[nodeIndex];
+    const nodePath = paths[nodeIndex];
+    if (node === undefined || nodePath === undefined) {
+      return bounds;
+    }
+    const local = nodeBound(node, nodePath, context);
+    const continuation = continuationBound(graph.outgoing[nodeIndex] ?? new Uint32Array(), bounds);
+    bounds[nodeIndex] =
+      local === null || continuation === null
+        ? null
+        : safeAdd(local, continuation, nodePath, context);
+  }
+  return bounds;
+};
+
 const regionBound = (
   region: SourceRegion,
   path: JsonPointer,
@@ -85,13 +140,7 @@ const regionBound = (
   );
   const routes = region.nodes.map((node, index) => {
     const nodePath = paths[index] ?? path;
-    const selectedStrategy =
-      node.kind === 'agent'
-        ? node.strategies.find(({ kind }) =>
-            context.selectedParticipants.has(nodePath) ? kind === 'consensus' : kind === 'single',
-          )
-        : undefined;
-    return sourceRoutes(node, selectedStrategy);
+    return sourceRoutes(node, selectedAgentStrategy(node, nodePath, context));
   });
   const graph = createIndexedDag(
     region.nodes.map(({ key }) => key),
@@ -102,33 +151,7 @@ const regionBound = (
     return null;
   }
   const reachable = reachableFrom(graph, entryIndex);
-  const bounds = new Array<number | null>(region.nodes.length).fill(null);
-  for (let orderIndex = graph.topologicalOrder.length - 1; orderIndex >= 0; orderIndex -= 1) {
-    const nodeIndex = graph.topologicalOrder[orderIndex];
-    const node = nodeIndex === undefined ? undefined : region.nodes[nodeIndex];
-    const nodePath = nodeIndex === undefined ? path : (paths[nodeIndex] ?? path);
-    if (nodeIndex === undefined || node === undefined) {
-      return null;
-    }
-    if (reachable[nodeIndex] === 0) {
-      continue;
-    }
-    const local = nodeBound(node, nodePath, context);
-    let continuation: number | null = 0;
-    for (const targetIndex of graph.outgoing[nodeIndex] ?? []) {
-      const targetBound = bounds[targetIndex];
-      if (targetBound === null || targetBound === undefined) {
-        continuation = null;
-        break;
-      }
-      continuation = Math.max(continuation, targetBound);
-    }
-    bounds[nodeIndex] =
-      local === null || continuation === null
-        ? null
-        : safeAdd(local, continuation, nodePath, context);
-  }
-
+  const bounds = evaluateRegionBounds(region, paths, graph, reachable, context);
   return bounds[entryIndex] ?? null;
 };
 

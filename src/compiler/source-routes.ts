@@ -16,6 +16,13 @@ const activityStatus = (route: string): SourceRouteStatus => {
   throw new TypeError('Unexpected schema-validated activity route.');
 };
 
+const completionStatus = (route: string): SourceRouteStatus => {
+  if (route === 'failed' || route === 'cancelled') {
+    return route;
+  }
+  return 'succeeded';
+};
+
 const agentRoutes = (strategy: AgentSlotStrategy): readonly SourceRoute[] =>
   strategy.kind === 'single'
     ? entries(strategy.routes, activityStatus)
@@ -45,14 +52,10 @@ export const sourceRoutes = (
     ];
   }
   if (node.kind === 'repeat') {
-    return entries(node.routes, (route) =>
-      route === 'failed' ? 'failed' : route === 'cancelled' ? 'cancelled' : 'succeeded',
-    );
+    return entries(node.routes, completionStatus);
   }
   if (node.kind === 'map' || node.kind === 'wait') {
-    return entries(node.routes, (route) =>
-      route === 'failed' ? 'failed' : route === 'cancelled' ? 'cancelled' : 'succeeded',
-    );
+    return entries(node.routes, completionStatus);
   }
   if (node.kind === 'humanGate') {
     return [

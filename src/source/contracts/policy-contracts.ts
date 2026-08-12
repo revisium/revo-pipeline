@@ -5,10 +5,6 @@ import {
   PIPELINE_LIMITS,
   closedObject,
   readonlySchema,
-  type ConsensusPolicy,
-  type ParallelBranchClassification,
-  type ParallelPolicy,
-  type RegionExitClassification,
 } from '../../foundation/index.js';
 import { IdentifierSchema } from './schema-builders.js';
 
@@ -63,4 +59,4 @@ export {
   type ParallelBranchClassification,
   type ParallelPolicy,
   type RegionExitClassification,
-};
+} from '../../foundation/index.js';

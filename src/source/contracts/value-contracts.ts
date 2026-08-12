@@ -1,21 +1,15 @@
 import { Type, type Static } from 'typebox';
 
 import {
-  ChoiceDomainSchema,
-  EmptyObjectSchema,
   JsonPointerSchema,
   JsonScalarSchema,
   JsonValueSchema,
-  PipelineFailureValueSchema,
   PIPELINE_LIMITS,
-  ValueSchemaSchema,
   atLeastTwoSchema,
   closedObject,
   nonEmptyArraySchema,
   readonlySchema,
-  type ChoiceDomain,
   type JsonScalar,
-  type ValueSchema,
 } from '../../foundation/index.js';
 
 export const ValueSelectorSchema = Type.Union([
@@ -132,4 +126,4 @@ export {
   ValueSchemaSchema,
   type ChoiceDomain,
   type ValueSchema,
-};
+} from '../../foundation/index.js';

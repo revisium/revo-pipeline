@@ -221,26 +221,28 @@ const mapOutputDependency = (
   return dependency?.kind === 'map' ? dependency : undefined;
 };
 
-const resolveMapItemsSchema = (
+const cacheMapResolution = (
+  nodes: readonly MapNode[],
+  resolution: Extract<MapItemsSchemaResolution, { readonly ok: false }>,
+  environment: SelectorEnvironment,
+): void => {
+  for (const node of nodes) {
+    environment.resolutionState.mapItems.set(node, resolution);
+    environment.resolutionState.nodeOutputs.set(node, resolution);
+  }
+};
+
+const collectMapDependencies = (
   node: MapNode,
   environment: SelectorEnvironment,
-): MapItemsSchemaResolution => {
-  const cached = environment.resolutionState.mapItems.get(node);
-  if (cached !== undefined) {
-    return cached;
-  }
-
+): readonly MapNode[] | null => {
   const pending: MapNode[] = [];
   const pendingSet = new Set<MapNode>();
   let current = node;
   while (!environment.resolutionState.mapItems.has(current)) {
     if (pendingSet.has(current)) {
-      const failure = { ok: false, reason: 'scope' } as const;
-      for (const pendingNode of pending) {
-        environment.resolutionState.mapItems.set(pendingNode, failure);
-        environment.resolutionState.nodeOutputs.set(pendingNode, failure);
-      }
-      return failure;
+      cacheMapResolution(pending, { ok: false, reason: 'scope' }, environment);
+      return null;
     }
     pending.push(current);
     pendingSet.add(current);
@@ -250,26 +252,48 @@ const resolveMapItemsSchema = (
     }
     current = dependency;
   }
+  return pending;
+};
 
-  for (let index = pending.length - 1; index >= 0; index -= 1) {
-    const pendingNode = pending[index];
-    if (pendingNode === undefined) {
-      continue;
-    }
-    const resolution = resolveSelectorSchema(pendingNode.items, environment);
-    const items = resolution.ok ? mapItemsSchema(resolution.schema) : null;
-    const result: MapItemsSchemaResolution = !resolution.ok
-      ? resolution
-      : items === null || items.minimumItems > pendingNode.maximumItems
-        ? { ok: false, reason: 'schema' }
-        : { ok: true, value: items };
-    environment.resolutionState.mapItems.set(pendingNode, result);
-    environment.resolutionState.nodeOutputs.set(
-      pendingNode,
-      result.ok
-        ? optionalSchema(sourceNodeOutputSchema(pendingNode, result.value) ?? undefined)
-        : result,
-    );
+const mapItemsResolution = (
+  node: MapNode,
+  environment: SelectorEnvironment,
+): MapItemsSchemaResolution => {
+  const resolution = resolveSelectorSchema(node.items, environment);
+  if (!resolution.ok) {
+    return resolution;
+  }
+  const items = mapItemsSchema(resolution.schema);
+  if (items === null || items.minimumItems > node.maximumItems) {
+    return { ok: false, reason: 'schema' };
+  }
+  return { ok: true, value: items };
+};
+
+const resolvePendingMap = (node: MapNode, environment: SelectorEnvironment): void => {
+  const result = mapItemsResolution(node, environment);
+  environment.resolutionState.mapItems.set(node, result);
+  const output = result.ok
+    ? optionalSchema(sourceNodeOutputSchema(node, result.value) ?? undefined)
+    : result;
+  environment.resolutionState.nodeOutputs.set(node, output);
+};
+
+const resolveMapItemsSchema = (
+  node: MapNode,
+  environment: SelectorEnvironment,
+): MapItemsSchemaResolution => {
+  const cached = environment.resolutionState.mapItems.get(node);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const pending = collectMapDependencies(node, environment);
+  if (pending === null) {
+    return environment.resolutionState.mapItems.get(node) ?? unavailableSelector();
+  }
+  for (const pendingNode of pending.toReversed()) {
+    resolvePendingMap(pendingNode, environment);
   }
 
   return environment.resolutionState.mapItems.get(node) ?? unavailableSelector();

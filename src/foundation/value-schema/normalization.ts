@@ -9,6 +9,8 @@ import { type ChoiceDomain, PipelineFailureValueSchema, type ValueSchema } from 
 type StringValueSchema = Extract<ValueSchema, { readonly type: 'string' }>;
 type ArrayValueSchema = Extract<ValueSchema, { readonly type: 'array' }>;
 type ObjectValueSchema = Extract<ValueSchema, { readonly type: 'object' }>;
+type NumericValueSchema = Extract<ValueSchema, { readonly type: 'integer' | 'number' }>;
+type UnionValueSchema = Extract<ValueSchema, { readonly anyOf: readonly ValueSchema[] }>;
 
 export const scalarKey = (value: JsonScalar): string =>
   value === null ? 'null' : `${typeof value}:${canonicalizeOwnedValue(value).text}`;
@@ -146,6 +148,56 @@ const normalizeObjectSchema = (
   });
 };
 
+const normalizeUnionSchema = (
+  schema: UnionValueSchema,
+  path: JsonPointer,
+  collector: DiagnosticCollector,
+  depth: number,
+): ValueSchema => {
+  const anyOfPath = appendJsonPointer(path, 'anyOf');
+  const anyOf = schema.anyOf.map((alternative, index) =>
+    normalizeValueSchema(
+      alternative,
+      appendJsonPointer(anyOfPath, String(index)),
+      collector,
+      depth + 1,
+    ),
+  );
+  const identities = new Set<string>();
+  for (const alternative of anyOf) {
+    const identity = valueSchemaText(alternative);
+    if (identities.has(identity)) {
+      collector.add('CANONICAL_INPUT', anyOfPath);
+    }
+    identities.add(identity);
+  }
+  const [first, second, ...rest] = anyOf;
+  if (first === undefined || second === undefined) {
+    throw new TypeError('Expected a schema-validated array with two values.');
+  }
+  const alternatives: [ValueSchema, ValueSchema, ...ValueSchema[]] = [first, second, ...rest];
+  return Object.freeze({ anyOf: Object.freeze(alternatives) });
+};
+
+const normalizeNumericSchema = (
+  schema: NumericValueSchema,
+  path: JsonPointer,
+  collector: DiagnosticCollector,
+): ValueSchema => {
+  if (
+    schema.minimum !== undefined &&
+    schema.maximum !== undefined &&
+    schema.minimum > schema.maximum
+  ) {
+    collector.add('BOUND_EXCEEDED', path);
+  }
+  return Object.freeze({
+    type: schema.type,
+    ...(schema.minimum === undefined ? {} : { minimum: schema.minimum }),
+    ...(schema.maximum === undefined ? {} : { maximum: schema.maximum }),
+  });
+};
+
 export const normalizeValueSchema = (
   schema: ValueSchema,
   path: JsonPointer,
@@ -156,29 +208,7 @@ export const normalizeValueSchema = (
     collector.add('BOUND_EXCEEDED', path);
   }
   if ('anyOf' in schema) {
-    const anyOfPath = appendJsonPointer(path, 'anyOf');
-    const anyOf = schema.anyOf.map((alternative, index) =>
-      normalizeValueSchema(
-        alternative,
-        appendJsonPointer(anyOfPath, String(index)),
-        collector,
-        depth + 1,
-      ),
-    );
-    const identities = new Set<string>();
-    for (const alternative of anyOf) {
-      const identity = valueSchemaText(alternative);
-      if (identities.has(identity)) {
-        collector.add('CANONICAL_INPUT', anyOfPath);
-      }
-      identities.add(identity);
-    }
-    const [first, second, ...rest] = anyOf;
-    if (first === undefined || second === undefined) {
-      throw new TypeError('Expected a schema-validated array with two values.');
-    }
-    const alternatives: [ValueSchema, ValueSchema, ...ValueSchema[]] = [first, second, ...rest];
-    return Object.freeze({ anyOf: Object.freeze(alternatives) });
+    return normalizeUnionSchema(schema, path, collector, depth);
   }
   switch (schema.type) {
     case 'null':
@@ -186,18 +216,7 @@ export const normalizeValueSchema = (
       return Object.freeze({ type: schema.type });
     case 'integer':
     case 'number':
-      if (
-        schema.minimum !== undefined &&
-        schema.maximum !== undefined &&
-        schema.minimum > schema.maximum
-      ) {
-        collector.add('BOUND_EXCEEDED', path);
-      }
-      return Object.freeze({
-        type: schema.type,
-        ...(schema.minimum === undefined ? {} : { minimum: schema.minimum }),
-        ...(schema.maximum === undefined ? {} : { maximum: schema.maximum }),
-      });
+      return normalizeNumericSchema(schema, path, collector);
     case 'string':
       return normalizeStringSchema(schema, path, collector);
     case 'array':

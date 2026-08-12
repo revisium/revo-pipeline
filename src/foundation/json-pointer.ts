@@ -8,7 +8,7 @@ export type JsonPointerLookup =
 
 const encodedTilde = /~[01]/gu;
 const invalidTilde = /~(?![01])/u;
-export const JSON_ARRAY_INDEX_PATTERN = '^(?:0|[1-9]\\d*)$';
+export const JSON_ARRAY_INDEX_PATTERN = String.raw`^(?:0|[1-9]\d*)$`;
 const jsonArrayIndexPattern = new RegExp(JSON_ARRAY_INDEX_PATTERN, 'u');
 const missing: JsonPointerLookup = Object.freeze({ found: false });
 
