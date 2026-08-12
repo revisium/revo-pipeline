@@ -30,26 +30,30 @@ const terminalFailure = (
 const callTarget = (node: ProgramCallNode, outcome: string): Digest | null =>
   node.routes.outcomes.find((route) => route.outcome === outcome)?.target ?? null;
 
+type CallCompletionContext = {
+  readonly state: PipelineState;
+  readonly parent: RegionContext;
+  readonly frame: CallMachineFrame;
+  readonly rootFrameKey: Digest;
+  readonly parentModuleAncestry: readonly [string, ...string[]];
+};
+
 const finishCallInParent = (
-  state: PipelineState,
-  parentContext: RegionContext,
-  callFrame: CallMachineFrame,
+  context: CallCompletionContext,
   outcome: string,
   output: JsonValue,
-  rootFrameKey: Digest,
-  parentModuleAncestry: readonly [string, ...string[]],
   counters?: LookupCounters,
 ): BaseStepResult | null => {
-  const node = findNode(parentContext.region, callFrame.nodeId, counters);
+  const node = findNode(context.parent.region, context.frame.nodeId, counters);
   if (node?.kind !== 'call') {
     return null;
   }
   const target = callTarget(node, outcome);
   if (target === null || !valueMatchesSchema(node.outputSchema, output)) {
-    return terminalFailure(state, rootFrameKey, 'INVARIANT_PROGRAM_STATE', '');
+    return terminalFailure(context.state, context.rootFrameKey, 'INVARIANT_PROGRAM_STATE', '');
   }
   const parent = recordPendingNodeResult(
-    parentContext.frame,
+    context.parent.frame,
     node.id,
     Object.freeze({ status: 'succeeded', output }),
     target,
@@ -58,11 +62,11 @@ const finishCallInParent = (
     return null;
   }
   const nextState = replaceFrames(
-    state,
-    new Set([callFrame.key, callFrame.childRegionKey ?? '', parentContext.frame.key]),
+    context.state,
+    new Set([context.frame.key, context.frame.childRegionKey ?? '', context.parent.frame.key]),
     [parent],
   );
-  return continueAt(nextState, parent.key, parentModuleAncestry);
+  return continueAt(nextState, parent.key, context.parentModuleAncestry);
 };
 
 export const finishRegion = (
@@ -112,13 +116,15 @@ export const finishRegion = (
   return parentContext === null
     ? null
     : finishCallInParent(
-        state,
-        parentContext,
-        callFrame,
+        {
+          state,
+          parent: parentContext,
+          frame: callFrame,
+          rootFrameKey,
+          parentModuleAncestry: nonEmptyParentAncestry,
+        },
         node.outcome,
         output.value,
-        rootFrameKey,
-        nonEmptyParentAncestry,
         counters,
       );
 };

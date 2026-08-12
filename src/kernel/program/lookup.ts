@@ -7,7 +7,7 @@ import type {
 } from '../../program/index.js';
 import type { MachineFrame } from '../contracts/frames.js';
 import type { KernelProgram } from '../contracts/program.js';
-import type { RegionMachineFrame } from '../contracts/region-frames.js';
+import type { RegionMachineFrame, RootRegionMachineFrame } from '../contracts/region-frames.js';
 import type { PipelineState } from '../contracts/state.js';
 
 export type LookupCounters = { comparisons: number; ancestrySteps: number };
@@ -106,14 +106,23 @@ export const resolveKnownRegion = (
     : null;
 };
 
-export const resolveBaseRegion = (
-  bundle: KernelProgram,
+type BaseRegionAncestry = {
+  readonly requested: RegionMachineFrame;
+  readonly root: RootRegionMachineFrame;
+  readonly callNodeIds: readonly string[];
+};
+
+const traceBaseRegionAncestry = (
   state: PipelineState,
   frameKey: Digest,
   counters?: LookupCounters,
-): RegionContext | null => {
+): BaseRegionAncestry | null => {
+  const requested = findFrame(state, frameKey, counters);
+  if (requested === null || !isRegionFrame(requested)) {
+    return null;
+  }
   const callNodeIds: string[] = [];
-  let current = findFrame(state, frameKey, counters);
+  let current: MachineFrame | null = requested;
   while (current?.kind === 'callRegion') {
     const callFrame = findFrame(state, current.parentFrameKey, counters);
     if (callFrame?.kind !== 'call') {
@@ -128,38 +137,60 @@ export const resolveBaseRegion = (
       return null;
     }
   }
-  if (current?.kind !== 'rootRegion') {
-    return null;
-  }
+  return current?.kind === 'rootRegion'
+    ? Object.freeze({ requested, root: current, callNodeIds: Object.freeze(callNodeIds) })
+    : null;
+};
+
+type ModuleAncestry = {
+  readonly module: ProgramModule;
+  readonly keys: [string, ...string[]];
+};
+
+const resolveModuleAncestry = (
+  bundle: KernelProgram,
+  root: RootRegionMachineFrame,
+  callNodeIds: readonly string[],
+  counters?: LookupCounters,
+): ModuleAncestry | null => {
   let module = findModule(bundle, bundle.program.entryModule, counters);
-  let moduleInput = current.scopeInput;
-  const moduleAncestry: [string, ...string[]] = [bundle.program.entryModule];
-  if (module === null || module.region.id !== current.regionId) {
+  if (module?.region.id !== root.regionId) {
     return null;
   }
-  while (callNodeIds.length > 0) {
-    const callNodeId = callNodeIds.pop();
-    const node = callNodeId === undefined ? null : findNode(module.region, callNodeId, counters);
+  const keys: [string, ...string[]] = [bundle.program.entryModule];
+  for (const callNodeId of callNodeIds.toReversed()) {
+    const node = findNode(module.region, callNodeId, counters);
     if (node?.kind !== 'call') {
       return null;
     }
-    module = findModule(bundle, node.module, counters);
-    if (module === null) {
+    const calledModule = findModule(bundle, node.module, counters);
+    if (calledModule === null) {
       return null;
     }
-    moduleAncestry.push(module.key);
+    module = calledModule;
+    keys.push(module.key);
   }
-  const requested = findFrame(state, frameKey, counters);
-  if (requested !== null && isRegionFrame(requested)) {
-    moduleInput = requested.scopeInput;
+  return Object.freeze({ module, keys });
+};
+
+export const resolveBaseRegion = (
+  bundle: KernelProgram,
+  state: PipelineState,
+  frameKey: Digest,
+  counters?: LookupCounters,
+): RegionContext | null => {
+  const frames = traceBaseRegionAncestry(state, frameKey, counters);
+  if (frames === null) {
+    return null;
   }
-  return requested !== null && isRegionFrame(requested) && requested.regionId === module.region.id
-    ? Object.freeze({
-        frame: requested,
-        module,
-        region: module.region,
-        moduleInput,
-        moduleAncestry: Object.freeze(moduleAncestry),
-      })
-    : null;
+  const modules = resolveModuleAncestry(bundle, frames.root, frames.callNodeIds, counters);
+  return modules === null || frames.requested.regionId !== modules.module.region.id
+    ? null
+    : Object.freeze({
+        frame: frames.requested,
+        module: modules.module,
+        region: modules.module.region,
+        moduleInput: frames.requested.scopeInput,
+        moduleAncestry: Object.freeze(modules.keys),
+      });
 };

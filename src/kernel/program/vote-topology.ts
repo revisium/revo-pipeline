@@ -2,6 +2,7 @@ import {
   EmptyObjectSchema,
   PipelineFailureValueSchema,
   canonicalizeOwnedValue,
+  compareUnicodeCodePoints,
   escapeJsonPointerToken,
   valueSchemasEqual,
 } from '../../foundation/index.js';
@@ -22,8 +23,8 @@ const hasIdentityInput = (
   branchInput: ProgramValueMapping,
   activityInput: ProgramValueMapping,
 ): boolean => {
-  const keys = Object.keys(branchInput).toSorted();
-  const activityKeys = Object.keys(activityInput).toSorted();
+  const keys = Object.keys(branchInput).toSorted(compareUnicodeCodePoints);
+  const activityKeys = Object.keys(activityInput).toSorted(compareUnicodeCodePoints);
   return (
     keys.length === activityKeys.length &&
     keys.every((key, index) => {
@@ -88,9 +89,8 @@ const hasValidVoteBranch = (branch: ProgramVoteBranch): boolean => {
     branch.region.nodes.length === 4 &&
     activities.length === 1 &&
     ends.length === 3 &&
-    activity !== undefined &&
+    activity?.activityKind === 'agent' &&
     branch.region.entry === activity.id &&
-    activity.activityKind === 'agent' &&
     activity.requirementKey === branch.bindingKey &&
     valueSchemasEqual(branch.region.inputSchema, activity.inputSchema) &&
     valueSchemasEqual(activity.outputSchema, VoteValueSchema) &&
