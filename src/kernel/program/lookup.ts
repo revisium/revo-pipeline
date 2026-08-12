@@ -184,7 +184,7 @@ export const resolveBaseRegion = (
     return null;
   }
   const modules = resolveModuleAncestry(bundle, frames.root, frames.callNodeIds, counters);
-  return modules === null || frames.requested.regionId !== modules.module.region.id
+  return modules?.module.region.id !== frames.requested.regionId
     ? null
     : Object.freeze({
         frame: frames.requested,
