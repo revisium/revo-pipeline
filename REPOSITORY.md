@@ -1,6 +1,7 @@
 # Repository Structure
 
-`@revisium/revo-pipeline` has private foundation, source, and materialization layers and remains publication-blocked.
+`@revisium/revo-pipeline` has private foundation, source, materialization, Program, and
+compiler layers and remains publication-blocked.
 
 ```text
 architecture/layers.json  canonical layer state, DAG, and visibility manifest
@@ -8,10 +9,14 @@ src/index.ts               inert root module with no runtime exports
 src/foundation/            active private portable/schema/canonical/digest primitives
 src/source/                active private source contracts, normalization, and semantics
 src/materialization/       active private profile-materialization contracts and validation
+src/program/               active private closed Program contracts and derived schemas
+src/compiler/              active private linking, dataflow, bounds, lowering, and emission
 scripts/              local Sonar helpers
 test/foundation/      foundation behavior and normative digest-vector suites
 test/source/          source contract, graph, selector, normalization, and digest suites
 test/materialization/ materialization contract, source-relative, and digest suites
+test/program/         closed Program contract suites
+test/compiler/        compiler pass, lowering, diagnostic, and bundle suites
 test/architecture/    manifest, filesystem, and dependency-rule fixtures
 test/docs/            delivery-plan traceability checks
 test/package/         publication-block and empty-root-surface tests
@@ -41,9 +46,10 @@ extensions/tooling -> source + materialization + compiler (compile time only)
 ```
 
 `architecture/layers.json` owns this DAG without duplicating it in dependency-cruiser
-configuration. The active `src/foundation/`, `src/source/`, and `src/materialization/`
-exist. Vitest pins the current manifest and filesystem, while dependency-cruiser checks the resolved graph for cycles, root and
-deep cross-layer imports, unresolved local imports, DAG violations, Node core drift, and
+configuration. The active `src/foundation/`, `src/source/`, `src/materialization/`,
+`src/program/`, and `src/compiler/` exist. Vitest pins the current manifest and
+filesystem, while dependency-cruiser checks the resolved graph for cycles, root and deep
+cross-layer imports, unresolved local imports, DAG violations, Node core drift, and
 classified nonproduction dependencies. Its resolved production-package allowlist comes
 from `package.json`. Same-layer peer imports remain valid, and the current implementation
 uses `node:crypto` for SHA-256.

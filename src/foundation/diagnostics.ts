@@ -1,5 +1,8 @@
+import { Type } from 'typebox';
+
 import { PIPELINE_LIMITS } from './bounds.js';
 import { isJsonPointer, type JsonPointer } from './json-pointer.js';
+import { closedObject, JsonPointerSchema, readonlySchema } from './typebox.js';
 import { compareUnicodeCodePoints } from './unicode.js';
 
 export type PipelineDiagnosticFamily =
@@ -48,6 +51,11 @@ export const PIPELINE_DIAGNOSTIC_CATALOG = Object.freeze({
     'The materialized participant count does not satisfy the source policy.',
   ),
   LINK_MODULE_MISSING: definition('LINK', 'LINK_MODULE_MISSING', 'A called module is missing.'),
+  LINK_MODULE_OUTCOME_MISMATCH: definition(
+    'LINK',
+    'LINK_MODULE_OUTCOME_MISMATCH',
+    'The call outcome routes do not match the called module outcomes.',
+  ),
   LINK_RECURSION: definition('LINK', 'LINK_RECURSION', 'The module call graph is recursive.'),
   DATA_DOMINANCE: definition('DATA', 'DATA_DOMINANCE', 'A data reference is not dominated.'),
   DATA_FAILED_EXIT_SCHEMA: definition(
@@ -102,6 +110,19 @@ export const PIPELINE_DIAGNOSTIC_CATALOG = Object.freeze({
 });
 
 export type PipelineDiagnosticCode = keyof typeof PIPELINE_DIAGNOSTIC_CATALOG;
+
+export const PipelineDiagnosticSchema = Type.Unsafe<PipelineDiagnostic>(
+  Type.Union(
+    Object.values(PIPELINE_DIAGNOSTIC_CATALOG).map((diagnostic) =>
+      closedObject({
+        family: readonlySchema(Type.Literal(diagnostic.family)),
+        code: readonlySchema(Type.Literal(diagnostic.code)),
+        path: readonlySchema(JsonPointerSchema),
+        message: readonlySchema(Type.Literal(diagnostic.message)),
+      }),
+    ),
+  ),
+);
 
 const familyPriority: Readonly<Record<PipelineDiagnosticFamily, number>> = Object.freeze({
   SOURCE: 0,

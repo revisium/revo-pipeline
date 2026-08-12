@@ -1,48 +1,45 @@
-import { Type, type Static, type TSchema, type TUnsafe } from 'typebox';
+import { Type, type Static } from 'typebox';
 
-import { PIPELINE_LIMITS, closedObject, type JsonPointer } from '../foundation/index.js';
-import { DigestSchema, JsonPointerSchema } from '../source/index.js';
-
-const readonly = <Schema extends TSchema>(schema: Schema) => Type.Readonly(schema);
-const nonEmptyArray = <Schema extends TSchema>(
-  schema: Schema,
-  maximum: number,
-): TUnsafe<readonly [Static<Schema>, ...Static<Schema>[]]> =>
-  Type.Unsafe<readonly [Static<Schema>, ...Static<Schema>[]]>(
-    Type.Array(schema, { minItems: 1, maxItems: maximum }),
-  );
+import {
+  DigestSchema,
+  JsonPointerSchema,
+  PIPELINE_LIMITS,
+  closedObject,
+  nonEmptyArraySchema,
+  readonlySchema,
+} from '../foundation/index.js';
 
 export const AbstractParticipantSchema = closedObject({
-  key: readonly(Type.String()),
-  bindingKey: readonly(Type.String()),
+  key: readonlySchema(Type.String()),
+  bindingKey: readonlySchema(Type.String()),
 });
 export type AbstractParticipant = Static<typeof AbstractParticipantSchema>;
 
 export const SlotSelectionSchema = Type.Union([
   closedObject({
-    strategy: readonly(Type.Literal('single')),
-    participant: readonly(AbstractParticipantSchema),
+    strategy: readonlySchema(Type.Literal('single')),
+    participant: readonlySchema(AbstractParticipantSchema),
   }),
   closedObject({
-    strategy: readonly(Type.Literal('consensus')),
-    participants: readonly(
-      nonEmptyArray(AbstractParticipantSchema, PIPELINE_LIMITS.structured.participants),
+    strategy: readonlySchema(Type.Literal('consensus')),
+    participants: readonlySchema(
+      nonEmptyArraySchema(AbstractParticipantSchema, PIPELINE_LIMITS.structured.participants),
     ),
   }),
 ]);
 export type SlotSelection = Static<typeof SlotSelectionSchema>;
 
 export const AgentSlotMaterializationSchema = closedObject({
-  sourcePath: readonly(Type.Unsafe<JsonPointer>(JsonPointerSchema)),
-  slotKey: readonly(Type.String()),
-  selection: readonly(SlotSelectionSchema),
+  sourcePath: readonlySchema(JsonPointerSchema),
+  slotKey: readonlySchema(Type.String()),
+  selection: readonlySchema(SlotSelectionSchema),
 });
 export type AgentSlotMaterialization = Static<typeof AgentSlotMaterializationSchema>;
 
 const profileMaterializationSchema = closedObject({
-  schemaVersion: readonly(Type.Literal('pipeline-materialization/v1')),
-  sourceDigest: readonly(DigestSchema),
-  slots: readonly(
+  schemaVersion: readonlySchema(Type.Literal('pipeline-materialization/v1')),
+  sourceDigest: readonlySchema(DigestSchema),
+  slots: readonlySchema(
     Type.Immutable(
       Type.Array(AgentSlotMaterializationSchema, {
         maxItems: PIPELINE_LIMITS.sourcePackage.nodes,

@@ -1,6 +1,6 @@
 import { Type, type Static } from 'typebox';
 
-import { PIPELINE_LIMITS, closedObject } from '../../foundation/index.js';
+import { PIPELINE_LIMITS, ParallelPolicySchema, closedObject } from '../../foundation/index.js';
 import type {
   ExactParallelSourceBranch,
   ExactSourceNode,
@@ -113,18 +113,7 @@ const parallelSourceNodeSchema = closedObject({
       PIPELINE_LIMITS.structured.participants,
     ),
   ),
-  policy: readonlySchema(
-    Type.Union([
-      closedObject({ kind: readonlySchema(Type.Literal('all')) }),
-      closedObject({ kind: readonlySchema(Type.Literal('any')) }),
-      closedObject({
-        kind: readonlySchema(Type.Literal('threshold')),
-        count: readonlySchema(
-          Type.Integer({ minimum: 1, maximum: PIPELINE_LIMITS.structured.participants }),
-        ),
-      }),
-    ]),
-  ),
+  policy: readonlySchema(ParallelPolicySchema),
   remaining: readonlySchema(Type.Union([Type.Literal('drain'), Type.Literal('cancel')])),
   routes: readonlySchema(
     closedObject({

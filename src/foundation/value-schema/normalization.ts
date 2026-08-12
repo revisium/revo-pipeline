@@ -1,29 +1,17 @@
-import {
-  PIPELINE_LIMITS,
-  appendJsonPointer,
-  canonicalizeOwnedValue,
-  compareUnicodeCodePoints,
-  type DiagnosticCollector,
-  type JsonPointer,
-  type JsonScalar,
-} from '../../foundation/index.js';
-import {
-  PipelineFailureValueSchema,
-  type ChoiceDomain,
-  type ValueSchema,
-} from '../contracts/index.js';
-import { atLeastTwoTuple, nonEmptyTuple } from '../internal.js';
+import { PIPELINE_LIMITS } from '../bounds.js';
+import { canonicalizeOwnedValue } from '../canonicalization.js';
+import type { DiagnosticCollector } from '../diagnostic-collector.js';
+import { appendJsonPointer, type JsonPointer } from '../json-pointer.js';
+import type { JsonScalar } from '../portable-value.js';
+import { compareUnicodeCodePoints } from '../unicode.js';
+import { type ChoiceDomain, PipelineFailureValueSchema, type ValueSchema } from './contracts.js';
 
 type StringValueSchema = Extract<ValueSchema, { readonly type: 'string' }>;
 type ArrayValueSchema = Extract<ValueSchema, { readonly type: 'array' }>;
 type ObjectValueSchema = Extract<ValueSchema, { readonly type: 'object' }>;
 
-const scalarKey = (value: JsonScalar): string => {
-  if (value === null) {
-    return 'null';
-  }
-  return `${typeof value}:${canonicalizeOwnedValue(value).text}`;
-};
+export const scalarKey = (value: JsonScalar): string =>
+  value === null ? 'null' : `${typeof value}:${canonicalizeOwnedValue(value).text}`;
 
 const compareBytes = (left: Uint8Array, right: Uint8Array): number => {
   const length = Math.min(left.byteLength, right.byteLength);
@@ -185,15 +173,19 @@ export const normalizeValueSchema = (
       }
       identities.add(identity);
     }
-    return Object.freeze({ anyOf: atLeastTwoTuple(anyOf) });
+    const [first, second, ...rest] = anyOf;
+    if (first === undefined || second === undefined) {
+      throw new TypeError('Expected a schema-validated array with two values.');
+    }
+    const alternatives: [ValueSchema, ValueSchema, ...ValueSchema[]] = [first, second, ...rest];
+    return Object.freeze({ anyOf: Object.freeze(alternatives) });
   }
-
   switch (schema.type) {
     case 'null':
     case 'boolean':
       return Object.freeze({ type: schema.type });
     case 'integer':
-    case 'number': {
+    case 'number':
       if (
         schema.minimum !== undefined &&
         schema.maximum !== undefined &&
@@ -206,7 +198,6 @@ export const normalizeValueSchema = (
         ...(schema.minimum === undefined ? {} : { minimum: schema.minimum }),
         ...(schema.maximum === undefined ? {} : { maximum: schema.maximum }),
       });
-    }
     case 'string':
       return normalizeStringSchema(schema, path, collector);
     case 'array':
@@ -214,7 +205,7 @@ export const normalizeValueSchema = (
     case 'object':
       return normalizeObjectSchema(schema, path, collector, depth);
   }
-  throw new TypeError('Unexpected schema-validated ValueSchema.');
+  throw new TypeError('Unexpected schema-validated value schema.');
 };
 
 export const normalizeChoiceDomain = (
@@ -226,9 +217,16 @@ export const normalizeChoiceDomain = (
     ? Object.freeze({ kind: 'equals', value: domain.value })
     : Object.freeze({
         kind: 'oneOf',
-        values: nonEmptyTuple(
-          normalizeScalarSet(domain.values, appendJsonPointer(path, 'values'), collector),
-        ),
+        values: (() => {
+          const [first, ...rest] = normalizeScalarSet(
+            domain.values,
+            appendJsonPointer(path, 'values'),
+            collector,
+          );
+          if (first === undefined) {
+            throw new TypeError('Expected a non-empty scalar set.');
+          }
+          const values: [JsonScalar, ...JsonScalar[]] = [first, ...rest];
+          return Object.freeze(values);
+        })(),
       });
-
-export { scalarKey };

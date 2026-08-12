@@ -122,17 +122,18 @@ const nodesThatCanExit = (
   nodes: readonly SourceNode[],
   edges: ReadonlyMap<string, readonly Target[]>,
 ): ReadonlySet<string> => {
+  const reverse = reverseEdges(new Set(nodes.map(({ key }) => key)), edges);
   const canExit = new Set(nodes.filter(({ kind }) => kind === 'end').map(({ key }) => key));
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const node of nodes) {
-      if (
-        !canExit.has(node.key) &&
-        (edges.get(node.key) ?? []).some(({ key }) => canExit.has(key))
-      ) {
-        canExit.add(node.key);
-        changed = true;
+  const pending = [...canExit];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) {
+      break;
+    }
+    for (const predecessor of reverse.get(current) ?? []) {
+      if (!canExit.has(predecessor)) {
+        canExit.add(predecessor);
+        pending.push(predecessor);
       }
     }
   }
@@ -193,10 +194,10 @@ const finishOrder = (
   return finished;
 };
 
-const reverseEdges = (
+function reverseEdges(
   reachable: ReadonlySet<string>,
   edges: ReadonlyMap<string, readonly Target[]>,
-): ReadonlyMap<string, readonly string[]> => {
+): ReadonlyMap<string, readonly string[]> {
   const reverse = new Map<string, string[]>([...reachable].map((key) => [key, []]));
   for (const key of reachable) {
     for (const target of edges.get(key) ?? []) {
@@ -204,7 +205,7 @@ const reverseEdges = (
     }
   }
   return reverse;
-};
+}
 
 const collectComponent = (
   start: string,

@@ -183,6 +183,14 @@ pin the exact participant region input schema, fixed vote/failure/empty exit sch
 and full compiler-bundle `programDigest`. Any fixture from the pre-A3 lowering MUST fail
 `PROGRAM_INVALID`, not silently rebaseline at runtime.
 
+Generic-parallel goldens MUST pin the generated-choice order
+`cancelled, completed, failed, impossible`; consensus goldens MUST pin
+`approved, cancelled, inconclusive, participantFailed, rejected`. Keys and equality
+values are identical, `otherwise` is null, generated choices are not source-target
+entries, and slot aggregate/single/participant provenance uses the exact Materialization
+v1 paths. Linking fixtures MUST prove missing/extra/both call outcomes produce one fixed
+`LINK_MODULE_OUTCOME_MISMATCH` at `/routes/outcomes`.
+
 Failed-classification compiler fixtures MUST accept only exact
 `PipelineFailureValueSchema` and emit `DATA_FAILED_EXIT_SCHEMA` at the source exit path
 for every other schema, including a wider object and `anyOf` wrapper.
@@ -310,8 +318,8 @@ IDs.
    compiler-bundle digests.
 5. **`rp-04` — base kernel.** Implements state, frames, activity, choice, call, end,
    data failure, command ordering, and base cancellation semantics.
-6. **`rp-05` — coordination and waits.** Implements parallel/vote policy, consensus
-   lowering, repeat, map, waits, human gates, drain/cancel, and acknowledgements.
+6. **`rp-05` — coordination and waits.** Implements kernel execution of compiler-emitted
+   parallel/vote, repeat, map, waits, human gates, drain/cancel, and acknowledgements.
 7. **`rp-06` — conformance and readiness.** Proves 103/103 traceability plus all extra
    golden/conformance vectors, accepts the six specs, exposes the exact root and
    `./kernel` manifests, proves core/run consumer fixtures, and may restore release

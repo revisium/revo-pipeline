@@ -5,8 +5,8 @@
 [ADR 0005](./adr/0005-greenfield-language-compiler-kernel-cutover.md) is Accepted and
 sets the direct-cutover architecture. The six contracts in `docs/specs/` remain Draft
 until conformance and consumer readiness are accepted. The private foundation, source,
-and materialization layers are active while the root module stays inert and publication
-remains unconditionally blocked; there is no consumer API.
+materialization, Program, and compiler layers are active while the root module stays
+inert and publication remains unconditionally blocked; there is no consumer API.
 
 ## System shape
 
@@ -52,7 +52,7 @@ it in the final manifest.
 `architecture/layers.json` is the canonical machine-readable record for state,
 paths, dependency direction, and visibility. Dependency-cruiser derives graph rules
 from it, while concise contract tests pin the current state and filesystem. Foundation,
-source, and materialization are active; the four later records are
+source, materialization, Program, and compiler are active; kernel and extensions remain
 future and have no source directories.
 
 ```text
@@ -89,7 +89,7 @@ These checks prevent ordinary architecture drift in a reviewed change. They do n
 every possible source spelling and are not a security sandbox against a contributor who
 changes code, configuration, and verification together.
 
-## Implemented private foundation, source, and materialization
+## Implemented private language and compiler
 
 The foundation owns bounded portable JSON cloning/freezing, NFC and surrogate checks,
 identifiers, RFC 6901 pointers, fixed limits and overflow-safe arithmetic, the exact
@@ -117,19 +117,29 @@ The only production dependencies are exact `typebox@1.3.10` and
 The current foundation implementation uses `node:crypto` for SHA-256; dependency-cruiser
 flags resolved imports of other Node core modules.
 
-Source owns the TypeBox-derived 12-kind authoring graph, ValueSchema, selectors,
-mappings, recursive regions, and deterministic normalization. Its current semantic pass
-is intentionally local: it validates each region's entry and targets, reachability and
-the ability to exit, nested-region exits and selector contexts, human-gate answer
-bijections, and the finite coverage required by `choice.otherwise: null`. Cross-module
+Foundation is also the single implementation owner of representation-neutral
+ValueSchema, choice-domain, policy, normalization, projection, and finite-domain
+vocabulary re-exported unchanged by source. Source owns the TypeBox-derived 12-kind
+authoring graph, selectors, mappings, recursive regions, and deterministic normalization.
+Its current semantic pass is intentionally local: it validates each region's entry and
+targets, reachability and the ability to exit, nested-region exits and selector contexts,
+human-gate answer bijections, and the finite coverage required by
+`choice.otherwise: null`. Cross-module
 linking, call recursion, dominance, general dataflow/schema compatibility, composed
-bounds, Program lowering, and compiler-bundle digests remain compiler-layer work.
+bounds, Program lowering, and compiler-bundle digests are composed by the compiler.
 
 Materialization owns only the portable, source-pinned selection envelope. It requires
 exactly one canonical-path entry for every reachable agent slot, accepts only a strategy
 declared by that source node, and rechecks source-owned participant policies. Slot keys
 are path-local, so distinct agent paths may deliberately share one slot key. Normalized
 source and materialization documents have separate domain-separated digests.
+
+Program owns the recursively closed nine-kind IR, derived generic/vote result schemas,
+abstract requirements, complete provenance, and the exact digest-input contract while
+depending only on foundation. The compiler composes the existing source/materialization
+gates, then performs package linking, route-sensitive dataflow, overflow-safe activity
+bounds, exact lowering, requirement/provenance emission, recursive ownership, and the
+`pipeline-program/v1` digest. Neither layer is imported by the inert root.
 
 Publication remains blocked by `private: true`, absent public entrypoints, and an
 unconditional failing `prepublishOnly` hook. A concise contract test checks the ordinary

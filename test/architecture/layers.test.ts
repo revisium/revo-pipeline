@@ -38,14 +38,14 @@ const expectedManifest = {
     {
       name: 'program',
       path: 'src/program',
-      state: 'future',
+      state: 'active',
       public: false,
       dependencies: ['foundation'],
     },
     {
       name: 'compiler',
       path: 'src/compiler',
-      state: 'future',
+      state: 'active',
       public: false,
       dependencies: ['foundation', 'source', 'materialization', 'program'],
     },
@@ -71,11 +71,13 @@ describe('canonical layer manifest', () => {
     expect(manifest).toEqual(expectedManifest);
   });
 
-  it('materializes only the active foundation, source, and materialization layers', () => {
+  it('materializes only the five active private layers', () => {
     expect(readdirSync(join(repositoryRoot, 'src')).toSorted()).toEqual([
+      'compiler',
       'foundation',
       'index.ts',
       'materialization',
+      'program',
       'source',
     ]);
     expect(existsSync(join(repositoryRoot, 'src', 'foundation', 'index.ts'))).toBe(true);

@@ -2,9 +2,10 @@
 
 ## Lifecycle
 
-The host contract remains Draft, and this checkout exports no root runtime API. The flow
-below defines the consumer boundary that the complete implementation and conformance
-evidence must prove.
+The host contract remains Draft, and this checkout exports no root runtime API. The
+private compiler now emits the immutable bundle described below; kernel execution and
+host admission remain later work. The flow defines the consumer boundary that complete
+conformance evidence must prove.
 
 ## Host flow
 

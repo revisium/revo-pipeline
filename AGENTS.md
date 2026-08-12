@@ -28,13 +28,13 @@ or CLI dependencies.
 
 ## Direct-cutover policy
 
-- Foundation, source, and materialization are intentionally private and publication-blocked; the root
-  module has no runtime exports.
+- Foundation, source, materialization, Program, and compiler are intentionally private
+  and publication-blocked; the root module has no runtime exports.
 - Do not add an adapter, converter, dual reader, deprecated alias, compatibility
   package, hidden interpreter, or runtime node-kind plugin.
 - Implement only the scope explicitly assigned by the canonical delivery plan.
 - Treat `architecture/layers.json` as the layer-state and dependency source of
-  truth. Do not create future layer directories.
+  truth. Do not create the future kernel or extensions directories.
 - Keep release workflows and public package exports absent until readiness is
   proved and separately approved.
 

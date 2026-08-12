@@ -27,6 +27,7 @@ export type SelectorEnvironment = {
   readonly moduleInput: ValueSchema;
   readonly scopeInput: ValueSchema;
   readonly nodes: ReadonlyMap<string, SourceNode>;
+  readonly resolutionState: SelectorResolutionState;
   readonly repeat?: {
     readonly iteration: ValueSchema;
     readonly previousOutput: ValueSchema;
@@ -38,6 +39,22 @@ export type SelectorEnvironment = {
 type SelectorSchemaResolution =
   | { readonly ok: true; readonly schema: ValueSchema }
   | { readonly ok: false; readonly reason: 'pointer' | 'schema' | 'scope' };
+
+type MapNode = Extract<SourceNode, { readonly kind: 'map' }>;
+
+type MapItemsSchemaResolution =
+  | { readonly ok: true; readonly value: MapItemsSchema }
+  | { readonly ok: false; readonly reason: 'pointer' | 'schema' | 'scope' };
+
+export type SelectorResolutionState = {
+  readonly nodeOutputs: Map<SourceNode, SelectorSchemaResolution>;
+  readonly mapItems: Map<MapNode, MapItemsSchemaResolution>;
+};
+
+export const createSelectorResolutionState = (): SelectorResolutionState => ({
+  nodeOutputs: new Map(),
+  mapItems: new Map(),
+});
 
 const mappingSelectors = (
   mapping: ValueMapping,
@@ -97,7 +114,10 @@ export const validateSelectors = (
 
 const resolvedSchema = (schema: ValueSchema): SelectorSchemaResolution => ({ ok: true, schema });
 
-const unavailableSelector = (): SelectorSchemaResolution => ({ ok: false, reason: 'scope' });
+const unavailableSelector = (): Extract<SelectorSchemaResolution, { readonly ok: false }> => ({
+  ok: false,
+  reason: 'scope',
+});
 
 const optionalSchema = (schema: ValueSchema | undefined): SelectorSchemaResolution =>
   schema === undefined ? unavailableSelector() : resolvedSchema(schema);
@@ -105,20 +125,26 @@ const optionalSchema = (schema: ValueSchema | undefined): SelectorSchemaResoluti
 const nodeOutputBaseSchema = (
   nodeKey: string,
   environment: SelectorEnvironment,
-  resolvingMaps: ReadonlySet<SourceNode>,
 ): SelectorSchemaResolution => {
   const node = environment.nodes.get(nodeKey);
-  if (node === undefined || resolvingMaps.has(node)) {
+  if (node === undefined) {
     return unavailableSelector();
   }
-  if (node.kind !== 'map') {
-    return optionalSchema(sourceNodeOutputSchema(node) ?? undefined);
+  const cached = environment.resolutionState.nodeOutputs.get(node);
+  if (cached !== undefined) {
+    return cached;
   }
-  const nextResolving = new Set(resolvingMaps).add(node);
-  const mapItems = resolveMapItemsSchema(node, environment, nextResolving);
-  return mapItems.ok
-    ? optionalSchema(sourceNodeOutputSchema(node, mapItems.value) ?? undefined)
-    : mapItems;
+  const result =
+    node.kind === 'map'
+      ? (() => {
+          const mapItems = resolveMapItemsSchema(node, environment);
+          return mapItems.ok
+            ? optionalSchema(sourceNodeOutputSchema(node, mapItems.value) ?? undefined)
+            : mapItems;
+        })()
+      : optionalSchema(sourceNodeOutputSchema(node) ?? undefined);
+  environment.resolutionState.nodeOutputs.set(node, result);
+  return result;
 };
 
 const repeatBaseSchema = (
@@ -148,7 +174,6 @@ const mapBaseSchema = (
 const selectorBaseSchema = (
   selector: ValueSelector,
   environment: SelectorEnvironment,
-  resolvingMaps: ReadonlySet<SourceNode>,
 ): SelectorSchemaResolution => {
   switch (selector.kind) {
     case 'literal':
@@ -164,7 +189,7 @@ const selectorBaseSchema = (
         ? resolvedSchema(PipelineFailureValueSchema)
         : unavailableSelector();
     case 'nodeOutput':
-      return nodeOutputBaseSchema(selector.node, environment, resolvingMaps);
+      return nodeOutputBaseSchema(selector.node, environment);
     case 'repeat':
       return repeatBaseSchema(selector, environment);
     case 'map':
@@ -176,9 +201,8 @@ const selectorBaseSchema = (
 const resolveSelectorSchema = (
   selector: ValueSelector,
   environment: SelectorEnvironment,
-  resolvingMaps: ReadonlySet<SourceNode> = new Set(),
 ): SelectorSchemaResolution => {
-  const base = selectorBaseSchema(selector, environment, resolvingMaps);
+  const base = selectorBaseSchema(selector, environment);
   if (!base.ok || selector.kind === 'literal') {
     return base;
   }
@@ -186,23 +210,69 @@ const resolveSelectorSchema = (
   return projected === null ? { ok: false, reason: 'pointer' } : { ok: true, schema: projected };
 };
 
-type MapItemsSchemaResolution =
-  | { readonly ok: true; readonly value: MapItemsSchema }
-  | { readonly ok: false; readonly reason: 'pointer' | 'schema' | 'scope' };
+const mapOutputDependency = (
+  node: MapNode,
+  environment: SelectorEnvironment,
+): MapNode | undefined => {
+  if (node.items.kind !== 'nodeOutput') {
+    return undefined;
+  }
+  const dependency = environment.nodes.get(node.items.node);
+  return dependency?.kind === 'map' ? dependency : undefined;
+};
 
 const resolveMapItemsSchema = (
-  node: Extract<SourceNode, { readonly kind: 'map' }>,
+  node: MapNode,
   environment: SelectorEnvironment,
-  resolvingMaps: ReadonlySet<SourceNode> = new Set([node]),
 ): MapItemsSchemaResolution => {
-  const resolution = resolveSelectorSchema(node.items, environment, resolvingMaps);
-  if (!resolution.ok) {
-    return resolution;
+  const cached = environment.resolutionState.mapItems.get(node);
+  if (cached !== undefined) {
+    return cached;
   }
-  const items = mapItemsSchema(resolution.schema);
-  return items === null || items.minimumItems > node.maximumItems
-    ? { ok: false, reason: 'schema' }
-    : { ok: true, value: items };
+
+  const pending: MapNode[] = [];
+  const pendingSet = new Set<MapNode>();
+  let current = node;
+  while (!environment.resolutionState.mapItems.has(current)) {
+    if (pendingSet.has(current)) {
+      const failure = { ok: false, reason: 'scope' } as const;
+      for (const pendingNode of pending) {
+        environment.resolutionState.mapItems.set(pendingNode, failure);
+        environment.resolutionState.nodeOutputs.set(pendingNode, failure);
+      }
+      return failure;
+    }
+    pending.push(current);
+    pendingSet.add(current);
+    const dependency = mapOutputDependency(current, environment);
+    if (dependency === undefined || environment.resolutionState.mapItems.has(dependency)) {
+      break;
+    }
+    current = dependency;
+  }
+
+  for (let index = pending.length - 1; index >= 0; index -= 1) {
+    const pendingNode = pending[index];
+    if (pendingNode === undefined) {
+      continue;
+    }
+    const resolution = resolveSelectorSchema(pendingNode.items, environment);
+    const items = resolution.ok ? mapItemsSchema(resolution.schema) : null;
+    const result: MapItemsSchemaResolution = !resolution.ok
+      ? resolution
+      : items === null || items.minimumItems > pendingNode.maximumItems
+        ? { ok: false, reason: 'schema' }
+        : { ok: true, value: items };
+    environment.resolutionState.mapItems.set(pendingNode, result);
+    environment.resolutionState.nodeOutputs.set(
+      pendingNode,
+      result.ok
+        ? optionalSchema(sourceNodeOutputSchema(pendingNode, result.value) ?? undefined)
+        : result,
+    );
+  }
+
+  return environment.resolutionState.mapItems.get(node) ?? unavailableSelector();
 };
 
 const addSelectorResolutionDiagnostic = (

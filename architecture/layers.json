@@ -27,14 +27,14 @@
     {
       "name": "program",
       "path": "src/program",
-      "state": "future",
+      "state": "active",
       "public": false,
       "dependencies": ["foundation"]
     },
     {
       "name": "compiler",
       "path": "src/compiler",
-      "state": "future",
+      "state": "active",
       "public": false,
       "dependencies": ["foundation", "source", "materialization", "program"]
     },

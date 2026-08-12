@@ -100,7 +100,7 @@ private/public visibility.
 
 Each row is one independently verifiable requirement. `group` is the specification
 workstream and `owner` is the repository layer or repository policy boundary responsible
-for the evidence. `evidence_state` is `active` only for implemented `rp-00` through `rp-02`
+for the evidence. `evidence_state` is `active` only for implemented `rp-00` through `rp-03`
 evidence and `planned` for future work. Repeated spec sections deliberately split
 foundation byte/domain evidence from compiler, base-kernel, and coordination semantics;
 planned rows reserve evidence ownership only and create no directories, APIs, or test
@@ -145,8 +145,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-validated-canonical-domain",
-    "evidence_state": "planned"
+    "suite": "test/program/contracts/envelope.test.ts#survives a JSON round trip and rejects unknown envelope fields",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-005",
@@ -195,8 +195,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-digest-payloads",
-    "evidence_state": "planned"
+    "suite": "test/compiler/emission/bundle.test.ts#pins the full compiler bundle digest",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-010",
@@ -235,8 +235,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-bundle-goldens",
-    "evidence_state": "planned"
+    "suite": "test/compiler/lowering/id-vectors.test.ts#compiler lowering digest and full-ID vectors",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-014",
@@ -275,8 +275,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-canonicalization-edges",
-    "evidence_state": "planned"
+    "suite": "test/compiler/emission/bundle.test.ts#deterministic across equivalent caller property order",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-018",
@@ -345,8 +345,8 @@ placeholders.
     "group": "conformance",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "conformance-compiler",
-    "evidence_state": "planned"
+    "suite": "test/compiler/compile/source-forms.test.ts#compiler source-form coverage",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-025",
@@ -515,8 +515,8 @@ placeholders.
     "group": "materialization",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-agent-lowering",
-    "evidence_state": "planned"
+    "suite": "test/compiler/lowering/consensus-topology.test.ts#complete slot-consensus topology and exact materialization paths",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-042",
@@ -535,8 +535,8 @@ placeholders.
     "group": "program",
     "owner": "program",
     "item": "rp-03",
-    "suite": "program-contract",
-    "evidence_state": "planned"
+    "suite": "test/program/contracts/envelope.test.ts#Program compiler-bundle contracts",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-044",
@@ -545,8 +545,8 @@ placeholders.
     "group": "program",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-result",
-    "evidence_state": "planned"
+    "suite": "test/compiler/compile/result-contract.test.ts#closed compiler result contract",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-045",
@@ -555,8 +555,8 @@ placeholders.
     "group": "program",
     "owner": "program",
     "item": "rp-03",
-    "suite": "program-region-schema",
-    "evidence_state": "planned"
+    "suite": "test/program/contracts/envelope.test.ts#accepts the closed Program",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-046",
@@ -565,8 +565,8 @@ placeholders.
     "group": "program",
     "owner": "program",
     "item": "rp-03",
-    "suite": "program-selectors",
-    "evidence_state": "planned"
+    "suite": "test/program/contracts/selectors.test.ts#closed Program selectors",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-047",
@@ -575,8 +575,8 @@ placeholders.
     "group": "program",
     "owner": "program",
     "item": "rp-03",
-    "suite": "program-node-union",
-    "evidence_state": "planned"
+    "suite": "test/program/contracts/node-union.test.ts#closed Program node union",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-048",
@@ -585,8 +585,8 @@ placeholders.
     "group": "program",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-parallel-lowering",
-    "evidence_state": "planned"
+    "suite": "test/compiler/lowering/generated-topology.test.ts#exact generic-parallel routing table",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-049",
@@ -595,8 +595,8 @@ placeholders.
     "group": "program",
     "owner": "program",
     "item": "rp-03",
-    "suite": "program-structured-contracts",
-    "evidence_state": "planned"
+    "suite": "test/compiler/lowering/direct-structured-contracts.test.ts#direct and structured node lowering contracts",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-050",
@@ -605,8 +605,8 @@ placeholders.
     "group": "program",
     "owner": "program",
     "item": "rp-03",
-    "suite": "program-requirements",
-    "evidence_state": "planned"
+    "suite": "test/compiler/emission/bundle.test.ts#deduplicates identical requirements",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-051",
@@ -615,8 +615,8 @@ placeholders.
     "group": "program",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-provenance-ids",
-    "evidence_state": "planned"
+    "suite": "test/compiler/emission/invariants.test.ts#covers every emitted region and node with exactly one provenance record",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-052",
@@ -625,8 +625,8 @@ placeholders.
     "group": "program",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-dataflow-portability",
-    "evidence_state": "planned"
+    "suite": "test/compiler/dataflow/selector-matrix.test.ts#compiler dataflow matrix",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-053",
@@ -695,8 +695,8 @@ placeholders.
     "group": "source",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-scope-terminal-dataflow",
-    "evidence_state": "planned"
+    "suite": "test/compiler/dataflow/scope-dominance.test.ts#compiler selector scopes and route dominance",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-060",
@@ -705,8 +705,8 @@ placeholders.
     "group": "source",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-schema-compatibility",
-    "evidence_state": "planned"
+    "suite": "test/compiler/dataflow/selector-matrix.test.ts#integer to number widening",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-061",
@@ -715,8 +715,8 @@ placeholders.
     "group": "source",
     "owner": "compiler",
     "item": "rp-03",
-    "suite": "compiler-link-bounds-diagnostics",
-    "evidence_state": "planned"
+    "suite": "test/compiler/linking/diagnostics.test.ts#compiler linking diagnostics",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-062",

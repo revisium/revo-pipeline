@@ -1,9 +1,11 @@
-export { casesCoverFiniteDomain, finiteDomainOf, type FiniteDomain } from './finite-domain.js';
 export {
+  casesCoverFiniteDomain,
   compareCanonicalScalars,
+  finiteDomainOf,
   isPipelineFailureSchema,
   normalizeChoiceDomain,
   normalizeValueSchema,
+  projectValueSchema,
   valueSchemasEqual,
-} from './normalization.js';
-export { projectValueSchema } from './pointer.js';
+  type FiniteDomain,
+} from '../../foundation/index.js';

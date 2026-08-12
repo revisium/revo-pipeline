@@ -100,8 +100,9 @@ A `consensus` selection emits exactly:
    `approve | reject | abstain`, and routes succeeded/failed/cancelled to the respective
    vote/failed/cancelled end;
 4. one `choice` IR node after the parallel;
-5. five choice cases for `approved`, `rejected`, `inconclusive`,
-   `participantFailed`, and `cancelled`, using the source routes.
+5. five choice cases in exact Unicode order: `approved`, `cancelled`, `inconclusive`,
+   `participantFailed`, and `rejected`, using the same-named source routes and no
+   `otherwise` target.
 
 The vote-parallel policy classifies but does not route. The synthesized choice alone
 routes the five classifications. An explicit source consensus emits the identical
@@ -119,6 +120,11 @@ Participants lower in Unicode key order. Each branch region and its three exits 
 exact schemas, IDs, end mappings, outcome conversion, and provenance ordinals from
 Program v1. Explicit participants have null materialization provenance; slot participants
 use their own selected-participant path for the region, activity, and all three ends.
+For canonical slot index `s`, the aggregate parallel and choice use
+`/slots/{s}/selection`, a single activity and requirement use
+`/slots/{s}/selection/participant`, and consensus participant region/activity/ends plus
+requirement use `/slots/{s}/selection/participants/{i}`. No generated element may use a
+sibling participant path.
 
 A successful participant must explicitly output one vote. Activity failure is
 `participantFailed`. Participant cancellation before consensus-region cancellation is
