@@ -7,7 +7,8 @@ This repository is the source of `@revisium/revo-pipeline`.
 Read in this order:
 
 1. `README.md` for current work-item and publication status.
-2. Accepted ADR 0005 and `docs/architecture.md` for the direct-cutover boundary.
+2. Accepted ADRs 0005 through 0008 and `docs/architecture.md` for cutover, replay,
+   initialization identity, and bounded live-state boundaries.
 3. The six Draft specifications under `docs/specs/` for work-item constraints.
 4. `docs/delivery-plan.md` for sequential scope and spec-section traceability.
 5. `docs/host-integration.md` and the intent ownership matrix for consumer boundaries.
@@ -28,13 +29,13 @@ or CLI dependencies.
 
 ## Direct-cutover policy
 
-- Foundation, source, materialization, Program, and compiler are intentionally private
+- Foundation, source, materialization, Program, compiler, and the base kernel are intentionally private
   and publication-blocked; the root module has no runtime exports.
 - Do not add an adapter, converter, dual reader, deprecated alias, compatibility
   package, hidden interpreter, or runtime node-kind plugin.
 - Implement only the scope explicitly assigned by the canonical delivery plan.
 - Treat `architecture/layers.json` as the layer-state and dependency source of
-  truth. Do not create the future kernel or extensions directories.
+  truth. Do not create the future extensions directory.
 - Keep release workflows and public package exports absent until readiness is
   proved and separately approved.
 

@@ -68,6 +68,11 @@ the kernel's invariant checks are corruption guards, not an untrusted-state veri
 ```ts
 type FrameKeyPayload =
   | {
+      readonly kind: 'initialization';
+      readonly parentFrameKey: null;
+      readonly programDigest: Digest | null;
+    }
+  | {
       readonly kind: 'rootRegion';
       readonly parentFrameKey: null;
       readonly regionId: ProgramNodeId;
@@ -124,8 +129,11 @@ type CommandRef = {
 type CommandKey = Digest;
 ```
 
-Every frame key is the Canonicalization v1 digest in domain `pipeline-frame-key/v1`
-over exactly one `FrameKeyPayload`. `null` is the one root-parent sentinel. The repeat
+Every structural key is the Canonicalization v1 digest in domain `pipeline-frame-key/v1`
+over exactly one `FrameKeyPayload`. The `initialization` variant is the pre-root causal
+anchor used only for `PROGRAM_INVALID`; it is never executable and never appears in
+`PipelineState.frames`. Its `programDigest` is an own lexically valid candidate or
+`null`. `null` is the root/pre-root parent sentinel. The repeat
 body ordinal is the zero-based iteration number. Other structured nodes execute at most
 once in one enclosing region frame and therefore need no activation counter. A branch
 key or item key is canonical source data, not an encoded path. The payload has no
@@ -323,11 +331,30 @@ not add placeholder results. Properties sort by node ID. A succeeded selector se
 `output`. The exact `failure` is visible only through `nodeFailure` on a statically
 dominated failure route. Cancelled has no payload selector.
 
+`nodeResults` remains an exact frozen JSON record until its owning frame is pruned.
+Unchanged frozen result values may be shared between states. Insertion uses binary key
+positioning, one ordinary-object allocation, ordinary property assignment in canonical
+order, and one final freeze; it has no `Map`, persistent tree, hidden cache, or side
+index. For `K <= 4,096` retained results in one live frame, one insertion is
+`Theta(K)` assignments and `O(log K)` comparisons. The accepted `Theta(K^2)` maximum
+sequence is bounded to that live frame and never to total run history. In particular,
+`maximumTotalActivities = 1,000,000` causes no eager result allocation. General nested
+portable objects remain capped at 64 keys; only structural `nodeResults` uses the 4,096
+Program-node bound. See ADR 0008.
+
 All arrays and records are canonical: frames by key, pending/resolved and cancellation
 acknowledgements by command key, region cancellations by frame key, ready by node ID,
 branches by branch key, and item lists/results by item key. State MUST NOT contain
 workflow/provider/database IDs, attempts, leases, retry counters, deadlines, timestamps,
 DBOS handles, cursors, actor sessions, authorization results, executors, or secrets.
+
+`resolved` contains live receipts, not the run's event history. An accepted operation
+event removes the matching pending operation and inserts its exact
+`{commandKey,ref,eventDigest}` receipt before applying the result. The receipt remains
+while its owner or a cancellation acknowledgement set can still reference the command.
+It is pruned only after the result has been copied to its owner, every containing
+cancellation set has acknowledged it, and the owning frame is pruned. Durable replay
+after that point is the `revo-run` responsibility defined in the Host boundary below.
 
 ## Exact event union
 
@@ -487,6 +514,14 @@ IDs and provenance, which are intentionally absent from `KernelProgram`.
 A Program human gate whose answer vocabulary and answer routes are not unique equal
 Unicode-keyed sets is likewise `PROGRAM_INVALID` during initialization.
 
+For `PROGRAM_INVALID`, rejected input is normalized to `null`, no live frame is created,
+and exactly one `fail` command uses the `initialization` structural key. The failed
+state's and reference's effective `programDigest` is the own lexical candidate when
+present, otherwise that pre-root key; the reference node is `$pipeline`. For
+`INIT_INPUT_SCHEMA`, rejected input is also `null`, but the valid Program supplies its
+admitted `programDigest` and actual root-region key. No zero, random, or synthetic
+executable-frame digest is permitted.
+
 `advancePipeline` MUST first compare `bundle.programDigest` with
 `state.programDigest`. A mismatch returns `kind:'rejected'` with exactly
 `PROGRAM_DIGEST_MISMATCH`, the identical state object, and no commands. It MUST NOT hash
@@ -541,9 +576,10 @@ owner's full node ID into the enclosing region frame's `nodeResults`, then unlin
 prune itself and every completed descendant. An inner branch/item/body/call-region exit
 first copies into the owner's exact branch/item/body/call field; it never invents a
 synthetic node ID. The final owner copy and prune are atomic in the returned immutable
-state. Replay reads the retained parent result or global `resolved` entry and cannot
-recreate the child. `revo-run`'s durable event/attempt log is the audit authority;
-machine frames are live execution state, not durable audit history. A frame may be
+state. While the operation receipt remains live, replay reads `resolved` and cannot
+recreate the child. After receipt pruning, `revo-run`'s durable receipt and event log is
+the replay and audit authority; machine frames are live execution state, not durable
+audit history. A frame may be
 pruned only after it has no pending descendant and its exact result has been copied to
 its owning or enclosing parent.
 
@@ -623,3 +659,11 @@ delivery, run-scoped namespaces, dynamic IDs, attempts, retry and timeout policy
 reconciliation, DBOS workflows, global capacity, timers, authorization, subscriptions,
 and projections. The kernel does not poll or re-emit a pending command because no event
 arrived.
+
+For every accepted semantic event, `revo-run` MUST atomically persist the durable
+`(runId,commandKey) -> eventDigest` receipt, the next `PipelineState`, and the ordered
+outbox commands. A post-prune event with the same digest is an idempotent retry and MUST
+NOT invoke the kernel again; a different digest for the same key is a protocol conflict.
+A crash before commit leaves the prior state eligible for retry, while a crash after
+commit reuses the persisted receipt and outbox. This durable transaction is required for
+production replay safety and is outside the pure kernel.

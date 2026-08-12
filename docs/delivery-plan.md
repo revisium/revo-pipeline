@@ -77,7 +77,8 @@ private/public visibility.
 - **Objective:** complete bounded structured execution while preserving the pure
   kernel/host boundary.
 - **Scope:** parallel and vote policies, drain/cancel, repeat, map, waits, gates,
-  cancellation targets, acknowledgements, and internal compile-time extensions.
+  cancellation targets, acknowledgements, declared signal/gate-answer validation by
+  pending operation ref, and internal compile-time extensions.
 - **Out of scope:** host timers, DBOS, global capacity, authorization, run IDs, attempts,
   subscriptions, release workflows, and public exports.
 - **Acceptance:** exhaustive structured-machine, canonical coordination, cancellation,
@@ -100,8 +101,8 @@ private/public visibility.
 
 Each row is one independently verifiable requirement. `group` is the specification
 workstream and `owner` is the repository layer or repository policy boundary responsible
-for the evidence. `evidence_state` is `active` only for implemented `rp-00` through `rp-03`
-evidence and `planned` for future work. Repeated spec sections deliberately split
+for the evidence. `evidence_state` is `active` only for implemented `rp-00` through
+`rp-04` base evidence and `planned` for future work. Repeated spec sections deliberately split
 foundation byte/domain evidence from compiler, base-kernel, and coordination semantics;
 planned rows reserve evidence ownership only and create no directories, APIs, or test
 placeholders.
@@ -155,8 +156,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "kernel-validated-canonical-domain",
-    "evidence_state": "planned"
+    "suite": "test/kernel/contracts.test.ts#PipelineStateSchema",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-006",
@@ -205,8 +206,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "kernel-base-digest-payloads",
-    "evidence_state": "planned"
+    "suite": "test/kernel/identity.test.ts#covers every structural payload and event replay domain",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-011",
@@ -245,8 +246,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "kernel-base-goldens",
-    "evidence_state": "planned"
+    "suite": "test/kernel/identity.test.ts#pins the normative root frame and dispatch command vectors",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-015",
@@ -285,8 +286,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "kernel-canonicalization-edges",
-    "evidence_state": "planned"
+    "suite": "test/kernel/replay-and-faults.test.ts#checks the program digest before event normalization",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-019",
@@ -405,8 +406,8 @@ placeholders.
     "group": "machine",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "kernel-structural-identities",
-    "evidence_state": "planned"
+    "suite": "test/kernel/identity.test.ts#kernel structural identities",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-031",
@@ -415,8 +416,8 @@ placeholders.
     "group": "machine",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "kernel-state-contract",
-    "evidence_state": "planned"
+    "suite": "test/kernel/contracts.test.ts#keeps every Machine envelope closed and JSON portable",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-032",
@@ -425,8 +426,8 @@ placeholders.
     "group": "machine",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "kernel-event-contract",
-    "evidence_state": "planned"
+    "suite": "test/kernel/replay-and-faults.test.ts#kernel replay and fault precedence",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-033",
@@ -435,8 +436,8 @@ placeholders.
     "group": "machine",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "kernel-command-contract",
-    "evidence_state": "planned"
+    "suite": "test/kernel/identity.test.ts#orders cancellation, dispatch, and terminal commands by priority",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-034",
@@ -445,8 +446,8 @@ placeholders.
     "group": "machine",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "kernel-base-advancement",
-    "evidence_state": "planned"
+    "suite": "test/kernel/base-advancement.test.ts#kernel base advancement",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-035",
@@ -465,8 +466,8 @@ placeholders.
     "group": "machine",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "kernel-fault-contract",
-    "evidence_state": "planned"
+    "suite": "test/kernel/fault-contract.test.ts#kernel fault contract",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-037",

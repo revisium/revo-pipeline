@@ -41,7 +41,7 @@
     {
       "name": "kernel",
       "path": "src/kernel",
-      "state": "future",
+      "state": "active",
       "public": false,
       "dependencies": ["foundation", "program"]
     },

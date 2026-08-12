@@ -79,7 +79,12 @@ function createDependencyRules(manifest, productionDependencyNames) {
   const curatedBoundaryRules = manifest.layers.map((layer) => ({
     name: `cross-layer-${layer.name}-imports-use-index`,
     severity: 'error',
-    from: { pathNot: `^${escapeRegularExpression(layer.path)}/` },
+    from: {
+      pathNot:
+        layer.name === 'kernel'
+          ? `^(?:${escapeRegularExpression(layer.path)}/|test/support/kernel-internal\\.ts$)`
+          : `^${escapeRegularExpression(layer.path)}/`,
+    },
     to: { path: `^${escapeRegularExpression(layer.path)}/(?!index\\.ts$)` },
   }));
 

@@ -13,7 +13,7 @@
 
 > [!IMPORTANT]
 > Publication is blocked. The implemented foundation, source, materialization, Program,
-> and compiler layers are private, the root module has no runtime exports, and this is
+> compiler, and base-kernel layers are private, the root module has no runtime exports, and this is
 > not an installable consumer API.
 
 ## Status
@@ -43,6 +43,11 @@ hashing uses `node:crypto`. `src/index.ts` remains deliberately inert. The final
 `./kernel` exports are introduced only after conformance and consumer
 readiness are proved. Lifecycle acceptance still does not publish a release;
 publication remains a separate human gate.
+
+The private base kernel materializes the complete Machine v1 schemas and structural
+identities and executes initialization, activity, choice, linked call, end, live replay,
+data failure, and base run cancellation. Coordination, waits, gates, and the final
+machine functions remain unavailable until the next delivery item.
 
 ## Contract shape
 
@@ -78,8 +83,8 @@ cross-package fixtures. They are traceability requirements, not 103 pipeline
 implementations.
 
 The machine-readable [layer manifest](architecture/layers.json) marks `foundation`,
-`source`, `materialization`, `program`, and `compiler` active. Kernel and extensions
-remain future private records; their directories do not exist yet. Imports
+`source`, `materialization`, `program`, `compiler`, and `kernel` active. Extensions
+remains a future private record; its directory does not exist yet. Imports
 between active layers must use the target layer's curated `index.ts`, same-layer peer
 imports are allowed, and no layer may import the inert root module.
 

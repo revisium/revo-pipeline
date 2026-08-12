@@ -7,6 +7,8 @@ export type OwnedEnvelopeResult =
   | { readonly ok: true; readonly value: JsonValue }
   | { readonly ok: false; readonly failure: PipelineFailure };
 
+export type OwnedEnvelopeObjectLimit = (path: JsonPointer) => number;
+
 type Assignment = (value: JsonValue) => void;
 
 type VisitTask = {
@@ -115,13 +117,14 @@ const inspectArray = (
 const inspectObject = (
   input: object,
   path: JsonPointer,
+  maximumObjectProperties: number,
 ): { readonly entries: readonly (readonly [string, unknown])[] } | OwnedEnvelopeResult => {
   const prototype = readPrototype(input);
   const ownKeys = readOwnKeys(input);
   if ((prototype !== Object.prototype && prototype !== null) || ownKeys === null) {
     return failure('CANONICAL_INPUT', path);
   }
-  if (ownKeys.length > PIPELINE_LIMITS.portableValue.objectKeys) {
+  if (ownKeys.length > maximumObjectProperties) {
     return failure('BOUND_EXCEEDED', path);
   }
   const keys: string[] = [];
@@ -163,6 +166,7 @@ const enqueueContainer = (
   assign: Assignment,
   depth: number,
   maximumArrayItems: number,
+  objectLimit: OwnedEnvelopeObjectLimit,
   tasks: InspectionTask[],
 ): OwnedEnvelopeResult | null => {
   const isArray = readIsArray(input);
@@ -189,7 +193,16 @@ const enqueueContainer = (
     }
     return null;
   }
-  const inspection = inspectObject(input, path);
+  let maximumObjectProperties: number;
+  try {
+    maximumObjectProperties = objectLimit(path);
+  } catch {
+    return failure('CANONICAL_INPUT', path);
+  }
+  if (!Number.isSafeInteger(maximumObjectProperties) || maximumObjectProperties < 0) {
+    return failure('CANONICAL_INPUT', path);
+  }
+  const inspection = inspectObject(input, path, maximumObjectProperties);
   if ('ok' in inspection) {
     return inspection;
   }
@@ -248,6 +261,7 @@ const processVisitTask = (
   task: VisitTask,
   activeObjects: WeakSet<object>,
   maximumArrayItems: number,
+  objectLimit: OwnedEnvelopeObjectLimit,
   tasks: InspectionTask[],
 ): OwnedEnvelopeResult | null => {
   const primitive = normalizePrimitive(task.input, task.path, task.assign);
@@ -263,17 +277,26 @@ const processVisitTask = (
     return failure('CANONICAL_INPUT', task.path);
   }
   activeObjects.add(current);
-  return enqueueContainer(current, task.path, task.assign, task.depth, maximumArrayItems, tasks);
+  return enqueueContainer(
+    current,
+    task.path,
+    task.assign,
+    task.depth,
+    maximumArrayItems,
+    objectLimit,
+    tasks,
+  );
 };
 
 const processInspectionTask = (
   task: InspectionTask,
   activeObjects: WeakSet<object>,
   maximumArrayItems: number,
+  objectLimit: OwnedEnvelopeObjectLimit,
   tasks: InspectionTask[],
 ): OwnedEnvelopeResult | null => {
   if (task.kind === 'visit') {
-    return processVisitTask(task, activeObjects, maximumArrayItems, tasks);
+    return processVisitTask(task, activeObjects, maximumArrayItems, objectLimit, tasks);
   }
   activeObjects.delete(task.input);
   task.assign(Object.freeze(task.output));
@@ -283,6 +306,7 @@ const processInspectionTask = (
 export const normalizeOwnedEnvelope = (
   input: unknown,
   maximumArrayItems: number,
+  objectLimit: OwnedEnvelopeObjectLimit = () => PIPELINE_LIMITS.portableValue.objectKeys,
 ): OwnedEnvelopeResult => {
   if (!Number.isSafeInteger(maximumArrayItems) || maximumArrayItems < 0) {
     throw new TypeError('Invalid owned envelope array bound.');
@@ -299,7 +323,13 @@ export const normalizeOwnedEnvelope = (
     if (task === undefined) {
       break;
     }
-    const taskFailure = processInspectionTask(task, activeObjects, maximumArrayItems, tasks);
+    const taskFailure = processInspectionTask(
+      task,
+      activeObjects,
+      maximumArrayItems,
+      objectLimit,
+      tasks,
+    );
     if (taskFailure !== null) {
       return taskFailure;
     }

@@ -3,8 +3,9 @@
 ## Lifecycle
 
 The host contract remains Draft, and this checkout exports no root runtime API. The
-private compiler now emits the immutable bundle described below; kernel execution and
-host admission remain later work. The flow defines the consumer boundary that complete
+private compiler emits the immutable bundle described below and the private base kernel
+implements the non-coordination machine slice; complete kernel execution and host
+admission remain later work. The flow defines the consumer boundary that complete
 conformance evidence must prove.
 
 ## Host flow
@@ -48,8 +49,13 @@ while (state.status === 'running' || state.status === 'cancelling') {
 }
 ```
 
-The sketch describes ownership, not a transaction recipe. The host must preserve
-causation between each structural command reference and its returned semantic event.
+For an accepted semantic event, the host atomically commits its durable
+`(runId,commandKey) -> eventDigest` receipt, the next kernel state, and the ordered
+outbox commands. A repeated event with the same durable digest does not invoke the
+kernel again; a different digest for the same key is a protocol conflict. A crash before
+commit retries from the old state, while a crash after commit resumes from the persisted
+receipt, state, and outbox. The host must also preserve causation between each structural
+command reference and its returned semantic event.
 Admission, not the kernel, validates and hashes the complete compiler bundle. Invalid
 initial input produces a failed state and fail command; a program-digest mismatch rejects
 advancement with unchanged state and no commands.
@@ -75,7 +81,7 @@ worker leases, and provider responses are not kernel events or state.
 
 ## Runtime responsibilities
 
-`revo-run` owns durable delivery, event deduplication, retries and backoff, attempt and
+`revo-run` owns durable delivery, post-prune event deduplication, retries and backoff, attempt and
 effect identities, timers, cooperative cancellation, ambiguous-effect reconciliation,
 DBOS lifecycle, global capacity, projections, event cursors, and subscriptions. The
 kernel owns deterministic semantic progress, early parallel decisions, drain/cancel
@@ -84,8 +90,9 @@ outcome selection.
 
 Votes are explicit successful activity outputs: `approve`, `reject`, or `abstain`.
 Activity failure is never a vote. Each frame owns immutable scope input and exact
-terminal results. Child completion copies into the parent before live frames are pruned;
-the run event/attempt log remains the durable audit authority.
+terminal results. Child completion copies into the parent before live frames and their
+receipts are pruned; the run receipt/event/attempt log remains the durable replay and
+audit authority.
 
 Run and region cancellation are nonterminal until all pending work acknowledges.
 Independent sibling regions may have concurrent cancellation sets. Once run
