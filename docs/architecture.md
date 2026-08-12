@@ -5,7 +5,7 @@
 [ADR 0005](./adr/0005-greenfield-language-compiler-kernel-cutover.md) is Accepted and
 sets the direct-cutover architecture. The six contracts in `docs/specs/` remain Draft
 until conformance and consumer readiness are accepted. The private foundation, source,
-materialization, Program, and compiler layers are active while the root module stays
+materialization, Program, compiler, and base-kernel layers are active while the root module stays
 inert and publication remains unconditionally blocked; there is no consumer API.
 
 ## System shape
@@ -52,8 +52,8 @@ it in the final manifest.
 `architecture/layers.json` is the canonical machine-readable record for state,
 paths, dependency direction, and visibility. Dependency-cruiser derives graph rules
 from it, while concise contract tests pin the current state and filesystem. Foundation,
-source, materialization, Program, and compiler are active; kernel and extensions remain
-future and have no source directories.
+source, materialization, Program, compiler, and the base kernel are active; extensions
+remains future and has no source directory.
 
 ```text
 source -------------> foundation
@@ -200,6 +200,18 @@ frame has a structural digest key, immutable `scopeInput`, and full-ID terminal
 pruning. The kernel has no I/O, clocks, randomness, persistence, hidden mutable state,
 runtime IDs, or attempts. Calls are linked before execution and recursive call graphs
 are rejected. Parallel, map, repeat, and consensus expansion is bounded.
+
+Kernel replay receipts are live-state indexes rather than an unbounded audit log. The
+kernel retains an event digest only while its owning frame or cancellation cleanup can
+still reference the command. `revo-run` owns post-prune replay and atomically persists
+the run-scoped receipt, next state, and ordered outbox. See
+[ADR 0006](./adr/0006-live-kernel-receipts-and-durable-host-replay.md).
+
+Live frame `nodeResults` remain a frozen, canonically ordered JSON record. Insertions use
+binary key positioning, one ordinary copy, and one freeze. The accepted quadratic
+worst-case is bounded by 4,096 results in one live frame and never by total run history;
+no hidden cache or million-activity allocation is permitted. See
+[ADR 0008](./adr/0008-bounded-canonical-live-node-results.md).
 
 ## Traceability
 

@@ -42,7 +42,11 @@ export {
   type ParallelPolicy,
   type RegionExitClassification,
 } from './policy.js';
-export { normalizeOwnedEnvelope, type OwnedEnvelopeResult } from './owned-envelope.js';
+export {
+  normalizeOwnedEnvelope,
+  type OwnedEnvelopeObjectLimit,
+  type OwnedEnvelopeResult,
+} from './owned-envelope.js';
 export {
   appendJsonPointer,
   escapeJsonPointerToken,

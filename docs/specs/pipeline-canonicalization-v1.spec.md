@@ -126,6 +126,25 @@ Domain: `pipeline-frame-key/v1`
 - digest:
   `sha256:2c6bc1ea876c7f591aa19f1477e1f9da47e22a0cf83b567f6bc5b9568774f61b`
 
+### Invalid-Program initialization key
+
+Domain: `pipeline-frame-key/v1`
+
+```json
+{ "kind": "initialization", "parentFrameKey": null, "programDigest": null }
+```
+
+- payload byte length: `68`
+- digest:
+  `sha256:b15ff8e8f9172a2ecc0ffe97cbc63ac3198f16a8e47baae28e1b09a5b9ca1086`
+
+When no lexical candidate Program digest exists, the `PROGRAM_INVALID` command reference
+uses this digest for both `frameKey` and effective `programDigest`, with
+`nodeId:"$pipeline"`. The `pipeline-command-key/v1` digest over exactly
+`{kind:"fail",ref}` has payload byte length `219` and is:
+
+`sha256:84d4adb5d4cfb805d6570e892891a3fb575064369750766fb416bfdd4024ddf7`.
+
 ### Root-frame activity command key
 
 Domain: `pipeline-command-key/v1`

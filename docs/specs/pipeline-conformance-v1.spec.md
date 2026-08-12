@@ -205,6 +205,11 @@ events, program-digest rejection, and terminal immutability. Kernel tests MUST p
 does not recompute the compiler-bundle digest; core/run admission tests MUST prove they
 recompute `{program,requirements,provenance}` and validate every component.
 
+Invalid-Program fixtures MUST pin the pre-root `initialization` payload, its null-candidate
+frame-key golden, the resulting fail-command golden, and the lexical-candidate case. The
+pre-root key MUST never appear in `PipelineState.frames`. Invalid-input fixtures for a
+valid Program MUST instead use its actual root-region key and admitted `programDigest`.
+
 Invalid initial input MUST produce failed state plus `INIT_INPUT_SCHEMA`. Runtime missing
 pointer and top-level data failure MUST be value-redacted. A child-input schema mismatch
 MUST create no child frame. Call/repeat/map store the owning node's
@@ -262,8 +267,20 @@ terminal.
 
 Frame lifecycle tests MUST prove immutable `scopeInput`, full-ID `nodeResults`, the one
 exact succeeded/failed/cancelled envelope, status-specific selector visibility, atomic
-child-result copy-up before recursive pruning, replay after pruning, and preservation of
-the audit trail in the run-owned event log.
+child-result copy-up before recursive pruning, identical/conflicting replay while a
+receipt is live, and preservation of post-prune replay and audit in the run-owned event
+log. Cross-package evidence MUST prove that post-prune identical delivery does not invoke
+the kernel again and conflicting delivery is rejected.
+
+Bounded-result tests MUST prove reverse insertion of 4,096 full node IDs produces a
+frozen canonically sorted record with exactly 8,390,656 ordinary assignments and at most
+`4,096 * 12` key comparisons. They MUST prove duplicate insertion performs no
+replacement or mutation, a maximum record hydrates and survives JSON round trip, nested
+portable objects remain capped at 64 keys, and `maximumTotalActivities = 1,000,000`
+causes no eager allocation. Secondary performance evidence on the reference verification
+host MUST warm the path and measure five full insertion runs; median insertion MUST be
+at most 5 seconds, hydration at most 500 milliseconds, and final-state serialization at
+most 50 milliseconds. See ADR 0008.
 
 ## Purity, side-channel, and package evidence
 
@@ -302,7 +319,10 @@ Cross-package fixtures MUST prove core resolves every requirement to one exact i
 binding without changing `programDigest`, and run validates/adopts its own immutable
 plan, drives the pure kernel through DBOS, applies initial commands, owns retry/time/
 reconciliation/global capacity/events/subscriptions, and maps structural refs to dynamic
-IDs.
+IDs. Run fixtures MUST also prove one atomic write of
+`(runId,commandKey) -> eventDigest`, next kernel state, and ordered outbox commands,
+including crash-before-commit retry, crash-after-commit deduplication, and post-prune
+conflict handling.
 
 ## Cutover gates
 

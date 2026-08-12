@@ -52,7 +52,7 @@ const expectedManifest = {
     {
       name: 'kernel',
       path: 'src/kernel',
-      state: 'future',
+      state: 'active',
       public: false,
       dependencies: ['foundation', 'program'],
     },
@@ -71,11 +71,12 @@ describe('canonical layer manifest', () => {
     expect(manifest).toEqual(expectedManifest);
   });
 
-  it('materializes only the five active private layers', () => {
+  it('materializes only the six active private layers', () => {
     expect(readdirSync(join(repositoryRoot, 'src')).toSorted()).toEqual([
       'compiler',
       'foundation',
       'index.ts',
+      'kernel',
       'materialization',
       'program',
       'source',
