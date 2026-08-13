@@ -38,8 +38,6 @@ export const evaluateRepeatCondition = (
   return Object.freeze({
     ok: true,
     value:
-      condition.kind === 'equals'
-        ? scalar === condition.value
-        : condition.values.some((value) => scalar === value),
+      condition.kind === 'equals' ? scalar === condition.value : condition.values.includes(scalar),
   });
 };

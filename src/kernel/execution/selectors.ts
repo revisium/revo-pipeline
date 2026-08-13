@@ -125,7 +125,5 @@ export const choiceMatches = (
     return false;
   }
   const scalar = value;
-  return domain.kind === 'equals'
-    ? scalar === domain.value
-    : domain.values.some((candidate) => scalar === candidate);
+  return domain.kind === 'equals' ? scalar === domain.value : domain.values.includes(scalar);
 };

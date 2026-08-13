@@ -14,9 +14,11 @@ export const isNfcString = (value: string): boolean =>
 
 export const unicodeCodePointLength = (value: string): number => {
   let length = 0;
-  for (let index = 0; index < value.length; length += 1) {
+  let index = 0;
+  while (index < value.length) {
     const point = value.codePointAt(index);
     index += point !== undefined && point > 0xffff ? 2 : 1;
+    length += 1;
   }
   return length;
 };
