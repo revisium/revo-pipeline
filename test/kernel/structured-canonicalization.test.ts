@@ -43,9 +43,9 @@ describe('structured machine canonicalization evidence', () => {
     expect(
       computeFrameKey({ kind: 'mapItem', parentFrameKey, regionId, itemKey: 'e\u0301' }),
     ).toBeNull();
-    expect(computeFrameKey({ itemKey: 'é', regionId, parentFrameKey, kind: 'mapItem' })).not.toBe(
-      null,
-    );
+    expect(
+      computeFrameKey({ itemKey: 'é', regionId, parentFrameKey, kind: 'mapItem' }),
+    ).not.toBeNull();
     expect(
       frameKeyValidator.Check({ kind: 'repeatBody', parentFrameKey, regionId, ordinal: -1 }),
     ).toBe(false);

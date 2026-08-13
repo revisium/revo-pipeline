@@ -14,10 +14,11 @@ const parentRegionFrame = (
 ): RegionMachineFrame | null => {
   const owner =
     frame.parentFrameKey === null ? undefined : context.draft.frames.get(frame.parentFrameKey);
-  if (owner === undefined || owner.parentFrameKey === null) {
+  const parentFrameKey = owner?.parentFrameKey;
+  if (parentFrameKey === undefined || parentFrameKey === null) {
     return null;
   }
-  const parent = context.draft.frames.get(owner.parentFrameKey);
+  const parent = context.draft.frames.get(parentFrameKey);
   return parent !== undefined &&
     (parent.kind === 'rootRegion' ||
       parent.kind === 'callRegion' ||

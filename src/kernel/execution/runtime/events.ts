@@ -23,6 +23,8 @@ type RoutedResult =
     }
   | { readonly failure: ReturnType<typeof failure> };
 
+type RoutedEventResult = RoutedResult | MachineFaultCode | null;
+
 const isCancellationEvent = (event: NormalizedEvent['event']): boolean =>
   event.kind === 'activityCancelled' ||
   event.kind === 'waitCancelled' ||
@@ -72,7 +74,7 @@ const waitResult = (
   context: RuntimeContext,
   pending: Extract<PendingOperation, { readonly kind: 'wait' }>,
   normalized: NormalizedEvent,
-): RoutedResult | MachineFaultCode | null => {
+): RoutedEventResult => {
   const event = normalized.event;
   const frame = context.draft.frames.get(pending.ref.frameKey);
   const region =
@@ -119,7 +121,7 @@ const gateResult = (
   context: RuntimeContext,
   pending: Extract<PendingOperation, { readonly kind: 'humanGate' }>,
   normalized: NormalizedEvent,
-): RoutedResult | MachineFaultCode | null => {
+): RoutedEventResult => {
   const event = normalized.event;
   const frame = context.draft.frames.get(pending.ref.frameKey);
   const region =
@@ -158,7 +160,7 @@ const routedResult = (
   context: RuntimeContext,
   pending: PendingOperation,
   normalized: NormalizedEvent,
-): RoutedResult | MachineFaultCode | null => {
+): RoutedEventResult => {
   switch (pending.kind) {
     case 'activity':
       return activityResult(context, pending, normalized);

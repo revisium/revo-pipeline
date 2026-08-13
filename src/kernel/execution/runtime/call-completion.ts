@@ -4,8 +4,7 @@ import type { RegionTerminalResult } from '../../contracts/results.js';
 import { valueMatchesSchema } from '../selectors.js';
 import { pruneFrameTree } from './cancellation.js';
 import type { CancellationCausality, RuntimeContext } from './context.js';
-import { routeOwnedResult } from './parent-result.js';
-import { storeOwnedResult } from './parent-result.js';
+import { routeOwnedResult, storeOwnedResult } from './parent-result.js';
 import { findRuntimeNode, resolveRuntimeRegion } from './program-index.js';
 import { cancelledNode, cleanupNodeResult, failedNode, failure, succeededNode } from './results.js';
 

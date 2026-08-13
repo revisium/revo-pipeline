@@ -1,8 +1,7 @@
 import type { JsonValue, PipelineFailure } from '../../../foundation/index.js';
 import type { ProgramRepeatNode } from '../../../program/index.js';
 import type { RepeatBodyMachineFrame } from '../../contracts/region-frames.js';
-import type { RegionTerminalResult } from '../../contracts/results.js';
-import type { NodeTerminalResult } from '../../contracts/results.js';
+import type { NodeTerminalResult, RegionTerminalResult } from '../../contracts/results.js';
 import type { RepeatMachineFrame } from '../../contracts/structured-frames.js';
 import { resolveMapping, valueMatchesSchema, type SelectorEnvironment } from '../selectors.js';
 import { pruneFrameTree } from './cancellation.js';
@@ -103,6 +102,36 @@ const startNextBody = (
   return true;
 };
 
+const completeRepeatValue = (
+  context: RuntimeContext,
+  owner: RepeatMachineFrame,
+  node: ProgramRepeatNode,
+  frame: RepeatBodyMachineFrame,
+  result: Extract<RegionTerminalResult, { readonly status: 'succeeded' }>,
+  base: SelectorEnvironment,
+): boolean => {
+  const environment: SelectorEnvironment = {
+    ...base,
+    regionOutput: result.output,
+    repeat: { iteration: frame.ordinal, previousOutput: result.output },
+  };
+  const condition = evaluateRepeatCondition(node.continueWhen, environment);
+  if (!condition.ok) {
+    return failRepeat(context, owner, node, failure('DATA_POINTER_MISSING'));
+  }
+  const updated = Object.freeze({ ...owner, previousOutput: result.output, bodyRegionKey: null });
+  context.draft.setFrame(updated);
+  if (condition.value && frame.ordinal + 1 < node.maximumIterations) {
+    return startNextBody(context, updated, node, environment);
+  }
+  const output = outputResult(node, environment);
+  if (!output.ok) {
+    return failRepeat(context, updated, node, output.failure);
+  }
+  const target = condition.value ? node.routes.exhausted : node.routes.completed;
+  return finishRepeat(context, updated, node, succeededNode(output.output), target);
+};
+
 export const completeRepeatBody = (
   context: RuntimeContext,
   frame: RepeatBodyMachineFrame,
@@ -143,24 +172,5 @@ export const completeRepeatBody = (
   if (classification !== 'value') {
     return false;
   }
-  const environment: SelectorEnvironment = {
-    ...base,
-    regionOutput: result.output,
-    repeat: { iteration: frame.ordinal, previousOutput: result.output },
-  };
-  const condition = evaluateRepeatCondition(node.continueWhen, environment);
-  if (!condition.ok) {
-    return failRepeat(context, current, node, failure('DATA_POINTER_MISSING'));
-  }
-  const owner = Object.freeze({ ...current, previousOutput: result.output, bodyRegionKey: null });
-  context.draft.setFrame(owner);
-  if (condition.value && frame.ordinal + 1 < node.maximumIterations) {
-    return startNextBody(context, owner, node, environment);
-  }
-  const output = outputResult(node, environment);
-  if (!output.ok) {
-    return failRepeat(context, owner, node, output.failure);
-  }
-  const target = condition.value ? node.routes.exhausted : node.routes.completed;
-  return finishRepeat(context, owner, node, succeededNode(output.output), target);
+  return completeRepeatValue(context, current, node, frame, result, base);
 };

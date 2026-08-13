@@ -8,7 +8,7 @@ import {
   productionWork,
   program,
 } from '../support/admission-program-fixtures.js';
-import { literalMapQueue } from '../support/admission-reference-model.js';
+import { literalMapQueue, literalParallelQueue } from '../support/admission-reference-model.js';
 import { kernelModule, kernelProgram } from '../support/kernel-builders.js';
 
 describe('independent literal queue admission model', () => {
@@ -54,9 +54,8 @@ describe('independent literal queue admission model', () => {
 
   it('adds two 40,000 sibling bursts instead of taking their scalar maximum', () => {
     const work = productionWork(parallelRegion(40_000));
-    const literal = 2 + 2 * (1 + 40_000 + 2) + 2;
-    expect(literal).toBe(80_010);
-    expect(work.start).toBe(literal);
+    expect(literalParallelQueue([40_000, 40_000])).toBe(80_010);
+    expect(work.start).toBe(80_010);
   });
 
   it('pins every admission coordinate owned by Program analysis', () => {

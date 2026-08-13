@@ -144,17 +144,20 @@ const cancelUnstartedBranches = (
   if (!pruneFrameTrees(context.draft, idle, context.discard)) {
     return owner;
   }
-  return owner.mode === 'generic'
-    ? Object.freeze({
-        ...owner,
-        branchRegionKeys: Object.freeze(branchRegionKeys),
-        branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
-      })
-    : Object.freeze({
-        ...owner,
-        branchRegionKeys: Object.freeze(branchRegionKeys),
-        branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
-      });
+  if (owner.mode === 'generic') {
+    return Object.freeze({
+      ...owner,
+      mode: 'generic',
+      branchRegionKeys: Object.freeze(branchRegionKeys),
+      branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
+    });
+  }
+  return Object.freeze({
+    ...owner,
+    mode: 'votes',
+    branchRegionKeys: Object.freeze(branchRegionKeys),
+    branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
+  });
 };
 
 const withCleanupSelection = (
@@ -176,6 +179,34 @@ const withCleanupSelection = (
     });
   }
   return owner;
+};
+
+const storeCompletedBranch = (
+  context: RuntimeContext,
+  owner: ParallelMachineFrame,
+  node: ProgramParallelNode,
+  requested: boolean,
+  wasSelected: boolean,
+): boolean => {
+  let updated = owner;
+  if (requested) {
+    context.draft.setFrame(updated);
+  } else if (!wasSelected && updated.selected !== null) {
+    const cancelling = updated.selected !== 'cancelled' && node.remaining === 'cancel';
+    updated = Object.freeze({ ...updated, status: cancelling ? 'cancelling' : 'draining' });
+    context.draft.setFrame(updated);
+    if (cancelling) {
+      updated = cancelUnstartedBranches(context, updated);
+      context.draft.setFrame(updated);
+      if (!requestRegionCancellation(context.draft, updated, 'POLICY_SELECTED')) {
+        return false;
+      }
+    }
+  } else {
+    context.draft.setFrame(updated);
+  }
+  context.enqueue(updated.key);
+  return true;
 };
 
 export const completeParallelBranch = (
@@ -205,27 +236,7 @@ export const completeParallelBranch = (
     context.markCleanup(owner.key, cleanupOwner.remaining);
   }
   context.draft.charge(2);
-  if (requested !== null) {
-    context.draft.setFrame(owner);
-  } else if (!wasSelected && owner.selected !== null) {
-    owner = Object.freeze({
-      ...owner,
-      status:
-        owner.selected !== 'cancelled' && node.remaining === 'cancel' ? 'cancelling' : 'draining',
-    });
-    context.draft.setFrame(owner);
-    if (owner.status === 'cancelling') {
-      owner = cancelUnstartedBranches(context, owner);
-      context.draft.setFrame(owner);
-      if (!requestRegionCancellation(context.draft, owner, 'POLICY_SELECTED')) {
-        return false;
-      }
-    }
-  } else {
-    context.draft.setFrame(owner);
-  }
-  context.enqueue(owner.key);
-  return true;
+  return storeCompletedBranch(context, owner, node, requested !== null, wasSelected);
 };
 
 const outputFor = (owner: ParallelMachineFrame): JsonValue =>

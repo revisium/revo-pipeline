@@ -15,10 +15,15 @@ const add = (...values: readonly number[]): number =>
     overflow,
     values.reduce((total, value) => total + value, 0),
   );
-const multiply = (value: number, count: number): number =>
-  value === 0 || count === 0
-    ? 0
-    : Math.min(overflow, value > Math.floor(overflow / count) ? overflow : value * count);
+const multiply = (value: number, count: number): number => {
+  if (value === 0 || count === 0) {
+    return 0;
+  }
+  if (value > Math.floor(overflow / count)) {
+    return overflow;
+  }
+  return Math.min(overflow, value * count);
+};
 
 const emptyEnvelope = (): WorkEnvelope =>
   Object.freeze({ start: 0, resume: 0, cancel: 0, tokens: 0, synchronous: 0 });

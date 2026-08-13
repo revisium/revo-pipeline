@@ -157,6 +157,20 @@ const hasCanonicalStateArrays = (state: PipelineState): boolean =>
   state.regionCancellations.every(({ awaiting }) => isStrictlySorted(awaiting, (key) => key)) &&
   state.frames.every(hasCanonicalFrameArrays);
 
+const hasCancellationOwnerChain = (
+  operationFrameKey: Digest,
+  ownerKeys: readonly Digest[],
+  frames: ReadonlyMap<Digest, MachineFrame>,
+): boolean => {
+  const remaining = new Set(ownerKeys);
+  let frame = frames.get(operationFrameKey);
+  for (let depth = 0; frame !== undefined && depth <= 64; depth += 1) {
+    remaining.delete(frame.key);
+    frame = frame.parentFrameKey === null ? undefined : frames.get(frame.parentFrameKey);
+  }
+  return remaining.size === 0;
+};
+
 const hasConsistentCancellationOwners = (state: PipelineState): boolean => {
   const frames = new Map(state.frames.map((frame) => [frame.key, frame]));
   const pending = new Map(state.pending.map((operation) => [operation.commandKey, operation]));
@@ -174,16 +188,10 @@ const hasConsistentCancellationOwners = (state: PipelineState): boolean => {
   }
   for (const [commandKey, ownerKeys] of ownersByCommand) {
     const operation = pending.get(commandKey);
-    if (operation === undefined) {
-      return false;
-    }
-    const remaining = new Set(ownerKeys);
-    let frame = frames.get(operation.ref.frameKey);
-    for (let depth = 0; frame !== undefined && depth <= 64; depth += 1) {
-      remaining.delete(frame.key);
-      frame = frame.parentFrameKey === null ? undefined : frames.get(frame.parentFrameKey);
-    }
-    if (remaining.size > 0) {
+    if (
+      operation === undefined ||
+      !hasCancellationOwnerChain(operation.ref.frameKey, ownerKeys, frames)
+    ) {
       return false;
     }
   }

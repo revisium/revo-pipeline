@@ -89,17 +89,20 @@ const locallyCancel = (
       inputs.map(({ key }) => [key, Object.freeze({ status: 'cancelled' as const })]),
     ),
   );
-  return owner.mode === 'generic'
-    ? Object.freeze({
-        ...owner,
-        branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
-        status: 'completed',
-      })
-    : Object.freeze({
-        ...owner,
-        branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
-        status: 'completed',
-      });
+  if (owner.mode === 'generic') {
+    return Object.freeze({
+      ...owner,
+      mode: 'generic',
+      branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
+      status: 'completed',
+    });
+  }
+  return Object.freeze({
+    ...owner,
+    mode: 'votes',
+    branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
+    status: 'completed',
+  });
 };
 
 export const startParallel = (

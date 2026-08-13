@@ -30,6 +30,38 @@ const ownerNode = (context: RuntimeContext, owner: MapMachineFrame): ProgramMapN
   return node?.kind === 'map' ? node : null;
 };
 
+type MapCompletionState = Pick<MapMachineFrame, 'selected' | 'selectedFailureItemKey' | 'status'>;
+
+const completionState = (
+  owner: MapMachineFrame,
+  node: ProgramMapNode,
+  item: MapItemResult,
+  itemKey: string,
+  requested: boolean,
+): MapCompletionState => {
+  if (requested) {
+    return Object.freeze({
+      selected: owner.selected ?? 'cancelled',
+      selectedFailureItemKey: owner.selectedFailureItemKey,
+      status: 'draining',
+    });
+  }
+  const selectFailure =
+    owner.selected === null && item.status === 'failed' && node.failure.kind === 'failFast';
+  if (!selectFailure) {
+    return Object.freeze({
+      selected: owner.selected,
+      selectedFailureItemKey: owner.selectedFailureItemKey,
+      status: owner.status,
+    });
+  }
+  return Object.freeze({
+    selected: 'failed',
+    selectedFailureItemKey: itemKey,
+    status: node.failure.remaining === 'cancel' ? 'cancelling' : 'draining',
+  });
+};
+
 export const completeMapItem = (
   context: RuntimeContext,
   frame: MapItemMachineFrame,
@@ -50,33 +82,12 @@ export const completeMapItem = (
   if (cleanupOwner?.captured === true && owner.selected === null) {
     return false;
   }
-  const selectFailure =
-    requested === null &&
-    owner.selected === null &&
-    item.status === 'failed' &&
-    node.failure.kind === 'failFast';
-  const selectCancellation = false;
+  const state = completionState(owner, node, item, frame.itemKey, requested !== null);
   const updated = Object.freeze({
     ...owner,
     activeItemKeys: Object.freeze(owner.activeItemKeys.filter((key) => key !== frame.itemKey)),
     completedItems: insertMapItemResult(owner.completedItems, item),
-    selected:
-      requested !== null
-        ? (owner.selected ?? 'cancelled')
-        : selectFailure
-          ? 'failed'
-          : selectCancellation
-            ? 'cancelled'
-            : owner.selected,
-    selectedFailureItemKey: selectFailure ? frame.itemKey : owner.selectedFailureItemKey,
-    status:
-      requested !== null
-        ? 'draining'
-        : selectFailure || selectCancellation
-          ? selectFailure && node.failure.kind === 'failFast' && node.failure.remaining === 'cancel'
-            ? 'cancelling'
-            : 'draining'
-          : owner.status,
+    ...state,
   });
   context.draft.setFrame(updated);
   if (cleanupOwner !== null) {
@@ -190,7 +201,7 @@ const refill = (
   return Object.freeze({
     ...owner,
     pendingItemKeys: Object.freeze(owner.pendingItemKeys.slice(startingKeys.length)),
-    activeItemKeys: Object.freeze(active.sort(compareUnicodeCodePoints)),
+    activeItemKeys: Object.freeze(active.toSorted(compareUnicodeCodePoints)),
   });
 };
 

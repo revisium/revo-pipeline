@@ -103,15 +103,16 @@ const nestedRegionOwner = (
   index: RuntimeProgramIndex,
 ): RegionOwner | null => {
   const owner = draft.frames.get(frame.parentFrameKey);
-  if (owner === undefined || owner.parentFrameKey === null) {
+  const parentFrameKey = owner?.parentFrameKey;
+  if (parentFrameKey === undefined || parentFrameKey === null) {
     return null;
   }
-  const parent = resolveRuntimeRegion(owner.parentFrameKey, draft, index);
-  const node =
-    parent === null || !('nodeId' in owner)
-      ? null
-      : findRuntimeNode(index, parent.region, owner.nodeId);
-  if (parent === null || node === null) {
+  const parent = resolveRuntimeRegion(parentFrameKey, draft, index);
+  if (owner === undefined || parent === null || !('nodeId' in owner)) {
+    return null;
+  }
+  const node = findRuntimeNode(index, parent.region, owner.nodeId);
+  if (node === null) {
     return null;
   }
   if (frame.kind === 'callRegion' && owner.kind === 'call' && node.kind === 'call') {
@@ -152,7 +153,7 @@ const regionOwner = (
           return module === null ? null : Object.freeze({ module, region: module.region });
         })()
       : nestedRegionOwner(frame, draft, index);
-  if (owner === null || owner.region.id !== frame.regionId) {
+  if (owner?.region.id !== frame.regionId) {
     return null;
   }
   index.regions.set(frame.key, owner);

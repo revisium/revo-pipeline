@@ -6,6 +6,11 @@ import type {
 
 type GenericNode = Extract<ProgramParallelNode, { readonly mode: 'generic' }>;
 type VoteNode = Extract<ProgramParallelNode, { readonly mode: 'votes' }>;
+type QuorumPolicy = Extract<VoteNode['policy'], { readonly kind: 'quorum' }>;
+type IndependentThresholdPolicy = Extract<
+  VoteNode['policy'],
+  { readonly kind: 'independentThreshold' }
+>;
 
 export type GenericSelection = 'completed' | 'impossible' | 'failed' | 'cancelled';
 export type VoteSelection =
@@ -14,6 +19,19 @@ export type VoteSelection =
   | 'inconclusive'
   | 'participantFailed'
   | 'cancelled';
+
+type GenericCounts = {
+  readonly qualified: number;
+  readonly doesNotQualify: number;
+};
+
+type VoteCounts = {
+  readonly approve: number;
+  readonly reject: number;
+  readonly abstain: number;
+  readonly failed: number;
+  readonly cancelled: number;
+};
 
 const genericClassification = (
   node: GenericNode,
@@ -29,14 +47,10 @@ const genericClassification = (
   );
 };
 
-export const classifyGenericParallel = (
+const countGenericResults = (
   node: GenericNode,
   results: Readonly<Record<string, GenericParallelBranchResult>>,
-  selected: GenericSelection | null,
-): GenericSelection | null => {
-  if (selected !== null) {
-    return selected;
-  }
+): GenericCounts | null => {
   let qualified = 0;
   let doesNotQualify = 0;
   for (const branch of node.branches) {
@@ -45,11 +59,8 @@ export const classifyGenericParallel = (
       continue;
     }
     const classification = genericClassification(node, branch.key, result);
-    if (classification === 'failed') {
-      return 'failed';
-    }
-    if (classification === 'cancelled') {
-      return 'failed';
+    if (classification === 'failed' || classification === 'cancelled') {
+      return null;
     }
     if (classification === 'qualifies') {
       qualified += 1;
@@ -57,20 +68,42 @@ export const classifyGenericParallel = (
       doesNotQualify += 1;
     }
   }
-  const pending = node.branches.length - qualified - doesNotQualify;
-  if (node.policy.kind === 'all') {
-    return doesNotQualify > 0 ? 'impossible' : pending === 0 ? 'completed' : null;
-  }
-  if (node.policy.kind === 'any') {
-    return qualified > 0 ? 'completed' : pending === 0 ? 'impossible' : null;
-  }
-  if (qualified >= node.policy.count) {
-    return 'completed';
-  }
-  return qualified + pending < node.policy.count ? 'impossible' : null;
+  return Object.freeze({ qualified, doesNotQualify });
 };
 
-const voteCounts = (results: Readonly<Record<string, VoteParallelBranchResult>>) => {
+const selectGenericPolicy = (node: GenericNode, counts: GenericCounts): GenericSelection | null => {
+  const pending = node.branches.length - counts.qualified - counts.doesNotQualify;
+  if (node.policy.kind === 'all') {
+    if (counts.doesNotQualify > 0) {
+      return 'impossible';
+    }
+    return pending === 0 ? 'completed' : null;
+  }
+  if (node.policy.kind === 'any') {
+    if (counts.qualified > 0) {
+      return 'completed';
+    }
+    return pending === 0 ? 'impossible' : null;
+  }
+  if (counts.qualified >= node.policy.count) {
+    return 'completed';
+  }
+  return counts.qualified + pending < node.policy.count ? 'impossible' : null;
+};
+
+export const classifyGenericParallel = (
+  node: GenericNode,
+  results: Readonly<Record<string, GenericParallelBranchResult>>,
+  selected: GenericSelection | null,
+): GenericSelection | null => {
+  if (selected !== null) {
+    return selected;
+  }
+  const counts = countGenericResults(node, results);
+  return counts === null ? 'failed' : selectGenericPolicy(node, counts);
+};
+
+const voteCounts = (results: Readonly<Record<string, VoteParallelBranchResult>>): VoteCounts => {
   let approve = 0;
   let reject = 0;
   let abstain = 0;
@@ -92,6 +125,47 @@ const voteCounts = (results: Readonly<Record<string, VoteParallelBranchResult>>)
   return { approve, reject, abstain, failed, cancelled };
 };
 
+const selectUnanimous = (counts: VoteCounts, pending: number): VoteSelection | null => {
+  if (counts.reject > 0) {
+    return 'rejected';
+  }
+  if (pending > 0) {
+    return null;
+  }
+  return counts.abstain > 0 ? 'inconclusive' : 'approved';
+};
+
+const selectQuorum = (
+  policy: QuorumPolicy,
+  counts: VoteCounts,
+  pending: number,
+): VoteSelection | null => {
+  if (pending > 0) {
+    return null;
+  }
+  const participation = counts.approve + counts.reject;
+  if (participation < policy.minimumParticipation || counts.approve === counts.reject) {
+    return 'inconclusive';
+  }
+  return counts.approve > counts.reject ? 'approved' : 'rejected';
+};
+
+const selectIndependentThreshold = (
+  policy: IndependentThresholdPolicy,
+  counts: VoteCounts,
+  pending: number,
+): VoteSelection | null => {
+  if (counts.approve >= policy.approveThreshold) {
+    return 'approved';
+  }
+  if (counts.reject >= policy.rejectThreshold) {
+    return 'rejected';
+  }
+  const approveReachable = counts.approve + pending >= policy.approveThreshold;
+  const rejectReachable = counts.reject + pending >= policy.rejectThreshold;
+  return approveReachable || rejectReachable ? null : 'inconclusive';
+};
+
 export const classifyVoteParallel = (
   node: VoteNode,
   results: Readonly<Record<string, VoteParallelBranchResult>>,
@@ -109,31 +183,10 @@ export const classifyVoteParallel = (
   }
   const pending = node.branches.length - Object.keys(results).length;
   if (node.policy.kind === 'unanimous') {
-    if (counts.reject > 0) {
-      return 'rejected';
-    }
-    if (pending > 0) {
-      return null;
-    }
-    return counts.abstain > 0 ? 'inconclusive' : 'approved';
+    return selectUnanimous(counts, pending);
   }
   if (node.policy.kind === 'quorum') {
-    if (pending > 0) {
-      return null;
-    }
-    const participation = counts.approve + counts.reject;
-    if (participation < node.policy.minimumParticipation || counts.approve === counts.reject) {
-      return 'inconclusive';
-    }
-    return counts.approve > counts.reject ? 'approved' : 'rejected';
+    return selectQuorum(node.policy, counts, pending);
   }
-  if (counts.approve >= node.policy.approveThreshold) {
-    return 'approved';
-  }
-  if (counts.reject >= node.policy.rejectThreshold) {
-    return 'rejected';
-  }
-  const approveReachable = counts.approve + pending >= node.policy.approveThreshold;
-  const rejectReachable = counts.reject + pending >= node.policy.rejectThreshold;
-  return approveReachable || rejectReachable ? null : 'inconclusive';
+  return selectIndependentThreshold(node.policy, counts, pending);
 };

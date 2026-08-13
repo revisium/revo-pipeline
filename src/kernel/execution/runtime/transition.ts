@@ -2,8 +2,12 @@ import type { Digest } from '../../../foundation/index.js';
 import type { KernelProgram } from '../../contracts/program.js';
 import type { PipelineState } from '../../contracts/state.js';
 import { cancelCommand, completeCommand, failCommand, pipelineReference } from '../commands.js';
-import type { RuntimeContext, RuntimeTerminal } from './context.js';
-import type { CancellationCausality, RequestedCleanup } from './context.js';
+import type {
+  CancellationCausality,
+  RequestedCleanup,
+  RuntimeContext,
+  RuntimeTerminal,
+} from './context.js';
 import { createTransitionDraft } from './draft.js';
 import { createRuntimeProgramIndex } from './program-index.js';
 import { completeRequestedCancellation } from './region-completion.js';
