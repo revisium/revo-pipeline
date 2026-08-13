@@ -1,4 +1,10 @@
 import { PIPELINE_LIMITS } from './bounds.js';
+import {
+  reflectIsArray,
+  reflectOwnDescriptor,
+  reflectOwnKeys,
+  reflectPrototype,
+} from './hostile-reflection.js';
 import { appendJsonPointer, type JsonPointer } from './json-pointer.js';
 import { compareUnicodeCodePoints, isNfcString } from './unicode.js';
 
@@ -36,43 +42,18 @@ const inspectNumber = (value: number, path: JsonPointer): PortableValueResult =>
 const inspectString = (value: string, path: JsonPointer): PortableValueResult =>
   isNfcString(value) ? { ok: true, value } : rejected(path);
 
-const readOwnKeys = (value: object): readonly PropertyKey[] | null => {
-  try {
-    return Reflect.ownKeys(value);
-  } catch {
-    return null;
-  }
-};
-
-const readPrototype = (value: object): object | null | undefined => {
-  try {
-    return Reflect.getPrototypeOf(value);
-  } catch {
-    return undefined;
-  }
-};
-
 const readDataDescriptor = (value: object, key: PropertyKey): PropertyDescriptor | null => {
-  try {
-    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-    if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
-      return null;
-    }
-    return descriptor;
-  } catch {
+  const descriptor = reflectOwnDescriptor(value, key);
+  if (descriptor === null || !descriptor.enumerable || !('value' in descriptor)) {
     return null;
   }
+  return descriptor;
 };
 
-const readArrayLength = (value: readonly unknown[]): number | null => {
-  try {
-    const descriptor = Reflect.getOwnPropertyDescriptor(value, 'length');
-    return descriptor && 'value' in descriptor && Number.isSafeInteger(descriptor.value)
-      ? descriptor.value
-      : null;
-  } catch {
-    return null;
-  }
+const readArrayLength = (value: object): number | null => {
+  const descriptor = reflectOwnDescriptor(value, 'length');
+  const length: unknown = descriptor !== null && 'value' in descriptor ? descriptor.value : null;
+  return typeof length === 'number' && Number.isSafeInteger(length) ? length : null;
 };
 
 const withActiveObject = (
@@ -93,7 +74,7 @@ const withActiveObject = (
 };
 
 const inspectArray = (
-  value: readonly unknown[],
+  value: object,
   path: JsonPointer,
   depth: number,
   context: InspectionContext,
@@ -102,11 +83,11 @@ const inspectArray = (
   if (
     length === null ||
     length > PIPELINE_LIMITS.portableValue.arrayItems ||
-    readPrototype(value) !== Array.prototype
+    reflectPrototype(value) !== Array.prototype
   ) {
     return rejected(path);
   }
-  const keys = readOwnKeys(value);
+  const keys = reflectOwnKeys(value);
   if (
     keys?.length !== length + 1 ||
     !keys.includes('length') ||
@@ -143,11 +124,11 @@ const inspectObject = (
   depth: number,
   context: InspectionContext,
 ): PortableValueResult => {
-  const prototype = readPrototype(value);
+  const prototype = reflectPrototype(value);
   if (prototype !== Object.prototype && prototype !== null) {
     return rejected(path);
   }
-  const ownKeys = readOwnKeys(value);
+  const ownKeys = reflectOwnKeys(value);
   if (ownKeys === null || ownKeys.length > PIPELINE_LIMITS.portableValue.objectKeys) {
     return rejected(path);
   }
@@ -210,13 +191,13 @@ const inspectValue = (
   if (typeof value !== 'object') {
     return rejected(path);
   }
-  try {
-    return Array.isArray(value)
-      ? inspectArray(value, path, depth, context)
-      : inspectObject(value, path, depth, context);
-  } catch {
+  const isArray = reflectIsArray(value);
+  if (isArray === null) {
     return rejected(path);
   }
+  return isArray
+    ? inspectArray(value, path, depth, context)
+    : inspectObject(value, path, depth, context);
 };
 
 export const createPortableNormalizationSession = (): PortableNormalizationSession => {

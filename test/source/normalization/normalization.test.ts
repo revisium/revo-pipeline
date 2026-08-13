@@ -127,4 +127,33 @@ describe('source normalization', () => {
       normalizedAgent?.kind === 'agent' ? normalizedAgent.strategies.map(({ kind }) => kind) : [];
     expect(strategyKinds).toEqual(['consensus', 'single']);
   });
+
+  it('preserves an own __proto__ mapping key on an ordinary frozen record', () => {
+    const script = sourceNodeBuilders.script();
+    const properties = Object.fromEntries([['__proto__', { type: 'string' as const }]]);
+    const source = sourceWithNodes(
+      nonEmptyNodes([
+        {
+          ...script,
+          input: Object.fromEntries([['__proto__', { kind: 'literal' as const, value: 'safe' }]]),
+          inputSchema: {
+            type: 'object',
+            properties,
+            required: ['__proto__'],
+            additionalProperties: false,
+          },
+        },
+        endNode(),
+      ]),
+    );
+    const normalized = expectValidSource(source);
+    const node = normalized.source.modules[0]?.region.nodes[0];
+    if (node?.kind !== 'script') {
+      throw new TypeError('Expected a normalized script node.');
+    }
+    expect(Object.getPrototypeOf(node.input)).toBe(Object.prototype);
+    expect(Object.hasOwn(node.input, '__proto__')).toBe(true);
+    expect(node.input.__proto__).toEqual({ kind: 'literal', value: 'safe' });
+    expect(Object.isFrozen(node.input)).toBe(true);
+  });
 });

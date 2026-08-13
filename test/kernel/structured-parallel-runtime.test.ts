@@ -6,6 +6,7 @@ import {
   type PipelineCommand,
   type PipelineState,
 } from '../../src/kernel/index.js';
+import { unstartedParallelProgram } from '../support/parallel-unstarted-builders.js';
 import {
   parallelActivityProgram,
   synchronousParallelProgram,
@@ -33,12 +34,13 @@ const branchCommands = (
 const terminalEvent = (
   command: ActivityCommand,
   kind: 'activityFailed' | 'activityCancelled' | 'activitySucceeded',
+  output: unknown = {},
 ) => ({
   kind,
   commandKey: command.key,
   ref: command.ref,
   ...(kind === 'activityFailed' ? { errorCode: 'BRANCH_FAILED' } : {}),
-  ...(kind === 'activitySucceeded' ? { output: {} } : {}),
+  ...(kind === 'activitySucceeded' ? { output } : {}),
 });
 
 describe('structured parallel runtime outcomes', () => {
@@ -157,4 +159,106 @@ describe('structured parallel runtime outcomes', () => {
       commands: [{ kind: 'complete' }],
     });
   });
+
+  it('preserves hostile branch keys in region and result records without prototype mutation', () => {
+    const keys = ['__proto__', 'right'] as const;
+    const active = createInitialPipelineState(
+      parallelActivityProgram('drain', { kind: 'all' }, {}, keys),
+      {},
+    );
+    const owner = active.state.frames.find((frame) => frame.kind === 'parallel');
+    if (owner?.kind !== 'parallel') {
+      throw new TypeError('Expected a parallel owner.');
+    }
+    expect(Object.getPrototypeOf(owner.branchRegionKeys)).toBe(Object.prototype);
+    expect(Object.hasOwn(owner.branchRegionKeys, '__proto__')).toBe(true);
+
+    const failed = createInitialPipelineState(
+      parallelActivityProgram(
+        'drain',
+        { kind: 'all' },
+        { value: { kind: 'scopeInput', pointer: '/missing' } },
+        keys,
+      ),
+      {},
+    );
+    const failedOwner = failed.state.frames.find((frame) => frame.kind === 'parallel');
+    if (failedOwner?.kind !== 'parallel') {
+      throw new TypeError('Expected a failed parallel owner.');
+    }
+    expect(Object.getPrototypeOf(failedOwner.branchResults)).toBe(Object.prototype);
+    expect(Object.hasOwn(failedOwner.branchResults, '__proto__')).toBe(true);
+    expect(failedOwner.branchResults.__proto__).toMatchObject({ status: 'failed' });
+  });
+
+  it.each(['generic', 'votes'] as const)(
+    'preserves hostile %s records while cancelling an owning unstarted branch',
+    (mode) => {
+      const bundle = unstartedParallelProgram(mode);
+      const initial = createInitialPipelineState(bundle, {});
+      const commands = branchCommands(initial.state, initial.commands);
+      const winner = commands.winner;
+      const live = commands.live;
+      const unstarted = Reflect.getOwnPropertyDescriptor(commands, '__proto__')?.value;
+      if (winner === undefined || live === undefined || unstarted === undefined) {
+        throw new TypeError('Expected winner, live, and unstarted branch commands.');
+      }
+      if (unstarted.ref.nodeId === '$pipeline') {
+        throw new TypeError('Expected an activity node reference.');
+      }
+      const unstartedNodeId = unstarted.ref.nodeId;
+      const reset = {
+        ...initial.state,
+        frames: initial.state.frames.map((frame) =>
+          frame.key === unstarted.ref.frameKey && 'ready' in frame
+            ? { ...frame, ready: [unstartedNodeId], nodeResults: {} }
+            : frame,
+        ),
+        pending: initial.state.pending.filter(({ commandKey }) => commandKey !== unstarted.key),
+      };
+
+      const selected = advancePipeline(
+        bundle,
+        reset,
+        terminalEvent(winner, 'activitySucceeded', mode === 'votes' ? 'approve' : {}),
+      );
+      const owner = selected.state.frames.find((frame) => frame.kind === 'parallel');
+      if (owner?.kind !== 'parallel') {
+        throw new TypeError('Expected a selected parallel owner.');
+      }
+      expect(selected).toMatchObject({
+        state: { status: 'running', regionCancellations: [{ awaiting: [live.key] }] },
+        commands: [{ kind: 'cancelPending', targets: [live.key] }],
+      });
+      expect(Object.getPrototypeOf(owner.branchRegionKeys)).toBe(Object.prototype);
+      expect(Object.isFrozen(owner.branchRegionKeys)).toBe(true);
+      expect(Object.keys(owner.branchRegionKeys)).toEqual(['live']);
+      expect(Object.hasOwn(owner.branchRegionKeys, 'live')).toBe(true);
+      expect(Object.hasOwn(owner.branchRegionKeys, '__proto__')).toBe(false);
+      expect(Object.getPrototypeOf(owner.branchResults)).toBe(Object.prototype);
+      expect(Object.isFrozen(owner.branchResults)).toBe(true);
+      expect(Object.keys(owner.branchResults).toSorted()).toEqual(['__proto__', 'winner']);
+      expect(Object.hasOwn(owner.branchResults, '__proto__')).toBe(true);
+      expect(owner.branchResults.winner).toMatchObject(
+        mode === 'generic'
+          ? { status: 'completed', outcome: 'succeeded', output: {} }
+          : { status: 'vote', vote: 'approve' },
+      );
+      expect(Reflect.getOwnPropertyDescriptor(owner.branchResults, '__proto__')).toMatchObject({
+        value: { status: 'cancelled' },
+      });
+      expect(Object.hasOwn(owner.branchResults, 'live')).toBe(false);
+      expect(Object.prototype).not.toHaveProperty('status');
+
+      const completed = advancePipeline(
+        bundle,
+        selected.state,
+        terminalEvent(live, 'activityCancelled'),
+      );
+      expect(completed).toMatchObject({
+        state: { status: 'succeeded', frames: [], pending: [], regionCancellations: [] },
+        commands: [{ kind: 'complete' }],
+      });
+    },
+  );
 });

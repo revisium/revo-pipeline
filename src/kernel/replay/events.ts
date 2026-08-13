@@ -10,6 +10,7 @@ import type { MachineFaultCode } from '../contracts/faults.js';
 import type { PendingOperation, ResolvedOperation } from '../contracts/operations.js';
 import type { PipelineState } from '../contracts/state.js';
 import { computeEventDigest } from '../identity/digests.js';
+import { findSorted } from '../program/lookup.js';
 
 const eventValidator = Compile(PipelineEventSchema);
 const activityEvents = new Set(['activitySucceeded', 'activityFailed', 'activityCancelled']);
@@ -56,30 +57,6 @@ export const normalizeEvent = (input: unknown): EventNormalization => {
       });
 };
 
-const findByCommandKey = <Value extends { readonly commandKey: string }>(
-  values: readonly Value[],
-  commandKey: string,
-): Value | null => {
-  let lower = 0;
-  let upper = values.length - 1;
-  while (lower <= upper) {
-    const middle = lower + Math.floor((upper - lower) / 2);
-    const value = values[middle];
-    if (value === undefined) {
-      return null;
-    }
-    if (value.commandKey === commandKey) {
-      return value;
-    }
-    if (value.commandKey < commandKey) {
-      lower = middle + 1;
-    } else {
-      upper = middle - 1;
-    }
-  }
-  return null;
-};
-
 const sameReference = (left: unknown, right: unknown): boolean =>
   canonicalizeOwnedValue(left).text === canonicalizeOwnedValue(right).text;
 
@@ -113,13 +90,21 @@ export const classifyOperationEvent = (
   if (event.kind === 'cancelRequested') {
     return Object.freeze({ kind: 'rejected', code: 'EVENT_OPERATION_KIND' });
   }
-  const resolved = findByCommandKey<ResolvedOperation>(state.resolved, event.commandKey);
+  const resolved = findSorted<ResolvedOperation>(
+    state.resolved,
+    event.commandKey,
+    ({ commandKey }) => commandKey,
+  );
   if (resolved !== null) {
     return resolved.eventDigest === normalized.eventDigest && sameReference(resolved.ref, event.ref)
       ? Object.freeze({ kind: 'replay' })
       : Object.freeze({ kind: 'rejected', code: 'EVENT_CONFLICT' });
   }
-  const pending = findByCommandKey<PendingOperation>(state.pending, event.commandKey);
+  const pending = findSorted<PendingOperation>(
+    state.pending,
+    event.commandKey,
+    ({ commandKey }) => commandKey,
+  );
   if (pending === null || !sameReference(pending.ref, event.ref)) {
     return Object.freeze({ kind: 'rejected', code: 'EVENT_FOREIGN' });
   }

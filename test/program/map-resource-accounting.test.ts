@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { JsonValue } from '../../src/foundation/index.js';
-import { analyzeProgram } from '../../src/program/index.js';
+import { analyzeProgram, type ProgramMapNode } from '../../src/program/index.js';
 import { reverseNestedKeyMapProgram } from '../support/large-map-builders.js';
 
 const jsonOccurrences = (value: JsonValue): number => {
@@ -120,5 +120,96 @@ describe('map source-index resource accounting', () => {
     expect(jsonOccurrences(authorMapOutput(itemCount, output))).toBe(
       2 + itemCount * (4 + Math.max(1, weight)),
     );
+  });
+
+  it('preserves duplicate/max semantics with one completed-outcome and body-exit pass', () => {
+    const bundle = reverseNestedKeyMapProgram(1);
+    const module = bundle.program.modules[0];
+    const base = module?.region.nodes.find(({ kind }) => kind === 'map');
+    if (base?.kind !== 'map') {
+      throw new TypeError('Expected a map node.');
+    }
+    if (module === undefined) {
+      throw new TypeError('Expected a Program module.');
+    }
+    const resourcesFor = (map: ProgramMapNode) =>
+      analyzeProgram({
+        ...bundle.program,
+        modules: [
+          {
+            ...module,
+            region: { ...module.region, nodes: [map, ...module.region.nodes.slice(1)] },
+          },
+        ],
+      }).analysis.resources;
+    const trackedTuple = <Value, Tuple extends readonly [Value, ...Value[]]>(
+      values: Tuple,
+      read: () => void,
+    ): Tuple =>
+      new Proxy(values, {
+        get(target, property, receiver): unknown {
+          if (typeof property === 'string' && /^(?:0|[1-9]\d*)$/u.test(property)) {
+            read();
+          }
+          const value: unknown = Reflect.get(target, property, receiver);
+          return value;
+        },
+      });
+    const count = 1_024;
+    const classifiedExits = Array.from({ length: count }, (_, index) => ({
+      outcome: `outcome-${index}`,
+      classification: 'completed' as const,
+    }));
+    const bodyExits = Array.from({ length: count }, (_, index) => ({
+      outcome: `outcome-${index}`,
+      outputSchema:
+        index === count - 1
+          ? ({
+              type: 'object',
+              properties: { value: { type: 'string' } },
+              required: ['value'],
+              additionalProperties: false,
+            } as const)
+          : ({ type: 'null' } as const),
+    }));
+    const reads = { classified: 0, body: 0 };
+    const node: ProgramMapNode = {
+      ...base,
+      bodyExits: trackedTuple(
+        [classifiedExits[0]!, ...classifiedExits.slice(1)],
+        () => (reads.classified += 1),
+      ),
+      body: {
+        ...base.body,
+        exits: trackedTuple([bodyExits[0]!, ...bodyExits.slice(1)], () => (reads.body += 1)),
+      },
+    };
+    const resources = resourcesFor(node);
+    const duplicate = resourcesFor({
+      ...node,
+      bodyExits: [classifiedExits[0]!, ...classifiedExits.slice(1), classifiedExits.at(-1)!],
+      body: {
+        ...node.body,
+        exits: [bodyExits[0]!, ...bodyExits.slice(1), bodyExits.at(-1)!],
+      },
+    });
+    const scalar = resourcesFor({
+      ...base,
+      bodyExits: [classifiedExits[0]!, ...classifiedExits.slice(1)],
+      body: {
+        ...base.body,
+        exits: [
+          { outcome: bodyExits[0]!.outcome, outputSchema: { type: 'null' } },
+          ...bodyExits.slice(1).map(({ outcome }) => ({
+            outcome,
+            outputSchema: { type: 'null' as const },
+          })),
+        ],
+      },
+    });
+
+    expect(resources.stateJsonValues).toBeGreaterThan(scalar.stateJsonValues);
+    expect(duplicate.stateJsonValues).toBe(resources.stateJsonValues);
+    expect(reads).toEqual({ classified: count * 2, body: count * 2 });
   });
 });

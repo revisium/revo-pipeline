@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { canonicalizeOwnedValue } from '../../src/foundation/index.js';
+import type { CommandRef, PipelineCommand } from '../../src/kernel/index.js';
 import { kernelDigest } from '../support/kernel-builders.js';
 import {
   pipelineCommandExamples,
@@ -245,5 +247,44 @@ describe('kernel structural identities', () => {
       'fail',
       'cancel',
     ]);
+  });
+
+  it('matches normative canonical UTF-8 CommandRef ordering exhaustively', () => {
+    const digests = ['0', '7', 'a', 'f'].map(kernelDigest);
+    const refs: CommandRef[] = digests.flatMap((programDigest) =>
+      digests.flatMap((frameKey) =>
+        ['$pipeline' as const, ...digests].map((nodeId) => ({
+          programDigest,
+          frameKey,
+          nodeId,
+        })),
+      ),
+    );
+    const compareBytes = (left: Uint8Array, right: Uint8Array): number => {
+      for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+        const difference = left[index]! - right[index]!;
+        if (difference !== 0) {
+          return difference;
+        }
+      }
+      return left.length - right.length;
+    };
+    const command = (ref: CommandRef): PipelineCommand => ({
+      kind: 'fail',
+      key: digests[0]!,
+      ref,
+      code: 'FAILED',
+      path: '',
+    });
+
+    for (const left of refs) {
+      for (const right of refs) {
+        const expected = compareBytes(
+          canonicalizeOwnedValue(left).bytes,
+          canonicalizeOwnedValue(right).bytes,
+        );
+        expect(Math.sign(compareCommands(command(left), command(right)))).toBe(Math.sign(expected));
+      }
+    }
   });
 });

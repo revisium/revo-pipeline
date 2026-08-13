@@ -127,7 +127,7 @@ export const constructItemInputs = (
       ...parent,
       map: { item: item.item, itemKey: item.itemKey },
     };
-    const input: Record<string, JsonValue> = {};
+    const inputEntries: [string, JsonValue][] = [];
     for (const [key, selector] of entries) {
       const resolution = resolveSelector(selector, environment);
       if (counters !== undefined) {
@@ -139,14 +139,15 @@ export const constructItemInputs = (
           mappedFailurePath(selector, item.itemPath, item.itemKeyPath),
         );
       }
-      input[key] = resolution.value;
+      inputEntries.push([key, resolution.value]);
     }
+    const input = Object.freeze(Object.fromEntries(inputEntries));
     descriptors.push(
       Object.freeze({
         index: item.index,
         itemKey: item.itemKey,
         item: item.item,
-        input: Object.freeze(input),
+        input,
       }),
     );
   }

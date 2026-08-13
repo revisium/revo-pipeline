@@ -67,10 +67,42 @@ describe('kernel selector semantics', () => {
     );
   });
 
+  it('preserves an own __proto__ mapping key without mutating the prototype', () => {
+    const mapping = Object.fromEntries([
+      ['__proto__', { kind: 'literal' as const, value: 'safe' }],
+    ]);
+    const resolution = resolveMapping(mapping, environment);
+    if (!resolution.ok || typeof resolution.value !== 'object' || resolution.value === null) {
+      throw new TypeError('Expected an object mapping result.');
+    }
+    expect(Object.getPrototypeOf(resolution.value)).toBe(Object.prototype);
+    expect(Object.hasOwn(resolution.value, '__proto__')).toBe(true);
+    expect(Reflect.getOwnPropertyDescriptor(resolution.value, '__proto__')).toMatchObject({
+      value: 'safe',
+    });
+    expect(Object.isFrozen(resolution.value)).toBe(true);
+  });
+
   it('matches only canonical scalar choice domains', () => {
     expect(choiceMatches(true, { kind: 'equals', value: true })).toBe(true);
     expect(choiceMatches(1, { kind: 'oneOf', values: [false, 1] })).toBe(true);
     expect(choiceMatches('1', { kind: 'equals', value: 1 })).toBe(false);
     expect(choiceMatches({}, { kind: 'oneOf', values: [null] })).toBe(false);
   });
+
+  it.each([
+    [null, null, true],
+    [true, true, true],
+    [false, true, false],
+    [42, 42, true],
+    [-0, 0, true],
+    ['é', 'é', true],
+    ['é', 'e\u0301', false],
+  ] as const)(
+    'uses admitted canonical scalar identity for %j and %j',
+    (value, candidate, expected) => {
+      expect(choiceMatches(value, { kind: 'equals', value: candidate })).toBe(expected);
+      expect(choiceMatches(value, { kind: 'oneOf', values: [candidate] })).toBe(expected);
+    },
+  );
 });

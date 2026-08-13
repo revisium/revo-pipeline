@@ -122,20 +122,22 @@ const nodeOutputWeight = (node: ProgramNode): number => {
   throw new TypeError('Unexpected Program node kind.');
 };
 
-const completedMapOutputWeight = (node: Extract<ProgramNode, { readonly kind: 'map' }>): number =>
-  Math.max(
-    0,
-    ...node.bodyExits
-      .filter(({ classification }) => classification === 'completed')
-      .map(({ outcome }) =>
-        Math.max(
-          0,
-          ...node.body.exits
-            .filter((exit) => exit.outcome === outcome)
-            .map(({ outputSchema }) => valueSchemaWeight(outputSchema)),
-        ),
-      ),
-  );
+const completedMapOutputWeight = (node: Extract<ProgramNode, { readonly kind: 'map' }>): number => {
+  const completedOutcomes = new Set<string>();
+  for (const exit of node.bodyExits) {
+    if (exit.classification === 'completed') {
+      completedOutcomes.add(exit.outcome);
+    }
+  }
+  let maximumWeight = 0;
+  for (const exit of node.body.exits) {
+    if (!completedOutcomes.has(exit.outcome)) {
+      continue;
+    }
+    maximumWeight = Math.max(maximumWeight, valueSchemaWeight(exit.outputSchema));
+  }
+  return maximumWeight;
+};
 
 type ResourceContext = {
   readonly modules: ReadonlyMap<string, ProgramResourceEnvelope>;

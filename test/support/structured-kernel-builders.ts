@@ -107,6 +107,7 @@ export const parallelActivityProgram = (
   remaining: 'drain' | 'cancel',
   policy: Extract<ProgramParallelNode, { readonly mode: 'generic' }>['policy'] = { kind: 'all' },
   leftInput: ProgramValueMapping = {},
+  branchKeys: readonly [string, string] = ['left', 'right'],
 ) => {
   const parallel: ProgramParallelNode = {
     kind: 'parallel',
@@ -114,7 +115,7 @@ export const parallelActivityProgram = (
     mode: 'generic',
     branches: [
       {
-        key: 'left',
+        key: branchKeys[0],
         input: leftInput,
         region: activityRegion(200),
         exits: [
@@ -124,7 +125,7 @@ export const parallelActivityProgram = (
         ],
       },
       {
-        key: 'right',
+        key: branchKeys[1],
         input: {},
         region: activityRegion(300),
         exits: [

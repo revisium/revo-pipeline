@@ -74,10 +74,9 @@ export const literalValueSchema = (value: JsonValue): ValueSchema => {
   if (!isJsonObject(value)) {
     throw new TypeError('Unexpected normalized JSON value.');
   }
-  const properties: Record<string, ValueSchema> = {};
-  for (const [key, nested] of Object.entries(value)) {
-    properties[key] = literalValueSchema(nested);
-  }
+  const properties = Object.fromEntries(
+    Object.entries(value).map(([key, nested]) => [key, literalValueSchema(nested)]),
+  );
   return closedValueObject(properties);
 };
 
@@ -109,10 +108,9 @@ const parallelBranchSchema = (branch: ParallelSourceBranch): ValueSchema => {
 };
 
 const parallelOutputSchema = (branches: readonly ParallelSourceBranch[]): ValueSchema => {
-  const properties: Record<string, ValueSchema> = {};
-  for (const branch of branches) {
-    properties[branch.key] = parallelBranchSchema(branch);
-  }
+  const properties = Object.fromEntries(
+    branches.map((branch) => [branch.key, parallelBranchSchema(branch)]),
+  );
   return closedValueObject({
     classification: stringEnum('completed', 'impossible', 'failed', 'cancelled'),
     branches: closedValueObject(properties),
@@ -132,10 +130,9 @@ const voteResultSchema = (): ValueSchema =>
 const consensusOutputSchema = (
   node: Extract<SourceNode, { readonly kind: 'consensus' }>,
 ): ValueSchema => {
-  const votes: Record<string, ValueSchema> = {};
-  for (const participant of node.participants) {
-    votes[participant.key] = voteResultSchema();
-  }
+  const votes = Object.fromEntries(
+    node.participants.map((participant) => [participant.key, voteResultSchema()]),
+  );
   return closedValueObject({
     classification: stringEnum(
       'approved',
