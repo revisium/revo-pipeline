@@ -10,7 +10,10 @@ const withNode = (node: ProgramNode) => {
   const main = kernelModule('main', kernelRegion(node.kind === 'end' ? [node] : [node, end]));
   return node.kind === 'call'
     ? kernelProgram(
-        [kernelModule('child', kernelRegion([end], { id: programId('e') })), main],
+        [
+          kernelModule('child', kernelRegion([programEnd(programId('8'))], { id: programId('e') })),
+          main,
+        ],
         'main',
       )
     : kernelProgram([main]);
@@ -142,7 +145,7 @@ const invalidPrograms = (): readonly (readonly [string, unknown])[] => {
 
 describe('kernel Program admission', () => {
   it.each(programNodeExamples().map((node) => [node.kind, node] as const))(
-    'indexes a valid %s node without executing RP05 behavior',
+    'indexes a valid %s node without executing structured behavior',
     (_kind, node) => {
       expect(inspectKernelProgram(withNode(node)).ok).toBe(true);
     },

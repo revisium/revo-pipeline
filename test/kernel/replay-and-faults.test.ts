@@ -1,20 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
+import { advancePipeline, createInitialPipelineState } from '../../src/kernel/index.js';
 import {
   activityDispatch,
-  boundaryResult,
   kernelDigest,
   kernelModule,
   kernelProgram,
   kernelRegion,
   rejectedResult,
+  runningResult,
   terminalResult,
 } from '../support/kernel-builders.js';
-import {
-  advanceBaseKernel,
-  computeEventDigest,
-  initializeBaseKernel,
-} from '../support/kernel-internal.js';
+import { computeEventDigest } from '../support/kernel-internal.js';
 import { programEnd, programId } from '../support/program-builders.js';
 import { emptySchema } from '../support/source-builders.js';
 
@@ -47,7 +44,7 @@ const fixture = () => {
   const bundle = kernelProgram([
     kernelModule('main', kernelRegion([firstActivity, secondActivity, end])),
   ]);
-  const initial = boundaryResult(initializeBaseKernel(bundle, {}));
+  const initial = runningResult(createInitialPipelineState(bundle, {}));
   return { bundle, initial, command: activityDispatch(initial), firstActivity };
 };
 
@@ -55,7 +52,7 @@ describe('kernel replay and fault precedence', () => {
   it('checks the program digest before event normalization', () => {
     const { bundle, initial } = fixture();
     const result = rejectedResult(
-      advanceBaseKernel(
+      advancePipeline(
         { ...bundle, programDigest: kernelDigest('f') },
         initial.state,
         new Proxy(
@@ -80,7 +77,7 @@ describe('kernel replay and fault precedence', () => {
     [null, 'EVENT_SCHEMA'],
   ] as const)('classifies malformed executor input without leaking values', (event, code) => {
     const { bundle, initial } = fixture();
-    const result = rejectedResult(advanceBaseKernel(bundle, initial.state, event));
+    const result = rejectedResult(advancePipeline(bundle, initial.state, event));
     expect(result.state).toBe(initial.state);
     expect(result.faults[0].code).toBe(code);
     expect(JSON.stringify(result.faults)).not.toContain('secret');
@@ -89,7 +86,7 @@ describe('kernel replay and fault precedence', () => {
   it('rejects a foreign ref without mutating state', () => {
     const { bundle, initial, command } = fixture();
     const result = rejectedResult(
-      advanceBaseKernel(bundle, initial.state, {
+      advancePipeline(bundle, initial.state, {
         kind: 'activityCancelled',
         commandKey: command.key,
         ref: { ...command.ref, frameKey: kernelDigest('e') },
@@ -102,7 +99,7 @@ describe('kernel replay and fault precedence', () => {
   it('rejects a valid event whose kind does not match the pending operation', () => {
     const { bundle, initial, command } = fixture();
     const result = rejectedResult(
-      advanceBaseKernel(bundle, initial.state, {
+      advancePipeline(bundle, initial.state, {
         kind: 'waitCompleted',
         commandKey: command.key,
         ref: command.ref,
@@ -121,7 +118,7 @@ describe('kernel replay and fault precedence', () => {
       ref: command.ref,
       output: {},
     };
-    const accepted = boundaryResult(advanceBaseKernel(bundle, initial.state, event));
+    const accepted = runningResult(advancePipeline(bundle, initial.state, event));
     const secondCommand = activityDispatch(accepted);
     expect(accepted.state.resolved).toEqual([
       {
@@ -135,12 +132,12 @@ describe('kernel replay and fault precedence', () => {
       [firstActivity.id]: { status: 'succeeded', output: {} },
     });
 
-    const identical = boundaryResult(advanceBaseKernel(bundle, accepted.state, event));
+    const identical = runningResult(advancePipeline(bundle, accepted.state, event));
     expect(identical.state).toBe(accepted.state);
     expect(identical.commands).toEqual([]);
 
     const conflict = rejectedResult(
-      advanceBaseKernel(bundle, accepted.state, {
+      advancePipeline(bundle, accepted.state, {
         kind: 'activityFailed',
         commandKey: command.key,
         ref: command.ref,
@@ -151,7 +148,7 @@ describe('kernel replay and fault precedence', () => {
     expect(conflict.faults[0].code).toBe('EVENT_CONFLICT');
 
     const completed = terminalResult(
-      advanceBaseKernel(bundle, accepted.state, {
+      advancePipeline(bundle, accepted.state, {
         kind: 'activitySucceeded',
         commandKey: secondCommand.key,
         ref: secondCommand.ref,

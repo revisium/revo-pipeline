@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
+import { advancePipeline, createInitialPipelineState } from '../../src/kernel/index.js';
 import type { ProgramActivityNode } from '../../src/program/index.js';
 import {
   activityDispatch,
-  boundaryResult,
   kernelModule,
   kernelProgram,
   kernelRegion,
+  runningResult,
   terminalResult,
 } from '../support/kernel-builders.js';
-import { advanceBaseKernel, initializeBaseKernel } from '../support/kernel-internal.js';
 import { programEnd, programId } from '../support/program-builders.js';
 import { emptySchema } from '../support/source-builders.js';
 
@@ -26,7 +26,7 @@ const activityFixture = () => {
     routes: { succeeded: end.id, failed: end.id, cancelled: end.id },
   };
   const bundle = kernelProgram([kernelModule('main', kernelRegion([activity, end]))]);
-  const initial = boundaryResult(initializeBaseKernel(bundle, {}));
+  const initial = runningResult(createInitialPipelineState(bundle, {}));
   return { bundle, initial, command: activityDispatch(initial) };
 };
 
@@ -67,7 +67,7 @@ describe('kernel portable totality and argument ownership', () => {
       const rootFrame = initial.state.frames.find(({ kind }) => kind === 'rootRegion');
 
       const result = terminalResult(
-        advanceBaseKernel(malformed, initial.state, activityEvent(command)),
+        advancePipeline(malformed, initial.state, activityEvent(command)),
       );
 
       expect(result.state.fault).toEqual({ code: 'INVARIANT_PROGRAM_STATE', path: '' });
@@ -93,11 +93,11 @@ describe('kernel portable totality and argument ownership', () => {
     const revoked = Proxy.revocable({}, {});
     revoked.revoke();
 
-    expect(() => initializeBaseKernel(hostileBundle, revoked.proxy)).not.toThrow();
+    expect(() => createInitialPipelineState(hostileBundle, revoked.proxy)).not.toThrow();
     expect(accessed).toBe(false);
 
     const { bundle, initial } = activityFixture();
-    const result = advanceBaseKernel(bundle, initial.state, revoked.proxy);
+    const result = advancePipeline(bundle, initial.state, revoked.proxy);
     expect(result.kind).toBe('rejected');
     expect(result.kind === 'rejected' && result.faults[0].code).toBe('EVENT_SCHEMA');
   });
@@ -108,8 +108,8 @@ describe('kernel portable totality and argument ownership', () => {
     const event = activityEvent(command);
     const before = JSON.stringify({ bundle, state: initial.state, input, event });
 
-    initializeBaseKernel(bundle, input);
-    advanceBaseKernel(bundle, initial.state, event);
+    createInitialPipelineState(bundle, input);
+    advancePipeline(bundle, initial.state, event);
 
     expect(JSON.stringify({ bundle, state: initial.state, input, event })).toBe(before);
     expect(Object.isFrozen(input)).toBe(false);

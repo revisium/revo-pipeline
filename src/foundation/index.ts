@@ -33,6 +33,7 @@ export {
   type DigestResult,
 } from './digest.js';
 export { isDisplayString, isIdentifier } from './identifier.js';
+export { countJsonValues } from './json-values.js';
 export {
   ConsensusPolicySchema,
   ParallelBranchClassificationSchema,

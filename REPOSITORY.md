@@ -1,7 +1,7 @@
 # Repository Structure
 
 `@revisium/revo-pipeline` has private foundation, source, materialization, Program,
-compiler, and base-kernel layers and remains publication-blocked.
+compiler, and final private kernel layers and remains publication-blocked.
 
 ```text
 architecture/layers.json  canonical layer state, DAG, and visibility manifest
@@ -11,14 +11,14 @@ src/source/                active private source contracts, normalization, and s
 src/materialization/       active private profile-materialization contracts and validation
 src/program/               active private closed Program contracts and derived schemas
 src/compiler/              active private linking, dataflow, bounds, lowering, and emission
-src/kernel/                active private Machine contracts and base transition engine
+src/kernel/                active private Machine contracts, admission guard, and structured engine
 scripts/              local Sonar helpers
 test/foundation/      foundation behavior and normative digest-vector suites
 test/source/          source contract, graph, selector, normalization, and digest suites
 test/materialization/ materialization contract, source-relative, and digest suites
 test/program/         closed Program contract suites
 test/compiler/        compiler pass, lowering, diagnostic, and bundle suites
-test/kernel/          base machine contracts, identities, advancement, replay, and performance
+test/kernel/          machine contracts, structured advancement, replay, cancellation, and performance
 test/architecture/    manifest, filesystem, and dependency-rule fixtures
 test/docs/            delivery-plan traceability checks
 test/package/         publication-block and empty-root-surface tests

@@ -75,11 +75,13 @@ export const machineFrameExamples = (): readonly MachineFrame[] => [
     kind: 'map',
     nodeId,
     itemKeys: ['item'],
+    itemSourceIndexes: [0],
     pendingItemKeys: ['item'],
     activeItemKeys: [],
     completedItems: [],
     status: 'active',
     selected: null,
+    selectedFailureItemKey: null,
   },
 ];
 

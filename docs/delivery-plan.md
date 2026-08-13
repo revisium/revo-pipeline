@@ -78,7 +78,7 @@ private/public visibility.
   kernel/host boundary.
 - **Scope:** parallel and vote policies, drain/cancel, repeat, map, waits, gates,
   cancellation targets, acknowledgements, declared signal/gate-answer validation by
-  pending operation ref, and internal compile-time extensions.
+  pending operation ref, shared Program admission, and fixed Machine resource bounds.
 - **Out of scope:** host timers, DBOS, global capacity, authorization, run IDs, attempts,
   subscriptions, release workflows, and public exports.
 - **Acceptance:** exhaustive structured-machine, canonical coordination, cancellation,
@@ -102,7 +102,7 @@ private/public visibility.
 Each row is one independently verifiable requirement. `group` is the specification
 workstream and `owner` is the repository layer or repository policy boundary responsible
 for the evidence. `evidence_state` is `active` only for implemented `rp-00` through
-`rp-04` base evidence and `planned` for future work. Repeated spec sections deliberately split
+`rp-05` evidence and `planned` for future work. Repeated spec sections deliberately split
 foundation byte/domain evidence from compiler, base-kernel, and coordination semantics;
 planned rows reserve evidence ownership only and create no directories, APIs, or test
 placeholders.
@@ -166,8 +166,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "kernel",
     "item": "rp-05",
-    "suite": "coordination-validated-canonical-domain",
-    "evidence_state": "planned"
+    "suite": "test/kernel/structured-canonicalization.test.ts#validates the structured canonical domain with a closed negative matrix",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-007",
@@ -206,7 +206,7 @@ placeholders.
     "group": "canonicalization",
     "owner": "kernel",
     "item": "rp-04",
-    "suite": "test/kernel/identity.test.ts#covers every structural payload and event replay domain",
+    "suite": "test/kernel/identity.test.ts#covers base structural payload domains with pinned digests",
     "evidence_state": "active"
   },
   {
@@ -216,8 +216,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "kernel",
     "item": "rp-05",
-    "suite": "coordination-digest-payloads",
-    "evidence_state": "planned"
+    "suite": "test/kernel/identity.test.ts#pins all eight command key vectors across seven kinds and both wait variants",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-012",
@@ -256,8 +256,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "kernel",
     "item": "rp-05",
-    "suite": "coordination-frame-event-goldens",
-    "evidence_state": "planned"
+    "suite": "test/kernel/identity.test.ts#pins all eleven normalized event digest vectors across terminal contexts",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-016",
@@ -296,8 +296,8 @@ placeholders.
     "group": "canonicalization",
     "owner": "kernel",
     "item": "rp-05",
-    "suite": "coordination-canonicalization-edges",
-    "evidence_state": "planned"
+    "suite": "test/kernel/structured-canonicalization.test.ts#covers structured canonicalization context and rejection edges",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-020",
@@ -356,8 +356,8 @@ placeholders.
     "group": "conformance",
     "owner": "kernel",
     "item": "rp-05",
-    "suite": "conformance-machine",
-    "evidence_state": "planned"
+    "suite": "test/kernel/structured-machine.test.ts#saturates synchronous structured owners and empty maps to global quiescence",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-026",
@@ -395,9 +395,9 @@ placeholders.
     "section": "Scope and exact functions",
     "group": "machine",
     "owner": "kernel",
-    "item": "rp-04",
-    "suite": "kernel-transition-contract",
-    "evidence_state": "planned"
+    "item": "rp-05",
+    "suite": "test/kernel/final-api.test.ts#exposes the final private initialization and advancement API",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-030",
@@ -456,8 +456,8 @@ placeholders.
     "group": "machine",
     "owner": "kernel",
     "item": "rp-05",
-    "suite": "kernel-coordination-cancellation",
-    "evidence_state": "planned"
+    "suite": "test/kernel/structured-cancellation.test.ts#emits one sorted run intent and waits for every acknowledgement",
+    "evidence_state": "active"
   },
   {
     "requirement_id": "req-036",
@@ -725,8 +725,8 @@ placeholders.
     "section": "Compile-time extension seam",
     "group": "source",
     "owner": "extensions",
-    "item": "rp-05",
-    "suite": "extensions-lowering-seam",
+    "item": "rp-06",
+    "suite": "conformance-extension-seam-absence",
     "evidence_state": "planned"
   }
 ]

@@ -38,7 +38,7 @@ export const ResolvedOperationSchema = closedObject({
 export type ResolvedOperation = Static<typeof ResolvedOperationSchema>;
 
 const awaitingSchema = readonlySchema(
-  immutableArraySchema(DigestSchema, PIPELINE_LIMITS.sourcePackage.totalActivities),
+  immutableArraySchema(DigestSchema, PIPELINE_LIMITS.machine.liveOperations),
 );
 
 export const RunCancellationSchema = closedObject({

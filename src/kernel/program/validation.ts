@@ -7,7 +7,12 @@ import {
   valueSchemasEqual,
   type JsonValue,
 } from '../../foundation/index.js';
-import type { ProgramModule, ProgramNode, ProgramRegion } from '../../program/index.js';
+import {
+  analyzeProgram,
+  type ProgramModule,
+  type ProgramNode,
+  type ProgramRegion,
+} from '../../program/index.js';
 import { KernelProgramSchema, type KernelProgram } from '../contracts/program.js';
 import { hasValidCallGraph, type ModuleCallEdge } from './module-graph.js';
 import { isStrictlySorted, sameOrderedKeys } from './ordering.js';
@@ -30,6 +35,7 @@ export type ProgramInspection =
   | { readonly ok: false };
 
 export type ProgramValidationCounters = StructuredValidationCounters & {
+  admissionAnalyses: number;
   modules: number;
   regions: number;
   nodes: number;
@@ -45,6 +51,7 @@ type RegionTask = {
 type MutableIndex = {
   readonly modules: Map<string, ProgramModule>;
   readonly regions: Map<string, ProgramRegion>;
+  readonly nodeIds: Set<string>;
   readonly calls: ModuleCallEdge[];
   nodeCount: number;
   targetCount: number;
@@ -84,9 +91,13 @@ const indexNode = (
   pending: RegionTask[],
   counters?: ProgramValidationCounters,
 ): boolean => {
-  if (!hasValidNodeSemantics(node, task.region, index.modules, counters)) {
+  if (
+    index.nodeIds.has(node.id) ||
+    !hasValidNodeSemantics(node, task.region, index.modules, counters)
+  ) {
     return false;
   }
+  index.nodeIds.add(node.id);
   const targets = localTargets(node);
   index.targetCount += targets.length;
   if (counters !== undefined) {
@@ -168,6 +179,7 @@ const buildProgramIndex = (
   const mutable: MutableIndex = {
     modules,
     regions: new Map(),
+    nodeIds: new Set(),
     calls: [],
     nodeCount: 0,
     targetCount: 0,
@@ -190,12 +202,23 @@ export const inspectKernelProgram = (
   input: unknown,
   counters?: ProgramValidationCounters,
 ): ProgramInspection => {
-  const owned = normalizeOwnedEnvelope(input, PIPELINE_LIMITS.sourcePackage.totalActivities);
+  const owned = normalizeOwnedEnvelope(
+    input,
+    PIPELINE_LIMITS.machine.liveFrames,
+    undefined,
+    PIPELINE_LIMITS.machine.serializedStateJsonValues,
+  );
   if (!owned.ok || !kernelProgramValidator.Check(owned.value)) {
     return Object.freeze({ ok: false });
   }
   const index = buildProgramIndex(owned.value, counters);
-  return index === null ? Object.freeze({ ok: false }) : Object.freeze({ ok: true, index });
+  if (counters !== undefined && index !== null) {
+    counters.admissionAnalyses += 1;
+  }
+  if (index === null || !analyzeProgram(index.bundle.program).ok) {
+    return Object.freeze({ ok: false });
+  }
+  return Object.freeze({ ok: true, index });
 };
 
 export const normalizeKernelInput = (input: unknown): JsonValue | null => {

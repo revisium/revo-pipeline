@@ -13,7 +13,7 @@
 
 > [!IMPORTANT]
 > Publication is blocked. The implemented foundation, source, materialization, Program,
-> compiler, and base-kernel layers are private, the root module has no runtime exports, and this is
+> compiler, and final private kernel layers are private, the root module has no runtime exports, and this is
 > not an installable consumer API.
 
 ## Status
@@ -44,10 +44,12 @@ hashing uses `node:crypto`. `src/index.ts` remains deliberately inert. The final
 readiness are proved. Lifecycle acceptance still does not publish a release;
 publication remains a separate human gate.
 
-The private base kernel materializes the complete Machine v1 schemas and structural
-identities and executes initialization, activity, choice, linked call, end, live replay,
-data failure, and base run cancellation. Coordination, waits, gates, and the final
-machine functions remain unavailable until the next delivery item.
+The private kernel materializes the complete Machine v1 schemas and structural
+identities, shares bounded Program admission with the compiler, and executes all nine IR
+node kinds to global quiescence. It includes waits, gates, structured parallel/vote,
+repeat, bounded map refill, overlapping cancellation acknowledgement, replay, and the
+final private `createInitialPipelineState` / `advancePipeline` functions. The root and
+package subpath remain unavailable until conformance readiness.
 
 ## Contract shape
 
@@ -112,7 +114,7 @@ corepack pnpm verify
 ```
 
 Focused work can use
-`corepack pnpm exec vitest run test/foundation test/source test/materialization test/program test/compiler`
+`corepack pnpm exec vitest run test/foundation test/source test/materialization test/program test/compiler test/kernel`
 before the required full gate. Architecture and package checks remain part of `verify`.
 
 Publishing, tagging, releasing, and merging require separate approval.

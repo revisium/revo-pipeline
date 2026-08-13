@@ -87,8 +87,12 @@ export const hasValidStructuredSemantics = (
     case 'parallel':
       return hasValidParallel(node, counters);
     case 'repeat':
-    case 'map':
       return hasValidClassifications(node.body, node.bodyExits, counters);
+    case 'map':
+      return (
+        node.maximumConcurrency <= Math.max(1, node.maximumItems) &&
+        hasValidClassifications(node.body, node.bodyExits, counters)
+      );
     case 'humanGate':
       return hasValidGateAnswers(node);
     case 'choice':

@@ -521,9 +521,18 @@ machine result keeps the full `PipelineFailure` and fail-fast propagation preser
 A map-body exit classified `failed` must output exact `PipelineFailureValueSchema` and
 becomes that item's retained failure.
 
-Duration wait schema/output is `null`. Signal wait schema/output is `null` when payload
-schema is null, otherwise the exact validated signal payload. Runtime missing data or
-schema mismatch is a machine DATA fault, never an exception.
+Both `maximumItems` and `maximumConcurrency` are bounded by 1,024, and concurrency is no
+greater than `max(1, maximumItems)`. Before creating a map owner or item frame, the
+kernel MUST validate the complete selected array, its bound, every item key, key
+uniqueness, every body mapping, and every constructed body input. Failure precedence is
+items selector, array shape/bound, item key pointer/type/duplicate, body mapping, then
+body schema; within one phase the lowest input index and then mapping key wins. A
+preflight failure creates no map work.
+
+Duration wait schema/output is `null`. A signal whose payload schema is null accepts
+only `payload:null` and produces `null`; otherwise it produces the exact validated
+signal payload. Runtime missing data or schema mismatch is a machine DATA fault, never
+an exception.
 
 A human gate contains no arbitration policy or caller-defined output schema. The host
 supplies an explicit answer, conflict, or deadline resolution after auth/arbitration;
@@ -672,6 +681,15 @@ Other stable compile codes include `LINK_MODULE_MISSING`, `LINK_RECURSION`,
 `BOUND_OVERFLOW`, `BOUND_EXCEEDED`, `REQUIREMENT_MISSING`, `REQUIREMENT_UNUSED`,
 `REQUIREMENT_CONFLICT`, `DATA_FAILED_EXIT_SCHEMA`, `LOWERING_ID_COLLISION`, and
 `CANONICAL_INPUT`. Codes remain in the diagnostic families defined by Source v1.
+
+After lowering and before emitting requirements, provenance, or a digest, compilation
+MUST apply the shared Program/Machine admission analysis. The exact caps are 4,096
+Program nodes, 4,096 regions, 16,384 targets, nesting and call depth 32, 65,536
+synchronous work units, 16,384 live frames and operations, 65,536 total live node
+results and cancellation memberships, 262,144 structural collection slots, and
+1,048,576 serialized state or command JSON value occurrences. Only the first exceeded
+cap in structural, work, live-resource, membership, and JSON-value order produces one
+`BOUND_EXCEEDED`; failure emits no partial bundle or `programDigest`.
 
 Successful output MUST be portable, recursively frozen, deterministic, and valid after a
 JSON round trip. Compilation MUST not read environment state or expose rejected values

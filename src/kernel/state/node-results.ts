@@ -51,6 +51,18 @@ export const insertCanonicalNodeResult = (
   const keys = Object.keys(results);
   const insertion = insertionIndex(keys, nodeId, counters);
   const output: Record<string, NodeTerminalResult> = {};
+  if (counters === undefined) {
+    for (let index = 0; index < insertion; index += 1) {
+      const key = keys[index]!;
+      output[key] = results[key]!;
+    }
+    output[nodeId] = result;
+    for (let index = insertion; index < keys.length; index += 1) {
+      const key = keys[index]!;
+      output[key] = results[key]!;
+    }
+    return Object.freeze(output);
+  }
   for (let index = 0; index <= keys.length; index += 1) {
     if (index === insertion) {
       assignResult(output, nodeId, result, counters);

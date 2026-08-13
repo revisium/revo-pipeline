@@ -31,17 +31,17 @@ export const PipelineStateSchema = closedObject({
   ),
   input: readonlySchema(JsonValueSchema),
   frames: readonlySchema(
-    immutableArraySchema(MachineFrameSchema, PIPELINE_LIMITS.sourcePackage.totalActivities),
+    immutableArraySchema(MachineFrameSchema, PIPELINE_LIMITS.machine.liveFrames),
   ),
   pending: readonlySchema(
-    immutableArraySchema(PendingOperationSchema, PIPELINE_LIMITS.sourcePackage.totalActivities),
+    immutableArraySchema(PendingOperationSchema, PIPELINE_LIMITS.machine.liveOperations),
   ),
   resolved: readonlySchema(
-    immutableArraySchema(ResolvedOperationSchema, PIPELINE_LIMITS.sourcePackage.totalActivities),
+    immutableArraySchema(ResolvedOperationSchema, PIPELINE_LIMITS.machine.liveOperations),
   ),
   runCancellation: readonlySchema(Type.Union([RunCancellationSchema, Type.Null()])),
   regionCancellations: readonlySchema(
-    immutableArraySchema(RegionCancellationSchema, PIPELINE_LIMITS.sourcePackage.totalActivities),
+    immutableArraySchema(RegionCancellationSchema, PIPELINE_LIMITS.machine.liveFrames),
   ),
   result: readonlySchema(
     Type.Union([

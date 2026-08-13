@@ -73,13 +73,13 @@ export const programNodeExamples = (): readonly ProgramNode[] => [
       {
         key: 'left',
         input: {},
-        region: programRegion(),
+        region: programRegion([programEnd(programId('a'))], programId('b')),
         exits: [{ outcome: 'ok', classification: 'qualifies' }],
       },
       {
         key: 'right',
         input: {},
-        region: programRegion(undefined, programId('7')),
+        region: programRegion([programEnd(programId('c'))], programId('d')),
         exits: [{ outcome: 'ok', classification: 'qualifies' }],
       },
     ],
@@ -93,7 +93,7 @@ export const programNodeExamples = (): readonly ProgramNode[] => [
     maximumIterations: 2,
     initialInput: {},
     nextInput: {},
-    body: programRegion(),
+    body: programRegion([programEnd(programId('a'))], programId('b')),
     bodyExits: [{ outcome: 'ok', classification: 'value' }],
     continueWhen: { kind: 'exists', selector: { kind: 'repeat', value: 'iteration', pointer: '' } },
     output: {},
@@ -113,7 +113,7 @@ export const programNodeExamples = (): readonly ProgramNode[] => [
     maximumItems: 2,
     maximumConcurrency: 1,
     bodyInput: {},
-    body: programRegion(),
+    body: programRegion([programEnd(programId('a'))], programId('b')),
     bodyExits: [{ outcome: 'ok', classification: 'completed' }],
     failure: { kind: 'collect' },
     routes: {

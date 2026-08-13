@@ -23,7 +23,7 @@ export const PipelineCommandSchema = Type.Union([
     kind: readonlySchema(Type.Literal('cancelPending')),
     ...command,
     targets: readonlySchema(
-      nonEmptyArraySchema(DigestSchema, PIPELINE_LIMITS.sourcePackage.totalActivities),
+      nonEmptyArraySchema(DigestSchema, PIPELINE_LIMITS.machine.liveOperations),
     ),
     reasonCode: readonlySchema(Type.String()),
   }),

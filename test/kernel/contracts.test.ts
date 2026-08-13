@@ -3,6 +3,7 @@ import { Compile } from 'typebox/compile';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import {
+  createInitialPipelineState,
   FrameKeyPayloadSchema,
   InitialPipelineTransitionSchema,
   KernelProgramSchema,
@@ -26,7 +27,6 @@ import {
   pipelineCommandExamples,
   pipelineEventExamples,
 } from '../support/kernel-contract-examples.js';
-import { initializeBaseKernel } from '../support/kernel-internal.js';
 import { programEnd, programId } from '../support/program-builders.js';
 
 const validators = {
@@ -73,12 +73,9 @@ describe('kernel transition contract', () => {
 
   it('keeps every Machine envelope closed and JSON portable', () => {
     const bundle = rootEndProgram();
-    const result = initializeBaseKernel(bundle, {});
+    const result = createInitialPipelineState(bundle, {});
     expect(validators.program.Check(bundle)).toBe(true);
-    expect(result.kind).toBe('terminal');
-    if (result.kind !== 'terminal') {
-      return;
-    }
+    expect(result.state.status).toBe('succeeded');
     expect(validators.state.Check(result.state)).toBe(true);
     expect(result.commands.every((command) => validators.command.Check(command))).toBe(true);
     expect(

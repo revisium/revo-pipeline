@@ -1,25 +1,22 @@
 import { describe, expect, it } from 'vitest';
 
+import { advancePipeline, createInitialPipelineState } from '../../src/kernel/index.js';
 import type { ProgramNode } from '../../src/program/index.js';
 import {
   activityDispatch,
-  boundaryResult,
   kernelModule,
   kernelProgram,
   kernelRegion,
+  runningResult,
   terminalResult,
 } from '../support/kernel-builders.js';
-import {
-  advanceBaseKernel,
-  computeFrameKey,
-  initializeBaseKernel,
-} from '../support/kernel-internal.js';
+import { computeFrameKey } from '../support/kernel-internal.js';
 import { programEnd, programId } from '../support/program-builders.js';
 import { emptySchema } from '../support/source-builders.js';
 
 describe('kernel initialization and data failures', () => {
   it('fails a malformed Program without exposing hostile input data', () => {
-    const result = terminalResult(initializeBaseKernel({}, { secret: 'must-not-leak' }));
+    const result = terminalResult(createInitialPipelineState({}, { secret: 'must-not-leak' }));
 
     expect(result.state.fault).toEqual({ code: 'PROGRAM_INVALID', path: '/program' });
     expect(result.state).toMatchObject({
@@ -46,7 +43,7 @@ describe('kernel initialization and data failures', () => {
   it('retains only an own lexical Program digest in the pre-root identity', () => {
     const programDigest = `sha256:${'c'.repeat(64)}` as const;
     const result = terminalResult(
-      initializeBaseKernel({ programDigest, program: null }, { secret: 'must-not-leak' }),
+      createInitialPipelineState({ programDigest, program: null }, { secret: 'must-not-leak' }),
     );
     const frameKey = computeFrameKey({
       kind: 'initialization',
@@ -71,7 +68,7 @@ describe('kernel initialization and data failures', () => {
     ]);
     const input = { secret: 'must-not-leak' };
 
-    const result = terminalResult(initializeBaseKernel(bundle, input));
+    const result = terminalResult(createInitialPipelineState(bundle, input));
 
     expect(result.state.fault).toEqual({ code: 'INIT_INPUT_SCHEMA', path: '/input' });
     const rootFrameKey = computeFrameKey({
@@ -112,7 +109,7 @@ describe('kernel initialization and data failures', () => {
       kernelModule('main', kernelRegion([activity, failed], { outcomes: ['failed'] })),
     ]);
 
-    const result = terminalResult(initializeBaseKernel(bundle, {}));
+    const result = terminalResult(createInitialPipelineState(bundle, {}));
 
     expect(result.state.result?.outcome).toBe('failed');
     expect(result.commands.map(({ kind }) => kind)).toEqual(['complete']);
@@ -133,11 +130,11 @@ describe('kernel initialization and data failures', () => {
     const bundle = kernelProgram([
       kernelModule('main', kernelRegion([activity, failed], { outcomes: ['failed'] })),
     ]);
-    const initial = boundaryResult(initializeBaseKernel(bundle, {}));
+    const initial = runningResult(createInitialPipelineState(bundle, {}));
     const command = activityDispatch(initial);
 
     const result = terminalResult(
-      advanceBaseKernel(bundle, initial.state, {
+      advancePipeline(bundle, initial.state, {
         kind: 'activitySucceeded',
         commandKey: command.key,
         ref: command.ref,
