@@ -40,20 +40,23 @@ const preflightBranches = (
   readonly failures: Readonly<Record<string, FailedBranch>>;
 } => {
   const inputs: BranchInput[] = [];
-  const failures: Record<string, FailedBranch> = {};
+  const failureEntries: [string, FailedBranch][] = [];
   for (const branch of [...node.branches].sort((left, right) =>
     compareUnicodeCodePoints(left.key, right.key),
   )) {
     const selected = resolveMapping(branch.input, environment);
     if (!selected.ok) {
-      failures[branch.key] = inputFailure(selected.path);
+      failureEntries.push([branch.key, inputFailure(selected.path)]);
     } else if (!valueMatchesSchema(branch.region.inputSchema, selected.value)) {
-      failures[branch.key] = schemaFailure();
+      failureEntries.push([branch.key, schemaFailure()]);
     } else {
       inputs.push(Object.freeze({ key: branch.key, input: selected.value }));
     }
   }
-  return Object.freeze({ inputs: Object.freeze(inputs), failures: Object.freeze(failures) });
+  return Object.freeze({
+    inputs: Object.freeze(inputs),
+    failures: Object.freeze(Object.fromEntries(failureEntries)),
+  });
 };
 
 const withPreflightResults = (
@@ -132,7 +135,7 @@ export const startParallel = (
     context.enqueue(owner.key);
     return true;
   }
-  const regionKeys: Record<string, ParallelMachineFrame['key']> = {};
+  const regionKeyEntries: [string, ParallelMachineFrame['key']][] = [];
   for (const branchInput of preflight.inputs) {
     const branch = node.branches.find(({ key }) => key === branchInput.key);
     const frame =
@@ -142,12 +145,12 @@ export const startParallel = (
     if (frame === null || !context.draft.addFrame(frame)) {
       return false;
     }
-    regionKeys[branchInput.key] = frame.key;
+    regionKeyEntries.push([branchInput.key, frame.key]);
     context.enqueue(frame.key);
   }
   owner = Object.freeze({
     ...owner,
-    branchRegionKeys: Object.freeze(regionKeys),
+    branchRegionKeys: Object.freeze(Object.fromEntries(regionKeyEntries)),
     status: owner.selected === null ? 'active' : 'draining',
   });
   context.draft.setFrame(owner);

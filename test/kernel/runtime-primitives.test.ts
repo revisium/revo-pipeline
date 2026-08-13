@@ -99,6 +99,28 @@ describe('structured runtime primitives', () => {
   );
 
   it.each([
+    [null, null, true],
+    [true, true, true],
+    [false, true, false],
+    [42, 42, true],
+    [-0, 0, true],
+    ['é', 'é', true],
+  ] as const)('uses canonical scalar identity for %j and %j', (value, candidate, expected) => {
+    const equals: ProgramRepeatCondition = {
+      kind: 'equals',
+      selector: { kind: 'literal', value },
+      value: candidate,
+    };
+    const oneOf: ProgramRepeatCondition = {
+      kind: 'oneOf',
+      selector: { kind: 'literal', value },
+      values: [candidate],
+    };
+    expect(evaluate(equals)).toEqual({ ok: true, value: expected });
+    expect(evaluate(oneOf)).toEqual({ ok: true, value: expected });
+  });
+
+  it.each([
     [
       { code: 'DECLARED', path: '/value' },
       { code: 'DECLARED', path: '/value' },

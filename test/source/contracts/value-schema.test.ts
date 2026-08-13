@@ -84,6 +84,25 @@ describe('ValueSchema semantics', () => {
     });
   });
 
+  it('preserves an own __proto__ schema property on an ordinary frozen record', () => {
+    const properties: Record<string, ValueSchema> = Object.fromEntries([
+      ['__proto__', { type: 'boolean' }],
+    ]);
+    const result = normalize({
+      type: 'object',
+      properties,
+      required: ['__proto__'],
+      additionalProperties: false,
+    }).value;
+    if ('anyOf' in result || result.type !== 'object') {
+      throw new TypeError('Expected an object schema.');
+    }
+    expect(Object.getPrototypeOf(result.properties)).toBe(Object.prototype);
+    expect(Object.hasOwn(result.properties, '__proto__')).toBe(true);
+    expect(result.properties.__proto__).toEqual({ type: 'boolean' });
+    expect(Object.isFrozen(result.properties)).toBe(true);
+  });
+
   it('normalizes ChoiceDomain as a type-sensitive canonical scalar set', () => {
     const collector = createDiagnosticCollector();
     const domain = normalizeChoiceDomain(

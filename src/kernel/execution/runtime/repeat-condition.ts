@@ -1,9 +1,5 @@
-import { compareCanonicalScalars, type JsonScalar } from '../../../foundation/index.js';
 import type { ProgramRepeatCondition } from '../../../program/index.js';
 import { resolveSelector, type SelectorEnvironment } from '../selectors.js';
-
-const sameScalar = (left: JsonScalar, right: JsonScalar): boolean =>
-  compareCanonicalScalars(left, right) === 0;
 
 export type ConditionResult =
   | { readonly ok: true; readonly value: boolean }
@@ -42,8 +38,6 @@ export const evaluateRepeatCondition = (
   return Object.freeze({
     ok: true,
     value:
-      condition.kind === 'equals'
-        ? sameScalar(scalar, condition.value)
-        : condition.values.some((value) => sameScalar(scalar, value)),
+      condition.kind === 'equals' ? scalar === condition.value : condition.values.includes(scalar),
   });
 };

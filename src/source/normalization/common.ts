@@ -76,11 +76,14 @@ export const normalizeMapping = (
   path: JsonPointer,
   context: NormalizationContext,
 ): ValueMapping => {
-  const normalized: Record<string, ValueSelector> = {};
-  for (const [key, selector] of Object.entries(mapping)) {
-    normalized[key] = normalizeSelector(selector, appendJsonPointer(path, key), context);
-  }
-  return Object.freeze(normalized);
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(mapping).map(([key, selector]) => [
+        key,
+        normalizeSelector(selector, appendJsonPointer(path, key), context),
+      ]),
+    ),
+  );
 };
 
 export const normalizeRepeatCondition = (

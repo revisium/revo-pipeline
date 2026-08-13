@@ -1,6 +1,7 @@
 import { PIPELINE_LIMITS } from './bounds.js';
+import { reflectIsArray } from './hostile-reflection.js';
 import { appendJsonPointer, type JsonPointer } from './json-pointer.js';
-import { inspectArray, inspectObject, readIsArray } from './owned-envelope-inspection.js';
+import { inspectArray, inspectObject } from './owned-envelope-inspection.js';
 import { type JsonValue, type PipelineFailure } from './portable-value.js';
 import { isNfcString } from './unicode.js';
 
@@ -58,7 +59,7 @@ const enqueueContainer = (
   objectLimit: OwnedEnvelopeObjectLimit,
   tasks: InspectionTask[],
 ): OwnedEnvelopeResult | null => {
-  const isArray = readIsArray(input);
+  const isArray = reflectIsArray(input);
   if (isArray === null) {
     return failure('CANONICAL_INPUT', path);
   }

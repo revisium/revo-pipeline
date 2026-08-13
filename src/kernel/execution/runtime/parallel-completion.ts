@@ -129,33 +129,35 @@ const cancelUnstartedBranches = (
   context: RuntimeContext,
   owner: ParallelMachineFrame,
 ): ParallelMachineFrame => {
-  const cancelled: Record<string, { readonly status: 'cancelled' }> = {};
-  const branchRegionKeys: Record<string, ParallelMachineFrame['key']> = {};
+  const cancelledEntries: [string, { readonly status: 'cancelled' }][] = [];
+  const branchRegionKeyEntries: [string, ParallelMachineFrame['key']][] = [];
   const live = pendingAncestorKeys(context.draft);
   const idle: ParallelMachineFrame['key'][] = [];
   for (const [branchKey, frameKey] of Object.entries(owner.branchRegionKeys)) {
     if (live.has(frameKey)) {
-      branchRegionKeys[branchKey] = frameKey;
+      branchRegionKeyEntries.push([branchKey, frameKey]);
     } else {
       idle.push(frameKey);
-      cancelled[branchKey] = Object.freeze({ status: 'cancelled' });
+      cancelledEntries.push([branchKey, Object.freeze({ status: 'cancelled' })]);
     }
   }
   if (!pruneFrameTrees(context.draft, idle, context.discard)) {
     return owner;
   }
+  const branchRegionKeys = Object.freeze(Object.fromEntries(branchRegionKeyEntries));
+  const cancelled = Object.freeze(Object.fromEntries(cancelledEntries));
   if (owner.mode === 'generic') {
     return Object.freeze({
       ...owner,
       mode: 'generic',
-      branchRegionKeys: Object.freeze(branchRegionKeys),
+      branchRegionKeys,
       branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
     });
   }
   return Object.freeze({
     ...owner,
     mode: 'votes',
-    branchRegionKeys: Object.freeze(branchRegionKeys),
+    branchRegionKeys,
     branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
   });
 };

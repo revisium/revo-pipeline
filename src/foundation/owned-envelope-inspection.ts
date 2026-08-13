@@ -1,3 +1,4 @@
+import { reflectOwnDescriptor, reflectOwnKeys, reflectPrototype } from './hostile-reflection.js';
 import { appendJsonPointer, type JsonPointer } from './json-pointer.js';
 import { type PipelineFailure } from './portable-value.js';
 import { compareUnicodeCodePoints, isNfcString } from './unicode.js';
@@ -14,47 +15,15 @@ const failure = (code: PipelineFailure['code'], path: JsonPointer): InspectionFa
 
 const invalid = Symbol('invalid-owned-envelope-value');
 
-const readOwnKeys = (value: object): readonly PropertyKey[] | null => {
-  try {
-    return Reflect.ownKeys(value);
-  } catch {
-    return null;
-  }
-};
-
-const readPrototype = (value: object): object | null | undefined => {
-  try {
-    return Reflect.getPrototypeOf(value);
-  } catch {
-    return undefined;
-  }
-};
-
-export const readIsArray = (value: object): boolean | null => {
-  try {
-    return Array.isArray(value);
-  } catch {
-    return null;
-  }
-};
-
 const readDataValue = (value: object, key: PropertyKey): unknown => {
-  try {
-    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-    return descriptor?.enumerable && 'value' in descriptor ? descriptor.value : invalid;
-  } catch {
-    return invalid;
-  }
+  const descriptor = reflectOwnDescriptor(value, key);
+  return descriptor?.enumerable && 'value' in descriptor ? descriptor.value : invalid;
 };
 
 const readArrayLength = (value: object): number | null => {
-  try {
-    const descriptor = Reflect.getOwnPropertyDescriptor(value, 'length');
-    const length: unknown = descriptor && 'value' in descriptor ? descriptor.value : null;
-    return typeof length === 'number' && Number.isSafeInteger(length) ? length : null;
-  } catch {
-    return null;
-  }
+  const descriptor = reflectOwnDescriptor(value, 'length');
+  const length: unknown = descriptor !== null && 'value' in descriptor ? descriptor.value : null;
+  return typeof length === 'number' && Number.isSafeInteger(length) ? length : null;
 };
 
 export const inspectArray = (
@@ -62,8 +31,8 @@ export const inspectArray = (
   path: JsonPointer,
   maximumArrayItems: number,
 ): { readonly values: readonly unknown[] } | InspectionFailure => {
-  const prototype = readPrototype(input);
-  const keys = readOwnKeys(input);
+  const prototype = reflectPrototype(input);
+  const keys = reflectOwnKeys(input);
   const length = readArrayLength(input);
   if (
     prototype !== Array.prototype ||
@@ -94,8 +63,8 @@ export const inspectObject = (
   path: JsonPointer,
   maximumObjectProperties: number,
 ): { readonly entries: readonly (readonly [string, unknown])[] } | InspectionFailure => {
-  const prototype = readPrototype(input);
-  const ownKeys = readOwnKeys(input);
+  const prototype = reflectPrototype(input);
+  const ownKeys = reflectOwnKeys(input);
   if ((prototype !== Object.prototype && prototype !== null) || ownKeys === null) {
     return failure('CANONICAL_INPUT', path);
   }

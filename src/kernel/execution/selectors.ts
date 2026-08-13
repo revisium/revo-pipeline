@@ -1,7 +1,6 @@
 import { Check } from 'typebox/value';
 
 import {
-  compareCanonicalScalars,
   compareUnicodeCodePoints,
   isPortableValue,
   readJsonPointer,
@@ -91,18 +90,18 @@ export const resolveMapping = (
   mapping: ProgramValueMapping,
   environment: SelectorEnvironment,
 ): ValueResolution => {
-  const output: Record<string, JsonValue> = {};
   const entries = Object.entries(mapping).sort(([left], [right]) =>
     compareUnicodeCodePoints(left, right),
   );
+  const outputEntries: [string, JsonValue][] = [];
   for (const [key, selector] of entries) {
     const result = resolveSelector(selector, environment);
     if (!result.ok) {
       return result;
     }
-    output[key] = result.value;
+    outputEntries.push([key, result.value]);
   }
-  return Object.freeze({ ok: true, value: Object.freeze(output) });
+  return Object.freeze({ ok: true, value: Object.freeze(Object.fromEntries(outputEntries)) });
 };
 
 export const valueMatchesSchema = (schema: ValueSchema, value: JsonValue): boolean => {
@@ -112,9 +111,6 @@ export const valueMatchesSchema = (schema: ValueSchema, value: JsonValue): boole
     return false;
   }
 };
-
-const scalarKey = (value: JsonScalar): string =>
-  value === null ? 'null' : `${typeof value}:${JSON.stringify(value)}`;
 
 export const choiceMatches = (
   value: JsonValue,
@@ -129,7 +125,5 @@ export const choiceMatches = (
     return false;
   }
   const scalar = value;
-  return domain.kind === 'equals'
-    ? scalarKey(scalar) === scalarKey(domain.value)
-    : domain.values.some((candidate) => compareCanonicalScalars(scalar, candidate) === 0);
+  return domain.kind === 'equals' ? scalar === domain.value : domain.values.includes(scalar);
 };

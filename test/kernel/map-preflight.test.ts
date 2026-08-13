@@ -135,6 +135,38 @@ describe('map complete preflight', () => {
     expect(result.ok && result.descriptors.map(({ itemKey }) => itemKey)).toEqual(['a', 'z']);
   });
 
+  it('preserves an own __proto__ body input key on an ordinary frozen record', () => {
+    const result = preflightMap(
+      {
+        ...mapExample(),
+        items: { kind: 'literal', value: [{ id: 'one' }] },
+        itemKeyPointer: '/id',
+        bodyInput: Object.fromEntries([['__proto__', { kind: 'literal' as const, value: 'safe' }]]),
+        body: {
+          ...mapExample().body,
+          inputSchema: {
+            type: 'object',
+            properties: Object.fromEntries([['__proto__', { type: 'string' as const }]]),
+            required: ['__proto__'],
+            additionalProperties: false,
+          },
+        },
+      },
+      environment,
+    );
+    if (!result.ok) {
+      throw new TypeError('Expected successful map preflight.');
+    }
+    const input = result.descriptors[0]?.input;
+    if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+      throw new TypeError('Expected an object map input.');
+    }
+    expect(Object.getPrototypeOf(input)).toBe(Object.prototype);
+    expect(Object.hasOwn(input, '__proto__')).toBe(true);
+    expect(Reflect.getOwnPropertyDescriptor(input, '__proto__')).toMatchObject({ value: 'safe' });
+    expect(Object.isFrozen(input)).toBe(true);
+  });
+
   it('builds and indexes one descriptor set per owner in a transition', () => {
     const counters = {
       builds: 0,

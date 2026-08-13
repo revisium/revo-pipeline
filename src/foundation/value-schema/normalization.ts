@@ -1,3 +1,5 @@
+import { Equal } from 'typebox/value';
+
 import { PIPELINE_LIMITS } from '../bounds.js';
 import { canonicalizeOwnedValue } from '../canonicalization.js';
 import type { DiagnosticCollector } from '../diagnostic-collector.js';
@@ -77,7 +79,7 @@ const normalizeBounds = (
 export const valueSchemaText = (schema: ValueSchema): string => canonicalizeOwnedValue(schema).text;
 
 export const valueSchemasEqual = (left: ValueSchema, right: ValueSchema): boolean =>
-  valueSchemaText(left) === valueSchemaText(right);
+  Equal(left, right);
 
 export const isPipelineFailureSchema = (schema: ValueSchema): boolean =>
   valueSchemasEqual(schema, PipelineFailureValueSchema);
@@ -126,15 +128,17 @@ const normalizeObjectSchema = (
   collector: DiagnosticCollector,
   depth: number,
 ): ValueSchema => {
-  const properties: Record<string, ValueSchema> = {};
-  for (const [key, value] of Object.entries(schema.properties)) {
-    properties[key] = normalizeValueSchema(
-      value,
-      appendJsonPointer(appendJsonPointer(path, 'properties'), key),
-      collector,
-      depth + 1,
-    );
-  }
+  const properties = Object.fromEntries(
+    Object.entries(schema.properties).map(([key, value]) => [
+      key,
+      normalizeValueSchema(
+        value,
+        appendJsonPointer(appendJsonPointer(path, 'properties'), key),
+        collector,
+        depth + 1,
+      ),
+    ]),
+  );
   const requiredPath = appendJsonPointer(path, 'required');
   const required = normalizeStringSet(schema.required, requiredPath, collector);
   if (required.some((key) => !Object.hasOwn(properties, key))) {

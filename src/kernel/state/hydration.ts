@@ -2,14 +2,15 @@ import { Compile } from 'typebox/compile';
 
 import {
   PIPELINE_LIMITS,
-  compareUnicodeCodePoints,
   normalizeOwnedEnvelope,
   type Digest,
   type JsonPointer,
 } from '../../foundation/index.js';
 import type { MachineFrame } from '../contracts/frames.js';
 import { PipelineStateSchema, type PipelineState } from '../contracts/state.js';
-import type { MapItemResult, MapMachineFrame } from '../contracts/structured-frames.js';
+import type { MapMachineFrame } from '../contracts/structured-frames.js';
+import { findSorted } from '../program/lookup.js';
+import { isStrictlySorted } from '../program/ordering.js';
 import { stateFitsMachineLimits } from './bounds.js';
 
 const stateValidator = Compile(PipelineStateSchema);
@@ -21,46 +22,6 @@ const machineObjectLimit = (path: JsonPointer): number =>
     ? PIPELINE_LIMITS.sourcePackage.nodes
     : PIPELINE_LIMITS.portableValue.objectKeys;
 
-const isStrictlySorted = <Value>(
-  values: readonly Value[],
-  key: (value: Value) => string,
-): boolean => {
-  for (let index = 1; index < values.length; index += 1) {
-    const previous = values[index - 1];
-    const current = values[index];
-    if (
-      previous === undefined ||
-      current === undefined ||
-      compareUnicodeCodePoints(key(previous), key(current)) >= 0
-    ) {
-      return false;
-    }
-  }
-  return true;
-};
-
-const findMapItem = (values: readonly MapItemResult[], key: string): MapItemResult | null => {
-  let lower = 0;
-  let upper = values.length - 1;
-  while (lower <= upper) {
-    const middle = lower + Math.floor((upper - lower) / 2);
-    const value = values[middle];
-    if (value === undefined) {
-      return null;
-    }
-    const order = compareUnicodeCodePoints(value.itemKey, key);
-    if (order === 0) {
-      return value;
-    }
-    if (order < 0) {
-      lower = middle + 1;
-    } else {
-      upper = middle - 1;
-    }
-  }
-  return null;
-};
-
 const hasConsistentSelectedMapFailure = (frame: MapMachineFrame): boolean => {
   const key = frame.selectedFailureItemKey;
   if ((frame.selected === 'failed') !== (key !== null)) {
@@ -69,7 +30,7 @@ const hasConsistentSelectedMapFailure = (frame: MapMachineFrame): boolean => {
   if (key === null) {
     return true;
   }
-  const selected = findMapItem(frame.completedItems, key);
+  const selected = findSorted(frame.completedItems, key, ({ itemKey }) => itemKey);
   return (
     frame.itemKeys.includes(key) &&
     !frame.pendingItemKeys.includes(key) &&

@@ -1,5 +1,4 @@
 import {
-  canonicalizeOwnedValue,
   compareUnicodeCodePoints,
   computeDomainDigest,
   type Digest,
@@ -26,17 +25,6 @@ export const computeEventDigest = (event: PipelineEvent): Digest | null => {
   return result.ok ? result.digest : null;
 };
 
-const compareBytes = (left: Uint8Array, right: Uint8Array): number => {
-  const commonLength = Math.min(left.byteLength, right.byteLength);
-  for (let index = 0; index < commonLength; index += 1) {
-    const difference = (left[index] ?? 0) - (right[index] ?? 0);
-    if (difference !== 0) {
-      return difference;
-    }
-  }
-  return left.byteLength - right.byteLength;
-};
-
 const commandPriority = Object.freeze({
   cancelPending: 0,
   dispatchActivity: 10,
@@ -47,15 +35,21 @@ const commandPriority = Object.freeze({
   cancel: 92,
 } satisfies Readonly<Record<PipelineCommand['kind'], number>>);
 
+const compareCommandRefs = (left: CommandRef, right: CommandRef): number => {
+  const frameKey = compareUnicodeCodePoints(left.frameKey, right.frameKey);
+  if (frameKey !== 0) {
+    return frameKey;
+  }
+  const nodeId = compareUnicodeCodePoints(left.nodeId, right.nodeId);
+  return nodeId === 0 ? compareUnicodeCodePoints(left.programDigest, right.programDigest) : nodeId;
+};
+
 export const compareCommands = (left: PipelineCommand, right: PipelineCommand): number => {
   const priority = commandPriority[left.kind] - commandPriority[right.kind];
   if (priority !== 0) {
     return priority;
   }
-  const refOrder = compareBytes(
-    canonicalizeOwnedValue(left.ref).bytes,
-    canonicalizeOwnedValue(right.ref).bytes,
-  );
+  const refOrder = compareCommandRefs(left.ref, right.ref);
   return refOrder === 0 ? compareUnicodeCodePoints(left.key, right.key) : refOrder;
 };
 

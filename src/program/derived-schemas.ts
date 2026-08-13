@@ -67,20 +67,22 @@ export type GenericBranchSchema = {
 export const genericParallelOutputSchema = (
   branches: readonly GenericBranchSchema[],
 ): ValueSchema => {
-  const branchProperties: Record<string, ValueSchema> = {};
-  for (const branch of branches) {
-    branchProperties[branch.key] = union([
-      ...branch.completed.map(({ outcome, outputSchema }) =>
-        closedObject({
-          status: stringEnum('completed'),
-          outcome: stringEnum(outcome),
-          output: outputSchema,
-        }),
-      ),
-      closedObject({ status: stringEnum('failed'), failure: PipelineFailureValueSchema }),
-      closedObject({ status: stringEnum('cancelled') }),
-    ]);
-  }
+  const branchProperties = Object.fromEntries(
+    branches.map((branch) => [
+      branch.key,
+      union([
+        ...branch.completed.map(({ outcome, outputSchema }) =>
+          closedObject({
+            status: stringEnum('completed'),
+            outcome: stringEnum(outcome),
+            output: outputSchema,
+          }),
+        ),
+        closedObject({ status: stringEnum('failed'), failure: PipelineFailureValueSchema }),
+        closedObject({ status: stringEnum('cancelled') }),
+      ]),
+    ]),
+  );
   return closedObject({
     classification: stringEnum('completed', 'impossible', 'failed', 'cancelled'),
     branches: closedObject(branchProperties),

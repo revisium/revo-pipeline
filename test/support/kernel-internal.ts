@@ -29,6 +29,7 @@ export {
   classifyGenericParallel,
   classifyVoteParallel,
 } from '../../src/kernel/execution/runtime/policies.js';
+export { findSorted } from '../../src/kernel/program/lookup.js';
 export {
   createRuntimeProgramIndex,
   findRuntimeModule,

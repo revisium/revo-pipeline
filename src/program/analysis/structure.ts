@@ -1,4 +1,9 @@
-import type { PipelineProgram, ProgramNode, ProgramRegion } from '../contracts/index.js';
+import type {
+  PipelineProgram,
+  ProgramNode,
+  ProgramNodeId,
+  ProgramRegion,
+} from '../contracts/index.js';
 import type { ProgramModuleGraph } from './module-graph.js';
 
 export type ProgramStructureMeasure = {
@@ -13,7 +18,7 @@ export type ProgramStructureMeasure = {
   readonly regionIds: ReadonlySet<string>;
 };
 
-export const programNodeTargets = (node: ProgramNode): readonly string[] => {
+export const programNodeTargets = (node: ProgramNode): readonly ProgramNodeId[] => {
   switch (node.kind) {
     case 'activity':
       return Object.values(node.routes);
