@@ -15,10 +15,25 @@ export const PIPELINE_LIMITS = Object.freeze({
     callDepth: 32,
     totalActivities: 1_000_000,
   }),
+  program: Object.freeze({
+    nodes: 4_096,
+    regions: 4_096,
+    targets: 16_384,
+  }),
   structured: Object.freeze({
     participants: 32,
     repeatIterations: 100,
-    mapItems: 10_000,
+    mapItems: 1_024,
+  }),
+  machine: Object.freeze({
+    synchronousStepsPerTransition: 65_536,
+    liveFrames: 16_384,
+    liveOperations: 16_384,
+    totalNodeResults: 65_536,
+    structuralCollectionSlots: 262_144,
+    cancellationMemberships: 65_536,
+    serializedStateJsonValues: 1_048_576,
+    commandJsonValuesPerTransition: 1_048_576,
   }),
   diagnostics: 100,
 } as const);

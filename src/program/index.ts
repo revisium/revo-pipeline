@@ -49,3 +49,17 @@ export {
   voteParallelOutputSchema,
   type GenericBranchSchema,
 } from './derived-schemas.js';
+export {
+  PROGRAM_ADMISSION_LIMITS,
+  acknowledgementWork,
+  analyzeProgram,
+  reverseIndexWork,
+  type CancellationEnvelope,
+  type ProgramAdmissionLimit,
+  type ProgramAdmissionViolation,
+  type ProgramAnalysis,
+  type ProgramAnalysisResult,
+  type ProgramResourceEnvelope,
+  type ProgramStructureMeasure,
+  type WorkEnvelope,
+} from './analysis/index.js';

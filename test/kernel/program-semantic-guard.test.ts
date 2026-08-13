@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { PipelineFailureValueSchema, type ValueSchema } from '../../src/foundation/index.js';
 import type { KernelProgram } from '../../src/kernel/index.js';
-import type {
-  ProgramModule,
-  ProgramNode,
-  ProgramNodeId,
-  ProgramRegion,
+import {
+  type ProgramModule,
+  type ProgramNode,
+  type ProgramNodeId,
+  type ProgramRegion,
 } from '../../src/program/index.js';
 import { kernelModule, kernelProgram, kernelRegion } from '../support/kernel-builders.js';
 import { inspectKernelProgram } from '../support/kernel-internal.js';

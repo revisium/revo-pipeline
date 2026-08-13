@@ -137,18 +137,42 @@ export const RepeatMachineFrameSchema = closedObject({
 });
 export type RepeatMachineFrame = Static<typeof RepeatMachineFrameSchema>;
 
-export const MapItemResultSchema = closedObject({
+const mapItemResult = {
   itemKey: readonlySchema(Type.String()),
-  status: readonlySchema(
-    Type.Union([Type.Literal('succeeded'), Type.Literal('failed'), Type.Literal('cancelled')]),
-  ),
-  output: readonlySchema(Type.Union([JsonValueSchema, Type.Null()])),
-  failure: readonlySchema(Type.Union([PipelineFailureSchema, Type.Null()])),
-});
+};
+
+export const MapItemResultSchema = Type.Union([
+  closedObject({
+    ...mapItemResult,
+    status: readonlySchema(Type.Literal('succeeded')),
+    output: readonlySchema(JsonValueSchema),
+    failure: readonlySchema(Type.Null()),
+  }),
+  closedObject({
+    ...mapItemResult,
+    status: readonlySchema(Type.Literal('failed')),
+    output: readonlySchema(Type.Null()),
+    failure: readonlySchema(PipelineFailureSchema),
+  }),
+  closedObject({
+    ...mapItemResult,
+    status: readonlySchema(Type.Literal('cancelled')),
+    output: readonlySchema(Type.Null()),
+    failure: readonlySchema(Type.Null()),
+  }),
+]);
 export type MapItemResult = Static<typeof MapItemResultSchema>;
 
 const mapKeys = () =>
   readonlySchema(immutableArraySchema(Type.String(), PIPELINE_LIMITS.structured.mapItems));
+
+const mapSourceIndexes = () =>
+  readonlySchema(
+    immutableArraySchema(
+      Type.Integer({ minimum: 0, maximum: PIPELINE_LIMITS.structured.mapItems - 1 }),
+      PIPELINE_LIMITS.structured.mapItems,
+    ),
+  );
 
 export const MapMachineFrameSchema = closedObject({
   ...frameBaseProperties,
@@ -156,6 +180,7 @@ export const MapMachineFrameSchema = closedObject({
   parentFrameKey: readonlySchema(DigestSchema),
   nodeId: readonlySchema(DigestSchema),
   itemKeys: mapKeys(),
+  itemSourceIndexes: mapSourceIndexes(),
   pendingItemKeys: mapKeys(),
   activeItemKeys: mapKeys(),
   completedItems: readonlySchema(
@@ -170,5 +195,6 @@ export const MapMachineFrameSchema = closedObject({
       Type.Null(),
     ]),
   ),
+  selectedFailureItemKey: readonlySchema(Type.Union([Type.String(), Type.Null()])),
 });
 export type MapMachineFrame = Static<typeof MapMachineFrameSchema>;

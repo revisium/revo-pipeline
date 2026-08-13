@@ -12,7 +12,7 @@ import { MachineFaultSchema } from './faults.js';
 import { PipelineStateSchema } from './state.js';
 
 const commands = readonlySchema(
-  immutableArraySchema(PipelineCommandSchema, PIPELINE_LIMITS.sourcePackage.totalActivities),
+  immutableArraySchema(PipelineCommandSchema, PIPELINE_LIMITS.machine.liveOperations),
 );
 
 export const InitialPipelineTransitionSchema = closedObject({

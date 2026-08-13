@@ -1,5 +1,6 @@
 import { validateProfileMaterialization } from '../materialization/index.js';
 import { validatePipelineSource } from '../source/index.js';
+import { admitLoweredProgram } from './admission/index.js';
 import { proveActivityBound } from './bounds/index.js';
 import type { PipelineCompileResult } from './contracts/index.js';
 import { validateDataflow } from './dataflow/index.js';
@@ -37,6 +38,10 @@ export const compilePipeline = (
   }
 
   const lowered = lowerProgram(source.value, materialization.value);
+  const admission = admitLoweredProgram(lowered);
+  if (!admission.ok) {
+    return admission;
+  }
   const emitted = emitProgramBundle(lowered);
   if (!emitted.ok) {
     return emitted;

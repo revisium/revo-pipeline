@@ -69,6 +69,7 @@ const classificationPopulationProgram = () => {
 describe('kernel structured validation performance', () => {
   it('inspects each exit exactly once at the maximum branch population', () => {
     const counters: ProgramValidationCounters = {
+      admissionAnalyses: 0,
       classificationExitInspections: 0,
       modules: 0,
       regions: 0,

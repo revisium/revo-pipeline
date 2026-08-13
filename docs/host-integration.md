@@ -3,9 +3,9 @@
 ## Lifecycle
 
 The host contract remains Draft, and this checkout exports no root runtime API. The
-private compiler emits the immutable bundle described below and the private base kernel
-implements the non-coordination machine slice; complete kernel execution and host
-admission remain later work. The flow defines the consumer boundary that complete
+private compiler emits the immutable bundle described below and the final private
+kernel executes the complete bounded Machine v1 slice. Public manifests and host-owned
+plan admission remain later work. The flow defines the consumer boundary that complete
 conformance evidence must prove.
 
 ## Host flow

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
+import { advancePipeline, createInitialPipelineState } from '../../src/kernel/index.js';
 import type { ProgramActivityNode, ProgramNode } from '../../src/program/index.js';
 import {
   activityDispatch,
-  boundaryResult,
   kernelModule,
   kernelProgram,
   kernelRegion,
+  runningResult,
   terminalResult,
 } from '../support/kernel-builders.js';
-import { advanceBaseKernel, initializeBaseKernel } from '../support/kernel-internal.js';
 import { programEnd, programId } from '../support/program-builders.js';
 import { emptySchema } from '../support/source-builders.js';
 
@@ -38,7 +38,7 @@ const activityProgram = () => {
 };
 
 const dispatch = (bundle = activityProgram()) => {
-  const initial = boundaryResult(initializeBaseKernel(bundle, {}));
+  const initial = runningResult(createInitialPipelineState(bundle, {}));
   return { bundle, initial, command: activityDispatch(initial) };
 };
 
@@ -51,7 +51,7 @@ describe('kernel base advancement', () => {
     const prepared = dispatch();
     const { bundle, initial, command } = prepared;
     const result = terminalResult(
-      advanceBaseKernel(bundle, initial.state, {
+      advancePipeline(bundle, initial.state, {
         kind,
         commandKey: command.key,
         ref: command.ref,
@@ -90,16 +90,16 @@ describe('kernel base advancement', () => {
       kernelModule('main', kernelRegion([activity, choice, yes, no], { outcomes: ['no', 'ok'] })),
     ]);
     const { initial, command } = dispatch(bundle);
-    const result = advanceBaseKernel(bundle, initial.state, {
+    const result = advancePipeline(bundle, initial.state, {
       kind: 'activitySucceeded',
       commandKey: command.key,
       ref: command.ref,
       output: { answer: true },
     });
-    expect(result.kind === 'terminal' && result.state.result?.outcome).toBe('ok');
+    expect(result.kind === 'advanced' && result.state.result?.outcome).toBe('ok');
   });
 
-  it('does not materialize RP05 behavior at a deferred node', () => {
+  it('schedules a wait through the final engine', () => {
     const wait: ProgramNode = {
       kind: 'wait',
       id: programId('1'),
@@ -109,9 +109,10 @@ describe('kernel base advancement', () => {
     const bundle = kernelProgram([
       kernelModule('main', kernelRegion([wait, programEnd(programId('9'))])),
     ]);
-    const result = initializeBaseKernel(bundle, {});
-    expect(result).toMatchObject({ kind: 'deferred-node', nodeId: wait.id });
-    expect('commands' in result).toBe(false);
-    expect('faults' in result).toBe(false);
+    const result = runningResult(createInitialPipelineState(bundle, {}));
+    expect(result).toMatchObject({
+      kind: 'initialized',
+      commands: [{ kind: 'scheduleWait', wait: { kind: 'duration', durationMs: 1 } }],
+    });
   });
 });

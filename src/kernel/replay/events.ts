@@ -94,9 +94,10 @@ const operationAcceptsEvent = (pending: PendingOperation, event: PipelineEvent):
       return activityEvents.has(event.kind);
     case 'wait':
       return (
-        event.kind === 'waitCompleted' ||
-        event.kind === 'signalReceived' ||
-        event.kind === 'waitCancelled'
+        event.kind === 'waitCancelled' ||
+        (pending.waitKind === 'duration'
+          ? event.kind === 'waitCompleted'
+          : event.kind === 'signalReceived')
       );
     case 'humanGate':
       return event.kind === 'gateResolved' || event.kind === 'gateCancelled';

@@ -30,6 +30,43 @@ export const dispatchActivityCommand = (
       });
 };
 
+export const scheduleWaitCommand = (
+  ref: CommandRef,
+  wait:
+    | { readonly kind: 'duration'; readonly durationMs: number }
+    | {
+        readonly kind: 'signal';
+        readonly signal: string;
+        readonly payloadSchema: ValueSchema | null;
+      },
+) => {
+  const key = keyFor('scheduleWait', ref);
+  return key === null ? null : Object.freeze({ kind: 'scheduleWait' as const, key, ref, wait });
+};
+
+export const openHumanGateCommand = (
+  ref: CommandRef,
+  subject: string,
+  answers: readonly [string, ...string[]],
+  authorizationRequirements: readonly string[],
+) => {
+  const key = keyFor('openHumanGate', ref);
+  const ownedAnswers: readonly [string, ...string[]] = Object.freeze([
+    answers[0],
+    ...answers.slice(1),
+  ]);
+  return key === null
+    ? null
+    : Object.freeze({
+        kind: 'openHumanGate' as const,
+        key,
+        ref,
+        subject,
+        answers: ownedAnswers,
+        authorizationRequirements: Object.freeze([...authorizationRequirements]),
+      });
+};
+
 export const cancelPendingCommand = (
   ref: CommandRef,
   targets: readonly [Digest, ...Digest[]],

@@ -59,3 +59,15 @@ export const recordPendingNodeResult = (
         nodeResults,
       });
 };
+
+export const storePendingNodeResult = (
+  frame: RegionMachineFrame,
+  nodeId: Digest,
+  result: NodeTerminalResult,
+): RegionMachineFrame | null => {
+  if (Object.hasOwn(frame.nodeResults, nodeId) || frame.ready.includes(nodeId)) {
+    return null;
+  }
+  const nodeResults = insertCanonicalNodeResult(frame.nodeResults, nodeId, result);
+  return nodeResults === null ? null : Object.freeze({ ...frame, nodeResults });
+};

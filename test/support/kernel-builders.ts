@@ -1,6 +1,10 @@
 import type { Digest, ValueSchema } from '../../src/foundation/index.js';
-import type { PipelineCommand } from '../../src/kernel/index.js';
-import type { KernelProgram } from '../../src/kernel/index.js';
+import type {
+  InitialPipelineTransition,
+  KernelProgram,
+  PipelineCommand,
+  PipelineTransition,
+} from '../../src/kernel/index.js';
 import type {
   PipelineProgram,
   ProgramModule,
@@ -8,32 +12,46 @@ import type {
   ProgramNodeId,
   ProgramRegion,
 } from '../../src/program/index.js';
-import type {
-  BaseBoundaryResult,
-  BaseEngineResult,
-  BaseRejectedResult,
-  BaseTerminalResult,
-} from './kernel-internal.js';
 import { programId } from './program-builders.js';
 import { emptySchema } from './source-builders.js';
 
 export const kernelDigest = (digit = '0'): Digest => `sha256:${digit.repeat(64)}`;
 
-export const boundaryResult = (result: BaseEngineResult): BaseBoundaryResult => {
-  if (result.kind !== 'boundary') {
-    throw new TypeError(`Expected a boundary result, received ${result.kind}.`);
+type AcceptedTransition =
+  | InitialPipelineTransition
+  | Extract<PipelineTransition, { readonly kind: 'advanced' }>;
+type RejectedTransition = Extract<PipelineTransition, { readonly kind: 'rejected' }>;
+
+export const runningResult = (
+  result: InitialPipelineTransition | PipelineTransition,
+): AcceptedTransition => {
+  if (
+    result.kind === 'rejected' ||
+    (result.state.status !== 'running' && result.state.status !== 'cancelling')
+  ) {
+    throw new TypeError(
+      `Expected a running result, received ${result.kind}/${result.state.status}.`,
+    );
   }
   return result;
 };
 
-export const terminalResult = (result: BaseEngineResult): BaseTerminalResult => {
-  if (result.kind !== 'terminal') {
-    throw new TypeError(`Expected a terminal result, received ${result.kind}.`);
+export const terminalResult = (
+  result: InitialPipelineTransition | PipelineTransition,
+): AcceptedTransition => {
+  if (
+    result.kind === 'rejected' ||
+    result.state.status === 'running' ||
+    result.state.status === 'cancelling'
+  ) {
+    throw new TypeError(
+      `Expected a terminal result, received ${result.kind}/${result.state.status}.`,
+    );
   }
   return result;
 };
 
-export const rejectedResult = (result: BaseEngineResult): BaseRejectedResult => {
+export const rejectedResult = (result: PipelineTransition): RejectedTransition => {
   if (result.kind !== 'rejected') {
     throw new TypeError(`Expected a rejected result, received ${result.kind}.`);
   }
@@ -41,7 +59,7 @@ export const rejectedResult = (result: BaseEngineResult): BaseRejectedResult => 
 };
 
 export const activityDispatch = (
-  result: BaseBoundaryResult,
+  result: AcceptedTransition,
 ): Extract<PipelineCommand, { readonly kind: 'dispatchActivity' }> => {
   const command = result.commands[0];
   if (command?.kind !== 'dispatchActivity') {

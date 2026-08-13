@@ -1,5 +1,4 @@
 import {
-  isDigest,
   normalizePortableValue,
   type Digest,
   type JsonValue,
@@ -7,18 +6,11 @@ import {
 } from '../../foundation/index.js';
 import type { PipelineCommand } from '../contracts/commands.js';
 import type { PipelineState } from '../contracts/state.js';
-import {
-  cancelCommand,
-  completeCommand,
-  failCommand,
-  pipelineReference,
-} from '../execution/commands.js';
+import { failCommand, pipelineReference } from '../execution/commands.js';
 import { canonicalCommands } from '../identity/digests.js';
 import { ownPipelineState } from './canonical.js';
 
 export const ZERO_DIGEST: Digest = `sha256:${'0'.repeat(64)}`;
-
-export const safeDigest = (value: unknown): Digest => (isDigest(value) ? value : ZERO_DIGEST);
 
 export const safeInput = (value: unknown): JsonValue => {
   const result = normalizePortableValue(value);
@@ -68,44 +60,4 @@ export const failPipeline = (
       fault: failure,
     },
     failCommand(pipelineReference(state.programDigest, frameKey), failure),
-  );
-
-export const completePipeline = (
-  state: PipelineState,
-  frameKey: Digest,
-  outcome: string,
-  output: JsonValue,
-): TerminalState =>
-  terminal(
-    {
-      ...state,
-      status: 'succeeded',
-      frames: [],
-      pending: [],
-      resolved: [],
-      regionCancellations: [],
-      result: Object.freeze({ outcome, output }),
-      fault: null,
-    },
-    completeCommand(pipelineReference(state.programDigest, frameKey), outcome, output),
-  );
-
-export const cancelPipeline = (
-  state: PipelineState,
-  frameKey: Digest,
-  reasonCode: string,
-): TerminalState =>
-  terminal(
-    {
-      ...state,
-      status: 'cancelled',
-      frames: [],
-      pending: [],
-      resolved: [],
-      regionCancellations: [],
-      result: null,
-      fault: null,
-      runCancellation: Object.freeze({ reasonCode, awaiting: Object.freeze([]) }),
-    },
-    cancelCommand(pipelineReference(state.programDigest, frameKey), reasonCode),
   );

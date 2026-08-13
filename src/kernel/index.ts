@@ -76,3 +76,4 @@ export {
   type PipelineTransition,
 } from './contracts/transitions.js';
 export { PipelineEventSchema, type PipelineEvent } from './contracts/events.js';
+export { advancePipeline, createInitialPipelineState } from './execution/runtime/engine.js';

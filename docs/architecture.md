@@ -5,7 +5,7 @@
 [ADR 0005](./adr/0005-greenfield-language-compiler-kernel-cutover.md) is Accepted and
 sets the direct-cutover architecture. The six contracts in `docs/specs/` remain Draft
 until conformance and consumer readiness are accepted. The private foundation, source,
-materialization, Program, compiler, and base-kernel layers are active while the root module stays
+materialization, Program, compiler, and final private kernel layers are active while the root module stays
 inert and publication remains unconditionally blocked; there is no consumer API.
 
 ## System shape
@@ -52,7 +52,7 @@ it in the final manifest.
 `architecture/layers.json` is the canonical machine-readable record for state,
 paths, dependency direction, and visibility. Dependency-cruiser derives graph rules
 from it, while concise contract tests pin the current state and filesystem. Foundation,
-source, materialization, Program, compiler, and the base kernel are active; extensions
+source, materialization, Program, compiler, and the structured kernel are active; extensions
 remains future and has no source directory.
 
 ```text
@@ -200,6 +200,17 @@ frame has a structural digest key, immutable `scopeInput`, and full-ID terminal
 pruning. The kernel has no I/O, clocks, randomness, persistence, hidden mutable state,
 runtime IDs, or attempts. Calls are linked before execution and recursive call graphs
 are rejected. Parallel, map, repeat, and consensus expansion is bounded.
+
+Lowered Program admission and the kernel corruption guard share one frontier-aware
+analysis. It accounts for the global runnable worklist, complete map preflight, live
+state, command/state JSON occurrences, and cancellation hypergraph membership before a
+bundle digest can be emitted. Runtime advancement uses one transition-local reverse
+cancellation index and never persists a scheduler cache. Map activation persists only
+the canonical key-aligned source indexes required for bounded later refill; each refill
+uses binary key lookup and direct source-array access rather than repeating complete
+preflight or building a hidden index. See
+[ADR 0009](./adr/0009-bounded-map-collection.md) and
+[ADR 0010](./adr/0010-static-machine-admission.md).
 
 Kernel replay receipts are live-state indexes rather than an unbounded audit log. The
 kernel retains an event digest only while its owning frame or cancellation cleanup can

@@ -18,6 +18,14 @@ export type SelectorEnvironment = {
   readonly scopeInput: JsonValue;
   readonly nodeResults: Readonly<Record<string, NodeTerminalResult>>;
   readonly regionOutput?: JsonValue;
+  readonly repeat?: {
+    readonly iteration: number;
+    readonly previousOutput: JsonValue;
+  };
+  readonly map?: {
+    readonly item: JsonValue;
+    readonly itemKey: string;
+  };
 };
 
 export type ValueResolution =
@@ -55,8 +63,11 @@ const selectorBase = (
     case 'regionOutput':
       return environment.regionOutput;
     case 'repeat':
+      return selector.value === 'iteration'
+        ? environment.repeat?.iteration
+        : environment.repeat?.previousOutput;
     case 'map':
-      return undefined;
+      return selector.value === 'item' ? environment.map?.item : environment.map?.itemKey;
   }
   return undefined;
 };

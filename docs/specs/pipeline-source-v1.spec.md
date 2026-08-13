@@ -539,7 +539,7 @@ validated `PipelineFailure` output unchanged; it is not a completed author outco
 
 Repeat `maximumIterations` is in `1..100`. When `continueWhen` is true after the final
 allowed iteration, the node MUST choose `exhausted`; it MUST NOT raise an invariant
-failure. Map `maximumItems` is in `0..10000`; `maximumConcurrency` is in
+failure. Map `maximumItems` is in `0..1024`; `maximumConcurrency` is in
 `1..max(1, maximumItems)`. Map routes are exactly `completed`, `failed`, and `cancelled`.
 `collect` records failed item results and MAY still route `completed`; `failFast` selects
 `failed` on the first failed item. An item cancelled by fail-fast cleanup is not a map

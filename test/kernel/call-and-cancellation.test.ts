@@ -1,41 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
+import { advancePipeline, createInitialPipelineState } from '../../src/kernel/index.js';
 import type { ProgramNode } from '../../src/program/index.js';
 import {
-  boundaryResult,
   kernelModule,
   kernelProgram,
   kernelRegion,
+  runningResult,
   terminalResult,
 } from '../support/kernel-builders.js';
-import { advanceBaseKernel, initializeBaseKernel } from '../support/kernel-internal.js';
 import { programEnd, programId } from '../support/program-builders.js';
 import { emptySchema } from '../support/source-builders.js';
 
-describe('kernel linked calls and base cancellation', () => {
-  it('cancels immediately when a run has no pending operation', () => {
-    const wait: ProgramNode = {
-      kind: 'wait',
-      id: programId('1'),
-      wait: { kind: 'duration', durationMs: 1 },
-      routes: { completed: programId('9'), cancelled: programId('9') },
-    };
-    const bundle = kernelProgram([
-      kernelModule('main', kernelRegion([wait, programEnd(programId('9'))])),
-    ]);
-    const initial = initializeBaseKernel(bundle, {});
-    if (initial.kind !== 'deferred-node') {
-      throw new TypeError('Expected the deferred wait fixture.');
-    }
-
-    const result = terminalResult(
-      advanceBaseKernel(bundle, initial.state, { kind: 'cancelRequested', reasonCode: 'USER' }),
-    );
-
-    expect(result.state.status).toBe('cancelled');
-    expect(result.commands.map(({ kind }) => kind)).toEqual(['cancel']);
-  });
-
+describe('kernel linked calls and run cancellation', () => {
   it('copies a called result into the parent before pruning', () => {
     const childEnd = programEnd(programId('5'));
     const parentEnd = programEnd(programId('9'));
@@ -59,7 +36,7 @@ describe('kernel linked calls and base cancellation', () => {
       'main',
     );
 
-    const result = terminalResult(initializeBaseKernel(bundle, {}));
+    const result = terminalResult(createInitialPipelineState(bundle, {}));
 
     expect(result.state.status).toBe('succeeded');
     expect(result.state.frames).toEqual([]);
@@ -79,10 +56,10 @@ describe('kernel linked calls and base cancellation', () => {
       routes: { succeeded: end.id, failed: end.id, cancelled: end.id },
     };
     const bundle = kernelProgram([kernelModule('main', kernelRegion([activity, end]))]);
-    const initial = boundaryResult(initializeBaseKernel(bundle, {}));
+    const initial = runningResult(createInitialPipelineState(bundle, {}));
 
-    const requested = boundaryResult(
-      advanceBaseKernel(bundle, initial.state, {
+    const requested = runningResult(
+      advancePipeline(bundle, initial.state, {
         kind: 'cancelRequested',
         reasonCode: 'USER',
       }),
@@ -90,19 +67,19 @@ describe('kernel linked calls and base cancellation', () => {
     expect(requested.state.status).toBe('cancelling');
     expect(requested.commands.map(({ kind }) => kind)).toEqual(['cancelPending']);
 
-    const duplicate = advanceBaseKernel(bundle, requested.state, {
+    const duplicate = advancePipeline(bundle, requested.state, {
       kind: 'cancelRequested',
       reasonCode: 'OTHER',
     });
-    expect(duplicate).toMatchObject({ kind: 'boundary', commands: [] });
-    expect(boundaryResult(duplicate).state).toBe(requested.state);
+    expect(duplicate).toMatchObject({ kind: 'advanced', commands: [] });
+    expect(runningResult(duplicate).state).toBe(requested.state);
 
     const pending = requested.state.pending[0];
     if (pending?.kind !== 'activity') {
       throw new TypeError('Expected one cancelling activity.');
     }
     const acknowledged = terminalResult(
-      advanceBaseKernel(bundle, requested.state, {
+      advancePipeline(bundle, requested.state, {
         kind: 'activityCancelled',
         commandKey: pending.commandKey,
         ref: pending.ref,

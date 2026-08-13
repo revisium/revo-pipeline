@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import { advancePipeline, createInitialPipelineState } from '../../src/kernel/index.js';
 import {
   activityDispatch,
-  boundaryResult,
   kernelModule,
   kernelProgram,
   kernelRegion,
+  runningResult,
   terminalResult,
 } from '../support/kernel-builders.js';
-import { advanceBaseKernel, initializeBaseKernel } from '../support/kernel-internal.js';
 import { programEnd, programId } from '../support/program-builders.js';
 
 describe('kernel base smoke', () => {
@@ -16,7 +16,7 @@ describe('kernel base smoke', () => {
     const end = programEnd(programId('1'));
     const bundle = kernelProgram([kernelModule('main', kernelRegion([end]))]);
 
-    const result = terminalResult(initializeBaseKernel(bundle, {}));
+    const result = terminalResult(createInitialPipelineState(bundle, {}));
 
     expect(result.state.status).toBe('succeeded');
     expect(result.commands.map(({ kind }) => kind)).toEqual(['complete']);
@@ -45,11 +45,11 @@ describe('kernel base smoke', () => {
       routes: { succeeded: end.id, failed: end.id, cancelled: end.id },
     };
     const bundle = kernelProgram([kernelModule('main', kernelRegion([activity, end]))]);
-    const initial = boundaryResult(initializeBaseKernel(bundle, {}));
+    const initial = runningResult(createInitialPipelineState(bundle, {}));
     const command = activityDispatch(initial);
 
     const result = terminalResult(
-      advanceBaseKernel(bundle, initial.state, {
+      advancePipeline(bundle, initial.state, {
         kind: 'activitySucceeded',
         commandKey: command.key,
         ref: command.ref,

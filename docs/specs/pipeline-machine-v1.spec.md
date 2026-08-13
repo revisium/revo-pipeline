@@ -248,22 +248,37 @@ type RepeatMachineFrame = MachineFrameBase & {
   readonly status: 'active' | 'completed';
 };
 
-type MapItemResult = {
-  readonly itemKey: string;
-  readonly status: 'succeeded' | 'failed' | 'cancelled';
-  readonly output: JsonValue | null;
-  readonly failure: PipelineFailure | null;
-};
+type MapItemResult =
+  | {
+      readonly itemKey: string;
+      readonly status: 'succeeded';
+      readonly output: JsonValue;
+      readonly failure: null;
+    }
+  | {
+      readonly itemKey: string;
+      readonly status: 'failed';
+      readonly output: null;
+      readonly failure: PipelineFailure;
+    }
+  | {
+      readonly itemKey: string;
+      readonly status: 'cancelled';
+      readonly output: null;
+      readonly failure: null;
+    };
 type MapMachineFrame = MachineFrameBase & {
   readonly kind: 'map';
   readonly parentFrameKey: Digest;
   readonly nodeId: ProgramNodeId;
   readonly itemKeys: readonly string[];
+  readonly itemSourceIndexes: readonly number[];
   readonly pendingItemKeys: readonly string[];
   readonly activeItemKeys: readonly string[];
   readonly completedItems: readonly MapItemResult[];
   readonly status: 'active' | 'draining' | 'cancelling' | 'completed';
   readonly selected: 'completed' | 'failed' | 'cancelled' | null;
+  readonly selectedFailureItemKey: string | null;
 };
 
 type MachineFrame =
@@ -348,6 +363,12 @@ branches by branch key, and item lists/results by item key. State MUST NOT conta
 workflow/provider/database IDs, attempts, leases, retry counters, deadlines, timestamps,
 DBOS handles, cursors, actor sessions, authorization results, executors, or secrets.
 
+Machine v1 admits at most 16,384 live frames and 16,384 pending plus resolved operations,
+65,536 total node-result entries and cancellation memberships, 262,144 structural
+collection slots, and 1,048,576 serialized JSON value occurrences. Map key and result
+arrays remain bounded by 1,024; one frame retains at most 4,096 node results. These are
+cumulative semantic limits, not independent allowances for each nested collection.
+
 `resolved` contains live receipts, not the run's event history. An accepted operation
 event removes the matching pending operation and inserts its exact
 `{commandKey,ref,eventDigest}` receipt before applying the result. The receipt remains
@@ -429,6 +450,8 @@ An event must match pending `commandKey`, ref, and kind. An identical replay, de
 by domain `pipeline-event/v1` digest, is idempotent. A conflicting replay, foreign ref,
 wrong operation kind, undeclared answer/signal, or invalid event schema returns
 `kind:'rejected'`, the identical state object, no commands, and stable EVENT faults.
+A declared signal with `payloadSchema:null` accepts only `payload:null`; any non-null
+payload produces `DATA_SCHEMA_MISMATCH` at `/payload`.
 
 ## Exact command union and order
 
@@ -588,11 +611,42 @@ kernel-owned map-local bound. `revo-run` separately owns plan-wide/global capaci
 may durably queue valid dispatch commands. Repeat true at the final bound selects
 `exhausted`; no invariant fault is allowed.
 
+Map activation performs complete preflight before creating its owner. It first resolves
+the items selector, requires an array within `maximumItems`, then checks each item-key
+pointer, string key, duplicate key, body mapping, and mapped body schema in that exact
+phase order. The lowest input index wins within a phase, and body mapping keys use
+Unicode order. A failure records the map node failure and emits no item work. Successful
+descriptors normalize by item key; refill reconstructs inputs from immutable source
+state without persisting a hidden descriptor cache. `itemSourceIndexes` is aligned with
+the Unicode-sorted `itemKeys`: each entry is the corresponding item's original index in
+the selected array. It has the same length as `itemKeys` and is an exact permutation of
+`0..N-1` (or `[]` for an empty map). The numeric array is not independently sorted.
+Refill binary-searches `itemKeys`, reads the aligned index, resolves the items selector
+once for the starting batch, and validates only the addressed item's key, mapping, and
+body schema. A schema-valid but false key/index relation is invariant corruption and
+emits no item dispatch.
+
+A live map owner with declared maximum `N` contributes `5N+4` structural collection
+slots. Let `O` be the maximum `valueSchemaWeight` of a completed body exit (or zero) and
+`R=max(7,4+O)`. Its conservative schema-capacity JSON envelope is `15+N*(4+R)`, using
+cap-saturating arithmetic; for scalar output this is exactly `11N+15`. A reachable
+all-failed partition is `9N+15`, while admission reserves independent declared
+collection capacities. The final author `{items}` projection is separately weighted as
+`2+N*(4+max(1,O))`. Runtime counts actual canonical state occurrences before returning
+a transition.
+
 A failed map item retains its exact failure in `MapItemResult.failure`, with
-`output:null`; succeeded and cancelled items have `failure:null`. The compiler-derived
+`output:null`; succeeded items have `failure:null`, while cancelled items have both
+`output:null` and `failure:null`. A succeeded output remains any `JsonValue`, including
+`null`, matching `NodeTerminalResult`. The compiler-derived
 author map output keeps its existing `errorCode` field and derives it as `failure.code`
 only for a failed item. It never stores only `errorCode` in machine state or loses the
 failure path. A fail-fast map propagates the selected full failure object.
+`selectedFailureItemKey` is non-null exactly while `selected:'failed'`; it names the
+unique failed entry in canonical `completedItems` and is immutable until the owner is
+pruned. This normalized causal key preserves the first accepted item failure across
+serialization even when a later lower-key cleanup failure sorts before it. A missing,
+unknown, active, pending, or non-failed relation is invalid Machine state.
 
 Generic parallel `branchResults` becomes the total `GenericParallelOutput.branches`
 record; vote parallel uses the total `VoteParallelOutput.votes` record. Early policy
