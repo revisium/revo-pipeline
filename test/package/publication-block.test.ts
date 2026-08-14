@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import * as runtimeSurface from '../../src/index.js';
+import * as kernelSurface from '../../src/kernel/public.js';
 
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
 const packageJson: unknown = JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8'));
@@ -13,22 +13,29 @@ const packageJson: unknown = JSON.parse(readFileSync(join(repositoryRoot, 'packa
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-describe('publication block', () => {
-  it('validates the blocked package manifest', () => {
+describe('under-development package boundary', () => {
+  it('validates the alpha package manifest and exact entrypoints', () => {
     expect(isRecord(packageJson)).toBe(true);
     if (!isRecord(packageJson)) {
       return;
     }
 
-    expect(packageJson.private).toBe(true);
+    expect(packageJson.version).toBe('0.1.0-alpha.1');
+    expect(Object.hasOwn(packageJson, 'private')).toBe(false);
     expect(packageJson.type).toBe('module');
     expect(packageJson.dependencies).toEqual({ canonicalize: '3.0.0', typebox: '1.3.10' });
+    expect(packageJson.main).toBe('./dist/index.js');
+    expect(packageJson.types).toBe('./dist/index.d.ts');
+    expect(packageJson.files).toEqual(['dist', 'README.md', 'LICENSE']);
+    expect(packageJson.exports).toEqual({
+      '.': { types: './dist/index.d.ts', import: './dist/index.js' },
+      './kernel': {
+        types: './dist/kernel/public.d.ts',
+        import: './dist/kernel/public.js',
+      },
+    });
+    expect(packageJson.publishConfig).toEqual({ access: 'public', tag: 'alpha' });
     for (const field of [
-      'main',
-      'types',
-      'exports',
-      'files',
-      'publishConfig',
       'optionalDependencies',
       'peerDependencies',
       'bundledDependencies',
@@ -41,29 +48,42 @@ describe('publication block', () => {
     if (!isRecord(packageJson.scripts)) {
       return;
     }
-    expect(packageJson.scripts.prepublishOnly).toBe(
-      `node -e "console.error('Publication is blocked until conformance and readiness are complete.'); process.exit(1)"`,
-    );
-    expect(Object.hasOwn(packageJson.scripts, 'prepack')).toBe(false);
-  });
-
-  it('fails closed when invoked as the publish hook', () => {
-    const result = spawnSync('corepack', ['pnpm', 'run', 'prepublishOnly'], {
-      cwd: repositoryRoot,
-      encoding: 'utf8',
-    });
-
-    expect(result.status).not.toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toContain(
-      'Publication is blocked until conformance and readiness are complete.',
-    );
+    expect(Object.hasOwn(packageJson.scripts, 'prepublishOnly')).toBe(false);
+    expect(packageJson.scripts.prepack).toBe('pnpm run build');
   });
 
   it('keeps the reviewed CI workflow as the only workflow', () => {
     expect(readdirSync(join(repositoryRoot, '.github', 'workflows'))).toEqual(['ci.yml']);
   });
 
-  it('has no root runtime exports while the package is private', () => {
-    expect(Object.keys(runtimeSurface)).toEqual([]);
+  it('exposes only the exact root and kernel runtime values', () => {
+    expect(Object.keys(runtimeSurface).toSorted()).toEqual([
+      'PipelineCompileResultSchema',
+      'PipelineProgramSchema',
+      'PipelineSourcePackageSchema',
+      'ProfileMaterializationSchema',
+      'ProgramDigestInputSchema',
+      'ProgramProvenanceSchema',
+      'ProgramRequirementsSchema',
+      'ValueSchemaSchema',
+      'compilePipeline',
+      'computeMaterializationDigest',
+      'computeProgramDigest',
+      'computeSourceDigest',
+      'definePipelineSource',
+      'defineProfileMaterialization',
+    ]);
+    expect(Object.keys(kernelSurface).toSorted()).toEqual([
+      'InitialPipelineTransitionSchema',
+      'KernelProgramSchema',
+      'PipelineCommandSchema',
+      'PipelineEventSchema',
+      'PipelineProgramSchema',
+      'PipelineStateSchema',
+      'PipelineTransitionSchema',
+      'advancePipeline',
+      'createInitialPipelineState',
+    ]);
+    expect(runtimeSurface.PipelineProgramSchema).toBe(kernelSurface.PipelineProgramSchema);
   });
 });

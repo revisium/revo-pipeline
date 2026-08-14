@@ -88,7 +88,7 @@ describe('kernel initialization and data failures', () => {
     expect(Object.isFrozen(input)).toBe(false);
   });
 
-  it('routes a missing activity input pointer through its failed route', () => {
+  it('rejects a Program with a statically missing activity input pointer', () => {
     const failed = { ...programEnd(programId('9')), outcome: 'failed' };
     const activity: ProgramNode = {
       kind: 'activity',
@@ -111,8 +111,8 @@ describe('kernel initialization and data failures', () => {
 
     const result = terminalResult(createInitialPipelineState(bundle, {}));
 
-    expect(result.state.result?.outcome).toBe('failed');
-    expect(result.commands.map(({ kind }) => kind)).toEqual(['complete']);
+    expect(result.state.fault).toEqual({ code: 'PROGRAM_INVALID', path: '/program' });
+    expect(result.commands).toMatchObject([{ kind: 'fail', code: 'PROGRAM_INVALID' }]);
   });
 
   it('retains an activity output schema mismatch as a DATA failure route', () => {

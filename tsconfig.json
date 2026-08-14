@@ -20,6 +20,12 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": [".dependency-cruiser.cjs", "src/**/*.ts", "test/**/*.ts", "vitest*.config.ts"],
+  "include": [
+    ".dependency-cruiser.cjs",
+    "scripts/**/*.mjs",
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "vitest*.config.ts"
+  ],
   "exclude": ["dist", "coverage", "node_modules"]
 }

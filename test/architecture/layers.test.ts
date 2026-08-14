@@ -17,51 +17,32 @@ const expectedManifest = {
     {
       name: 'foundation',
       path: 'src/foundation',
-      state: 'active',
-      public: false,
       dependencies: [],
     },
     {
       name: 'source',
       path: 'src/source',
-      state: 'active',
-      public: false,
       dependencies: ['foundation'],
     },
     {
       name: 'materialization',
       path: 'src/materialization',
-      state: 'active',
-      public: false,
       dependencies: ['foundation', 'source'],
     },
     {
       name: 'program',
       path: 'src/program',
-      state: 'active',
-      public: false,
       dependencies: ['foundation'],
     },
     {
       name: 'compiler',
       path: 'src/compiler',
-      state: 'active',
-      public: false,
       dependencies: ['foundation', 'source', 'materialization', 'program'],
     },
     {
       name: 'kernel',
       path: 'src/kernel',
-      state: 'active',
-      public: false,
       dependencies: ['foundation', 'program'],
-    },
-    {
-      name: 'extensions',
-      path: 'src/extensions',
-      state: 'future',
-      public: false,
-      dependencies: ['source', 'materialization', 'compiler'],
     },
   ],
 } as const;
@@ -71,7 +52,7 @@ describe('canonical layer manifest', () => {
     expect(manifest).toEqual(expectedManifest);
   });
 
-  it('materializes only the six active private layers', () => {
+  it('materializes exactly the six dependency layers plus public facades', () => {
     expect(readdirSync(join(repositoryRoot, 'src')).toSorted()).toEqual([
       'compiler',
       'foundation',
@@ -82,8 +63,7 @@ describe('canonical layer manifest', () => {
       'source',
     ]);
     expect(existsSync(join(repositoryRoot, 'src', 'foundation', 'index.ts'))).toBe(true);
-    for (const layer of expectedManifest.layers.filter(({ state }) => state === 'future')) {
-      expect(existsSync(join(repositoryRoot, layer.path))).toBe(false);
-    }
+    expect(existsSync(join(repositoryRoot, 'src', 'kernel', 'public.ts'))).toBe(true);
+    expect(existsSync(join(repositoryRoot, 'src', 'extensions'))).toBe(false);
   });
 });

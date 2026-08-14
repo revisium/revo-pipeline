@@ -6,7 +6,10 @@ import {
   type MapMachineFrame,
 } from '../../src/kernel/index.js';
 import { hydratePipelineState } from '../support/kernel-internal.js';
-import { reverseNestedKeyMapProgram } from '../support/large-map-builders.js';
+import {
+  reverseNestedKeyMapInput,
+  reverseNestedKeyMapProgram,
+} from '../support/large-map-builders.js';
 import { activityMapProgram, commandForItem } from '../support/structured-kernel-builders.js';
 
 const mutateOwner = (
@@ -20,7 +23,7 @@ const mutateOwner = (
 describe('map source index relation', () => {
   it('persists an empty aligned relation', () => {
     const bundle = reverseNestedKeyMapProgram(0);
-    expect(createInitialPipelineState(bundle, {})).toMatchObject({
+    expect(createInitialPipelineState(bundle, reverseNestedKeyMapInput(0))).toMatchObject({
       state: { status: 'succeeded' },
       commands: [{ kind: 'complete' }],
     });

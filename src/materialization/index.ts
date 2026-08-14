@@ -13,3 +13,4 @@ export {
   type ProfileMaterializationValidationResult,
   type ValidatedProfileMaterialization,
 } from './validate.js';
+export { computeMaterializationDigest, defineProfileMaterialization } from './public.js';

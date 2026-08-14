@@ -11,8 +11,9 @@ RFC 8174) when, and only when, they appear in all capitals.
 ## Scope
 
 This specification defines normalization, RFC 8785 bytes, digest domains, and golden
-vectors for every public hashed artifact. It defines no `planDigest`. These APIs remain
-Draft and unavailable from the package root while conformance is incomplete.
+vectors for every public hashed artifact. It defines no `planDigest`. These contracts
+remain Draft; their unstable APIs are available from npm `alpha` prereleases and local
+or CI-built tarballs without a compatibility guarantee.
 
 ## Validated canonical domain
 

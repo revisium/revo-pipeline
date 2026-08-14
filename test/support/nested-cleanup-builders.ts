@@ -115,7 +115,15 @@ const mapBody = (): ProgramRegion => {
   };
   return {
     id: structuredId(13_000),
-    inputSchema: objectSchema({ id: { type: 'string' } }),
+    inputSchema: objectSchema({
+      id: {
+        anyOf: [
+          { type: 'string', enum: ['a'] },
+          { type: 'string', enum: ['b'] },
+          { type: 'string', enum: ['c'] },
+        ],
+      },
+    }),
     entry: activity.id,
     outputSchema: { anyOf: [EmptyObjectSchema, PipelineFailureValueSchema] },
     exits: [

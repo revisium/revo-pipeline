@@ -147,7 +147,11 @@ describe('kernel Program admission', () => {
   it.each(programNodeExamples().map((node) => [node.kind, node] as const))(
     'indexes a valid %s node without executing structured behavior',
     (_kind, node) => {
-      expect(inspectKernelProgram(withNode(node)).ok).toBe(true);
+      const candidate =
+        node.kind === 'map'
+          ? { ...node, items: { kind: 'literal' as const, value: ['item'] } }
+          : node;
+      expect(inspectKernelProgram(withNode(candidate)).ok).toBe(true);
     },
   );
 

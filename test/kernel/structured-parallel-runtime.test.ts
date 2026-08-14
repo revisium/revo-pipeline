@@ -151,12 +151,12 @@ describe('structured parallel runtime outcomes', () => {
   it.each([
     ['missing input', { value: { kind: 'scopeInput', pointer: '/missing' } }],
     ['schema-mismatched input', { value: { kind: 'literal', value: 1 } }],
-  ] as const)('totalizes unstarted siblings after a %s preflight failure', (_name, input) => {
+  ] as const)('rejects a Program with a statically %s', (_name, input) => {
     const bundle = parallelActivityProgram('cancel', { kind: 'all' }, input);
     const initial = createInitialPipelineState(bundle, {});
     expect(initial).toMatchObject({
-      state: { status: 'succeeded', frames: [], pending: [] },
-      commands: [{ kind: 'complete' }],
+      state: { status: 'failed', frames: [], pending: [], fault: { code: 'PROGRAM_INVALID' } },
+      commands: [{ kind: 'fail', code: 'PROGRAM_INVALID' }],
     });
   });
 
@@ -173,14 +173,15 @@ describe('structured parallel runtime outcomes', () => {
     expect(Object.getPrototypeOf(owner.branchRegionKeys)).toBe(Object.prototype);
     expect(Object.hasOwn(owner.branchRegionKeys, '__proto__')).toBe(true);
 
-    const failed = createInitialPipelineState(
-      parallelActivityProgram(
-        'drain',
-        { kind: 'all' },
-        { value: { kind: 'scopeInput', pointer: '/missing' } },
-        keys,
-      ),
-      {},
+    const commands = branchCommands(active.state, active.commands);
+    const hostile = Reflect.getOwnPropertyDescriptor(commands, '__proto__')?.value;
+    if (hostile === undefined) {
+      throw new TypeError('Expected a hostile-key branch command.');
+    }
+    const failed = advancePipeline(
+      parallelActivityProgram('drain', { kind: 'all' }, {}, keys),
+      active.state,
+      terminalEvent(hostile, 'activityFailed'),
     );
     const failedOwner = failed.state.frames.find((frame) => frame.kind === 'parallel');
     if (failedOwner?.kind !== 'parallel') {

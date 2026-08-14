@@ -1,6 +1,6 @@
+import { localTargets as programNodeTargets } from '../admission/graphs.js';
 import type { ProgramNode, ProgramNodeId, ProgramRegion } from '../contracts/index.js';
 import { PROGRAM_ADMISSION_LIMITS } from './limits.js';
-import { programNodeTargets } from './structure.js';
 
 export type WorkEnvelope = {
   readonly start: number;

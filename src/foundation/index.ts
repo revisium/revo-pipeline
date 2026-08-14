@@ -32,6 +32,7 @@ export {
   type DigestDomain,
   type DigestResult,
 } from './digest.js';
+export { computeRedactedDigest } from './digest-redaction.js';
 export { isDisplayString, isIdentifier } from './identifier.js';
 export { countJsonValues } from './json-values.js';
 export {
@@ -104,6 +105,7 @@ export {
   isPipelineFailureSchema,
   normalizeChoiceDomain,
   normalizeValueSchema,
+  valueSchemaIsCompatible,
   valueSchemasEqual,
 } from './value-schema/normalization.js';
 export { projectValueSchema } from './value-schema/pointer.js';

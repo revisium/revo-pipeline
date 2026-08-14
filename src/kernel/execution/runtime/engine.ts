@@ -80,10 +80,10 @@ const invariantAdvance = (state: PipelineState, rootFrameKey: Digest): PipelineT
     ),
   });
 
-export const createInitialPipelineState = (
+export function createInitialPipelineState(
   bundleInput: unknown,
   input: unknown,
-): InitialPipelineTransition => {
+): InitialPipelineTransition {
   const inspection = inspectKernelProgram(bundleInput);
   if (!inspection.ok) {
     return initializationFailure(bundleInput, 'PROGRAM_INVALID');
@@ -120,7 +120,7 @@ export const createInitialPipelineState = (
         ),
       })
     : Object.freeze({ kind: 'initialized', ...result });
-};
+}
 
 const rootFrameKey = (state: PipelineState): Digest | null =>
   state.frames.find(({ kind }) => kind === 'rootRegion')?.key ?? null;
@@ -185,11 +185,11 @@ const advanceHydratedState = (
     : Object.freeze({ kind: 'advanced', ...result });
 };
 
-export const advancePipeline = (
+export function advancePipeline(
   bundleInput: KernelProgram,
   stateInput: PipelineState,
   eventInput: unknown,
-): PipelineTransition => {
+): PipelineTransition {
   const bundleDigest = ownValue(bundleInput, 'programDigest');
   const stateDigest = ownValue(stateInput, 'programDigest');
   if (!isDigest(bundleDigest) || !isDigest(stateDigest) || bundleDigest !== stateDigest) {
@@ -213,4 +213,4 @@ export const advancePipeline = (
   } catch {
     return invariantAdvance(state, rootKey);
   }
-};
+}

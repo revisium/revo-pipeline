@@ -47,7 +47,7 @@ describe('runtime targeted Program access', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('admits a maximum Program once and never re-analyzes it across repeated events', () => {
-    const admission = vi.spyOn(program, 'analyzeProgram');
+    const admission = vi.spyOn(program, 'admitSchemaValidatedPipelineProgram');
     const bundle = maximumRunningProgram();
     const initial = createInitialPipelineState(bundle, {});
     const command = initial.commands.find(({ kind }) => kind === 'dispatchActivity');

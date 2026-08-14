@@ -85,8 +85,20 @@ function createDependencyRules(manifest, productionDependencyNames) {
           ? `^(?:${escapeRegularExpression(layer.path)}/|test/support/kernel-internal\\.ts$)`
           : `^${escapeRegularExpression(layer.path)}/`,
     },
-    to: { path: `^${escapeRegularExpression(layer.path)}/(?!index\\.ts$)` },
+    to: {
+      path:
+        layer.name === 'kernel'
+          ? `^${escapeRegularExpression(layer.path)}/(?!index\\.ts$|public\\.ts$)`
+          : `^${escapeRegularExpression(layer.path)}/(?!index\\.ts$)`,
+    },
   }));
+  const rootFacadeSources = [
+    'src/foundation/index.ts',
+    'src/source/index.ts',
+    'src/materialization/index.ts',
+    'src/program/index.ts',
+    'src/compiler/index.ts',
+  ].map(escapeRegularExpression);
 
   return [
     {
@@ -144,16 +156,36 @@ function createDependencyRules(manifest, productionDependencyNames) {
       },
     },
     {
-      name: 'root-module-has-no-imports',
+      name: 'root-module-uses-only-approved-facade-sources',
       severity: 'error',
       from: { path: `^${escapeRegularExpression(manifest.rootModule)}$` },
-      to: {},
+      to: { pathNot: `^(?:${rootFacadeSources.join('|')})$` },
     },
     {
       name: 'layers-do-not-import-root-module',
       severity: 'error',
       from: { path: `^${allLayers}/` },
       to: { path: `^${escapeRegularExpression(manifest.rootModule)}$` },
+    },
+    {
+      name: 'kernel-public-uses-only-approved-indexes',
+      severity: 'error',
+      from: { path: '^src/kernel/public\\.ts$' },
+      to: {
+        pathNot: '^(?:src/foundation/index\\.ts|src/program/index\\.ts|src/kernel/index\\.ts)$',
+      },
+    },
+    {
+      name: 'private-layers-do-not-import-kernel-public',
+      severity: 'error',
+      from: { path: `^${allLayers}/`, pathNot: '^src/kernel/public\\.ts$' },
+      to: { path: '^src/kernel/public\\.ts$' },
+    },
+    {
+      name: 'publication-boundary-imports-only-kernel-public',
+      severity: 'error',
+      from: { path: '^test/package/publication-block\\.test\\.ts$' },
+      to: { path: '^src/kernel/(?!public\\.ts$)' },
     },
     ...dependencyRules,
     ...curatedBoundaryRules,

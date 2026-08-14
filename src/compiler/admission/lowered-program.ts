@@ -7,15 +7,16 @@ import {
   type PipelineDiagnostic,
 } from '../../foundation/index.js';
 import {
-  analyzeProgram,
+  admitOwnedPipelineProgram,
   type NodeProvenance,
+  type ProgramAdmissionReceipt,
   type ProgramAdmissionViolation,
   type ProgramAnalysis,
 } from '../../program/index.js';
 import type { LoweredProgram } from '../lowering/index.js';
 
 export type LoweredProgramAdmission =
-  | { readonly ok: true }
+  | { readonly ok: true; readonly receipt: ProgramAdmissionReceipt }
   | { readonly ok: false; readonly diagnostics: readonly PipelineDiagnostic[] };
 
 const compareSourcePaths = (left: JsonPointer, right: JsonPointer): number => {
@@ -83,14 +84,27 @@ const violationPath = (
 };
 
 export const admitLoweredProgram = (lowered: LoweredProgram): LoweredProgramAdmission => {
-  const result = analyzeProgram(lowered.program);
+  const provenanceIds = new Set<string>();
+  for (const record of lowered.nodeProvenance) {
+    if (provenanceIds.has(record.programNodeId)) {
+      const collector = createDiagnosticCollector();
+      collector.add('LOWERING_ID_COLLISION', record.sourcePath);
+      return Object.freeze({ ok: false, diagnostics: collector.finalize() });
+    }
+    provenanceIds.add(record.programNodeId);
+  }
+  const result = admitOwnedPipelineProgram(lowered.program);
   if (result.ok) {
-    return Object.freeze({ ok: true });
+    return Object.freeze({ ok: true, receipt: result.receipt });
   }
   const collector = createDiagnosticCollector();
-  collector.add(
-    'BOUND_EXCEEDED',
-    violationPath(result.violation, result.analysis, lowered.nodeProvenance),
-  );
+  if (result.reason === 'bounds') {
+    collector.add(
+      'BOUND_EXCEEDED',
+      violationPath(result.violation, result.analysis, lowered.nodeProvenance),
+    );
+  } else {
+    collector.add('CANONICAL_INPUT', '');
+  }
   return Object.freeze({ ok: false, diagnostics: collector.finalize() });
 };

@@ -28,6 +28,12 @@ const nonEmpty = <Value>(values: readonly Value[]): [Value, ...Value[]] => {
 };
 
 const structuralProgram = () => {
+  const inputSchema = {
+    type: 'object' as const,
+    properties: { value: { type: 'integer' as const, minimum: 0, maximum: 6 } },
+    required: ['value'],
+    additionalProperties: false as const,
+  };
   const modules: ProgramModule[] = [];
   for (let moduleIndex = 0; moduleIndex < 64; moduleIndex += 1) {
     const nodes: ProgramNode[] = [];
@@ -49,7 +55,7 @@ const structuralProgram = () => {
       nodes.push({
         kind: 'choice',
         id: digestFromNumber(ordinal),
-        selector: { kind: 'literal', value: true },
+        selector: { kind: 'scopeInput', pointer: '/value' },
         cases,
         otherwise: target,
       });
@@ -62,7 +68,10 @@ const structuralProgram = () => {
     modules.push(
       kernelModule(
         `module-${String(moduleIndex).padStart(2, '0')}`,
-        kernelRegion([first, ...rest], { id: digestFromNumber(50_000 + moduleIndex) }),
+        kernelRegion([first, ...rest], {
+          id: digestFromNumber(50_000 + moduleIndex),
+          inputSchema,
+        }),
       ),
     );
   }

@@ -6,11 +6,11 @@ import {
   type Digest,
   type JsonPointer,
 } from '../../foundation/index.js';
+import { isStrictlySorted } from '../../program/index.js';
 import type { MachineFrame } from '../contracts/frames.js';
 import { PipelineStateSchema, type PipelineState } from '../contracts/state.js';
 import type { MapMachineFrame } from '../contracts/structured-frames.js';
 import { findSorted } from '../program/lookup.js';
-import { isStrictlySorted } from '../program/ordering.js';
 import { stateFitsMachineLimits } from './bounds.js';
 
 const stateValidator = Compile(PipelineStateSchema);

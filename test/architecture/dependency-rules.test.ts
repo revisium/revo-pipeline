@@ -64,6 +64,7 @@ const cruiseFixture = (name: string) => {
   const root = mkdtempSync(join(tmpdir(), 'revo-pipeline-dependencies-'));
   temporaryRoots.push(root);
   materializeDirectory(join(fixtureRoot, name), root);
+  mkdirSync(join(root, 'test'), { recursive: true });
   writeFileSync(join(root, 'package.json'), readFileSync(join(repositoryRoot, 'package.json')));
   writeFileSync(
     join(root, 'tsconfig.json'),
@@ -82,7 +83,7 @@ const cruiseFixture = (name: string) => {
   );
   return spawnSync(
     process.execPath,
-    [dependencyCruiser, '--config', configuration, '--output-type', 'json', 'src'],
+    [dependencyCruiser, '--config', configuration, '--output-type', 'json', 'src', 'test'],
     { cwd: root, encoding: 'utf8' },
   );
 };
@@ -98,7 +99,11 @@ describe('manifest-derived dependency rules', () => {
     ['cross-layer-deep', 'cross-layer-foundation-imports-use-index'],
     ['disallowed-layer', 'source-uses-declared-layer-dependencies'],
     ['root-import', 'layers-do-not-import-root-module'],
-    ['root-private-import', 'root-module-has-no-imports'],
+    ['root-private-import', 'root-module-uses-only-approved-facade-sources'],
+    ['root-kernel-import', 'root-module-uses-only-approved-facade-sources'],
+    ['kernel-public-deep', 'kernel-public-uses-only-approved-indexes'],
+    ['kernel-internal-public', 'private-layers-do-not-import-kernel-public'],
+    ['package-kernel-index', 'publication-boundary-imports-only-kernel-public'],
     ['unresolved-local', 'source-imports-must-resolve'],
     ['cycle', 'no-cycles'],
     ['forbidden-builtin', 'source-uses-only-node-crypto'],

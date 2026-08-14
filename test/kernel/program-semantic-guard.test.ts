@@ -136,6 +136,7 @@ const parallelWithClassifications = (
   }[],
   failedSchema: ValueSchema = emptySchema(),
 ): KernelProgram => {
+  const hasFailureSchema = failedSchema === PipelineFailureValueSchema;
   const parallel = programNodeExamples().find(
     (node): node is Extract<ProgramNode, { kind: 'parallel'; mode: 'generic' }> =>
       node.kind === 'parallel' && node.mode === 'generic',
@@ -147,11 +148,20 @@ const parallelWithClassifications = (
     childOutcomes.map((outcome, index) => ({
       ...programEnd(digestFromNumber(60_000 + index)),
       outcome,
+      ...(hasFailureSchema
+        ? {
+            output: {
+              code: { kind: 'scopeInput' as const, pointer: '/code' as const },
+              path: { kind: 'scopeInput' as const, pointer: '/path' as const },
+            },
+          }
+        : {}),
     })),
   );
   const child = kernelRegion(childEnds, {
     id: digestFromNumber(60_010),
     outcomes: childOutcomes,
+    ...(hasFailureSchema ? { inputSchema: PipelineFailureValueSchema } : {}),
     outputSchema: failedSchema,
   });
   const [first, second] = parallel.branches;
@@ -160,15 +170,25 @@ const parallelWithClassifications = (
     branches: [
       {
         ...first,
+        ...(hasFailureSchema
+          ? {
+              input: {
+                code: { kind: 'moduleInput' as const, pointer: '/code' as const },
+                path: { kind: 'moduleInput' as const, pointer: '/path' as const },
+              },
+            }
+          : {}),
         region: child,
         exits: nonEmpty(classifications),
       },
       { ...second, region: { ...second.region, id: digestFromNumber(60_020) } },
     ],
   };
-  return kernelProgram([
-    kernelModule('main', kernelRegion([node, programEnd()], { id: digestFromNumber(60_030) })),
-  ]);
+  const region = kernelRegion([node, programEnd()], {
+    id: digestFromNumber(60_030),
+    ...(hasFailureSchema ? { inputSchema: PipelineFailureValueSchema } : {}),
+  });
+  return kernelProgram([kernelModule('main', region)]);
 };
 
 describe('kernel Program semantic guard', () => {

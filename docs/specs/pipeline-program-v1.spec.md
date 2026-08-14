@@ -12,9 +12,9 @@ RFC 8174) when, and only when, they appear in all capitals.
 
 This specification defines the exact compiler result, linked Program IR, abstract
 requirements, and provenance. It defines no exact executor binding or `ExecutionPlan`.
-These APIs remain Draft and unavailable from the package root while conformance is
-incomplete. TypeBox schemas are authoritative and MUST reject unknown fields, versions,
-kinds, and policies.
+These contracts remain Draft; their unstable APIs are available from npm `alpha`
+prereleases and local or CI-built tarballs without a compatibility guarantee. TypeBox schemas are authoritative
+and MUST reject unknown fields, versions, kinds, and policies.
 
 ## Compiler result
 
@@ -49,6 +49,32 @@ partial program, requirements, provenance, or digest. Success MUST own and recur
 freeze new data without retaining or freezing caller objects. Its outer `sourceDigest`
 and `materializationDigest` MUST equal the two pins inside `program`; `programDigest`
 MUST equal Canonicalization v1 over exactly `{program,requirements,provenance}`.
+
+## Public Program digest
+
+```ts
+type ProgramDigestInput = {
+  readonly program: PipelineProgram;
+  readonly requirements: ProgramRequirements;
+  readonly provenance: ProgramProvenance;
+};
+
+declare function computeProgramDigest(value: ProgramDigestInput): Digest;
+```
+
+`computeProgramDigest` MUST own its input once, then apply the same complete pure Program
+admission used by the compiler and kernel to that exact owned Program before checking
+requirement/provenance cross-references or hashing. Admission covers the canonical module,
+region, node, target, structured-node, selector/mapping, call-graph, cycle, depth, and
+resource contracts in this specification. A call is structurally valid only when its
+target exists, its output schema equals the target output schema, and its ordered outcome
+keys equal the target root exits; call input mapping is validated by Program dataflow.
+Source/materialization linking, source-level lowering proof, and provenance-to-source proof
+remain compiler-contextual and are not reconstructed from Program IR.
+
+Every invalid or hostile input MUST throw exactly
+`TypeError('Invalid pipeline digest input.')`, without a cause or internal error text.
+Successful hashing MUST not mutate caller data.
 
 ## Program envelope and regions
 

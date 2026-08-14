@@ -12,8 +12,9 @@ RFC 8174) when, and only when, they appear in all capitals.
 
 This specification defines the complete portable profile contribution accepted by the
 compiler. It selects agent-slot structure only. It does not define stored profiles,
-concrete agents, or executor bindings. This API remains Draft and unavailable from the
-package root while conformance is incomplete. Its TypeBox schema MUST use
+concrete agents, or executor bindings. The contract remains Draft; its under-development
+API is available from npm `alpha` prereleases and local or CI-built tarballs without a
+compatibility guarantee. Its TypeBox schema MUST use
 `additionalProperties: false` at every object.
 
 ## Exact envelope
@@ -62,6 +63,12 @@ selection. `bindingKey` is the only value later used by core to resolve an exact
 `AgentAssembly`; it MUST NOT embed assembly attributes.
 
 ## Source-envelope validation
+
+`computeMaterializationDigest` performs intrinsic validation only: it validates, owns,
+normalizes, and hashes the closed materialization envelope without requiring a source
+package. Contextual admission belongs to `compilePipeline`; only there can `sourceDigest`,
+slot coverage, source paths, strategies, participant counts, and source-owned policy be
+checked against the exact source.
 
 The materialization `sourceDigest` MUST equal the digest of the supplied source package.
 The selected strategy MUST be present in the source slot's exact `strategies` set.

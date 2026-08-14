@@ -6,51 +6,32 @@
     {
       "name": "foundation",
       "path": "src/foundation",
-      "state": "active",
-      "public": false,
       "dependencies": []
     },
     {
       "name": "source",
       "path": "src/source",
-      "state": "active",
-      "public": false,
       "dependencies": ["foundation"]
     },
     {
       "name": "materialization",
       "path": "src/materialization",
-      "state": "active",
-      "public": false,
       "dependencies": ["foundation", "source"]
     },
     {
       "name": "program",
       "path": "src/program",
-      "state": "active",
-      "public": false,
       "dependencies": ["foundation"]
     },
     {
       "name": "compiler",
       "path": "src/compiler",
-      "state": "active",
-      "public": false,
       "dependencies": ["foundation", "source", "materialization", "program"]
     },
     {
       "name": "kernel",
       "path": "src/kernel",
-      "state": "active",
-      "public": false,
       "dependencies": ["foundation", "program"]
-    },
-    {
-      "name": "extensions",
-      "path": "src/extensions",
-      "state": "future",
-      "public": false,
-      "dependencies": ["source", "materialization", "compiler"]
     }
   ]
 }

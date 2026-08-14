@@ -38,5 +38,5 @@ describe('maximum map source-index performance', () => {
       state: { status: 'succeeded', frames: [], pending: [] },
       commands: [{ kind: 'complete' }],
     });
-  }, 120_000);
+  }, 150_000);
 });

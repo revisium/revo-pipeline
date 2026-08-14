@@ -42,7 +42,7 @@ export const compilePipeline = (
   if (!admission.ok) {
     return admission;
   }
-  const emitted = emitProgramBundle(lowered);
+  const emitted = emitProgramBundle(lowered, admission.receipt);
   if (!emitted.ok) {
     return emitted;
   }

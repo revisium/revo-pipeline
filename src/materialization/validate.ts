@@ -201,8 +201,7 @@ const validateCoverage = (
   }
 };
 
-export const validateProfileMaterialization = (
-  source: ValidatedPipelineSource,
+export const normalizeProfileMaterialization = (
   input: unknown,
 ): ProfileMaterializationValidationResult => {
   const envelope = validateEnvelope(input);
@@ -210,17 +209,13 @@ export const validateProfileMaterialization = (
     return envelope;
   }
   const diagnostics = createDiagnosticCollector();
-  if (
-    !isDigest(envelope.value.sourceDigest) ||
-    envelope.value.sourceDigest !== source.sourceDigest
-  ) {
+  if (!isDigest(envelope.value.sourceDigest)) {
     diagnostics.add('CANONICAL_INPUT', '/sourceDigest');
   }
   const materialization = Object.freeze({
     ...envelope.value,
     slots: normalizeSlots(envelope.value.slots, diagnostics),
   });
-  validateCoverage(materialization.slots, source.reachableAgents, diagnostics);
   const finalized = diagnostics.finalize();
   if (finalized.length > 0) {
     return { ok: false, diagnostics: finalized };
@@ -234,4 +229,21 @@ export const validateProfileMaterialization = (
       canonicalText: canonical.text,
     }),
   };
+};
+
+export const validateProfileMaterialization = (
+  source: ValidatedPipelineSource,
+  input: unknown,
+): ProfileMaterializationValidationResult => {
+  const normalized = normalizeProfileMaterialization(input);
+  if (!normalized.ok) {
+    return normalized;
+  }
+  const diagnostics = createDiagnosticCollector();
+  if (normalized.value.materialization.sourceDigest !== source.sourceDigest) {
+    diagnostics.add('CANONICAL_INPUT', '/sourceDigest');
+  }
+  validateCoverage(normalized.value.materialization.slots, source.reachableAgents, diagnostics);
+  const finalized = diagnostics.finalize();
+  return finalized.length > 0 ? { ok: false, diagnostics: finalized } : normalized;
 };

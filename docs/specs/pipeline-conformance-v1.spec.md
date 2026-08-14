@@ -10,11 +10,10 @@ RFC 8174) when, and only when, they appear in all capitals.
 
 ## Scope and lifecycle
 
-This specification defines evidence and the exact final public manifest for the direct
-greenfield cutover. It does not expose Draft APIs. `rp-00` deliberately has no runtime
-surface, and no compatibility behavior is required.
+This specification defines evidence and the exact under-development public manifest.
+The contracts remain Draft and no compatibility behavior is required.
 
-## Exact package manifest at `rp-06` acceptance
+## Exact package manifest
 
 The root `@revisium/revo-pipeline` runtime manifest MUST contain exactly:
 
@@ -117,9 +116,19 @@ MachineFault
 seam, validator helper, comparator, graph algorithm, canonicalizer wrapper, policy model,
 XState machine, or runtime plugin API is public.
 
+While these contracts are Draft, the package MUST use version `0.1.0-alpha.1` and
+`publishConfig` exactly `{ "access": "public", "tag": "alpha" }`. It MUST NOT be
+marked private or block publication through a lifecycle hook. An npm `alpha` prerelease
+remains unstable, carries no compatibility guarantee, and makes no `revo-core` or
+`revo-run` readiness claim. Its `files` list MUST be exactly `dist`, `README.md`, and
+`LICENSE`; packed files MUST be only those three root files plus `dist/**/*.js` and
+`dist/**/*.d.ts`. JavaScript, declarations, and package metadata MUST point only at the
+two curated ESM entrypoints. Default, CommonJS, wildcard, and deep subpath exports are
+forbidden.
+
 ## Exact dependency contract
 
-After cutover, production dependencies MUST be exactly `typebox@1.3.10` and
+Production dependencies MUST be exactly `typebox@1.3.10` and
 `canonicalize@3.0.0`. SHA-256 MUST use built-in `node:crypto`. `fast-check` MAY be an
 exact-pinned development dependency. Ajv and XState MUST NOT be production dependencies.
 No `revo-run`, DBOS, Prisma, queue, NestJS, GraphQL, MCP, CLI, model/provider SDK,
@@ -202,8 +211,8 @@ every exact frame-key payload and golden, full command/event digest vectors,
 within-state command-reference uniqueness, host run namespacing, priority/ref/key
 ordering, event causation, identical replay, conflicting replay, foreign/mismatched
 events, program-digest rejection, and terminal immutability. Kernel tests MUST prove it
-does not recompute the compiler-bundle digest; core/run admission tests MUST prove they
-recompute `{program,requirements,provenance}` and validate every component.
+does not recompute the compiler-bundle digest; public digest tests MUST prove complete
+validation of `{program,requirements,provenance}`.
 
 Invalid-Program fixtures MUST pin the pre-root `initialization` payload, its null-candidate
 frame-key golden, the resulting fail-command golden, and the lexical-candidate case. The
@@ -248,8 +257,8 @@ before classification exits.
 
 Map tests MUST cover empty input, canonical/duplicate keys, item bound, local concurrency
 frontier, deterministic item order, collect-with-failures completion, fail-fast
-drain/cancel, item cleanup cancellation, and whole-map cancellation. `revo-run` consumer
-tests MUST separately cover plan-wide capacity. Machine-state fixtures MUST retain the
+drain/cancel, item cleanup cancellation, and whole-map cancellation. Machine-state
+fixtures MUST retain the
 full `MapItemResult.failure`; author output MUST derive only `errorCode` from its code,
 and fail-fast MUST propagate the full selected failure including path.
 
@@ -296,54 +305,8 @@ production policy helpers.
 
 The packed ESM package MUST pass formatter, types, lint, coverage, dependency-cruiser,
 build, publint, ATTW ESM profile, exact export-manifest tests, and runtime dependency
-inventory. A declaration-consumer fixture MUST import every root and `./kernel` type
-from the packed `.d.ts` output and name every transitively referenced policy,
-classification, region, condition, result, and state type without reaching an internal
-path. CI, configured Sonar analysis, and dual-model review MUST be green on one exact
-head.
-
-## `revo-run` intent traceability
-
-Before final acceptance, tooling MUST import the upstream registry and match exactly the
-103 current intent IDs `rr-001` through `rr-103` against the ownership matrix. Each row
-has upstream category/name, primary owner, preserved semantic intent, and pipeline
-evidence or explicit host-only status. Added/removed/renamed/recategorized upstream IDs
-must fail until reviewed.
-
-The intent count is exactly 103 for this baseline. Additional pipeline golden,
-canonicalization, dataflow, cancellation, package, or consumer vectors increase test
-coverage but MUST NOT be represented as new `rr-*` intents or change the `103/103`
-traceability count.
-
-Cross-package fixtures MUST prove core resolves every requirement to one exact immutable
-binding without changing `programDigest`, and run validates/adopts its own immutable
-plan, drives the pure kernel through DBOS, applies initial commands, owns retry/time/
-reconciliation/global capacity/events/subscriptions, and maps structural refs to dynamic
-IDs. Run fixtures MUST also prove one atomic write of
-`(runId,commandKey) -> eventDigest`, next kernel state, and ordered outbox commands,
-including crash-before-commit retry, crash-after-commit deduplication, and post-prune
-conflict handling.
-
-## Cutover gates
-
-1. **`rp-00` — reset, docs, and publication block.** Removes the prior implementation
-   and public surface, accepts ADR 0005, keeps all six specs Draft, and establishes an
-   inert source module plus fail-closed package manifest.
-2. **`rp-01` — foundation.** Implements portable values, exact TypeBox schema helpers,
-   diagnostics, bounds, RFC 8785 canonicalization, and domain-separated SHA-256.
-3. **`rp-02` — source and materialization.** Implements the 12-kind source language,
-   agent slots, profile materialization, validation, and the internal lowering seam.
-4. **`rp-03` — compiler, Program IR, and digests.** Implements linking, recursion
-   rejection, nine-kind IR lowering, dataflow/bounds, requirements, provenance, and all
-   compiler-bundle digests.
-5. **`rp-04` — base kernel.** Implements state, frames, activity, choice, call, end,
-   data failure, command ordering, and base cancellation semantics.
-6. **`rp-05` — coordination and waits.** Implements kernel execution of compiler-emitted
-   parallel/vote, repeat, map, waits, human gates, drain/cancel, and acknowledgements.
-7. **`rp-06` — conformance and readiness.** Proves 103/103 traceability plus all extra
-   golden/conformance vectors, accepts the six specs, exposes the exact root and
-   `./kernel` manifests, proves core/run consumer fixtures, and may restore release
-   tooling only after a separate approval.
-
-Every state before `rp-06` remains nonpublishable. Acceptance does not publish a
-release; release/publish remains a separate human gate.
+inventory. One installed-tarball smoke MUST type-check and execute the tracked README
+quick-start, inspect both entrypoints, and reject default, CommonJS, deep, and unknown
+subpath imports without resolving the repository checkout. Hostile input, admission,
+replay, mutation, and immutability semantics belong to focused unit suites at their
+owning boundaries.

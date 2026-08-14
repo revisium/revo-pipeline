@@ -5,7 +5,13 @@
     "perf": "warn",
     "suspicious": "error"
   },
-  "ignorePatterns": [".revisium-actions/**", "coverage/**", "dist/**", "node_modules/**"],
+  "ignorePatterns": [
+    ".revisium-actions/**",
+    "coverage/**",
+    "dist/**",
+    "examples/**",
+    "node_modules/**"
+  ],
   "options": {
     "typeAware": true,
     "typeCheck": true
