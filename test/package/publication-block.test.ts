@@ -52,8 +52,13 @@ describe('under-development package boundary', () => {
     expect(packageJson.scripts.prepack).toBe('pnpm run build');
   });
 
-  it('keeps the reviewed CI workflow as the only workflow', () => {
-    expect(readdirSync(join(repositoryRoot, '.github', 'workflows'))).toEqual(['ci.yml']);
+  it('keeps the exact reviewed workflow inventory', () => {
+    expect(readdirSync(join(repositoryRoot, '.github', 'workflows')).toSorted()).toEqual([
+      'ci.yml',
+      'npm-publish.yml',
+      'release-train.yml',
+      'release.yml',
+    ]);
   });
 
   it('exposes only the exact root and kernel runtime values', () => {

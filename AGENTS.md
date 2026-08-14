@@ -24,7 +24,8 @@ deprecated aliases, dual readers, hidden interpreters, or runtime node-kind plug
 Keep production dependencies exactly `typebox@1.3.10` and `canonicalize@3.0.0`. The
 under-development package may be published only as an unstable prerelease under the npm
 `alpha` tag. This does not establish compatibility or `revo-core`/`revo-run` readiness.
-No release or publish workflow belongs in this repository state.
+Release automation may validate or prepare future versions. Automated npm publication
+is restricted to an explicit, version-matched alpha tag and never runs for pull requests.
 
 ## Changes
 
