@@ -2,11 +2,12 @@
 
 ## Lifecycle
 
-[ADR 0005](./adr/0005-greenfield-language-compiler-kernel-cutover.md) is Accepted and
-sets the direct-cutover architecture. The six contracts in `docs/specs/` remain Draft
-until conformance and consumer readiness are accepted. The private foundation, source,
-materialization, Program, compiler, and final private kernel layers are active while the root module stays
-inert and publication remains unconditionally blocked; there is no consumer API.
+[ADR 0005](./adr/0005-greenfield-language-compiler-kernel-cutover.md) sets the
+direct-cutover architecture. [ADR 0011](./adr/0011-under-development-package-entrypoints.md)
+allows the exact package facades to be evaluated independently while the six contracts
+remain Draft. [ADR 0012](./adr/0012-alpha-prerelease-publication.md) permits only
+unstable prerelease publication under the npm `alpha` tag; it makes no compatibility or
+consumer-integration readiness claim.
 
 ## System shape
 
@@ -46,14 +47,11 @@ forms lower to ordinary IR structure, so neither `agent` nor `consensus` is an I
 
 ## Layers and dependency direction
 
-Arrows mean “imports or depends on.” Every layer is private unless Conformance v1 names
-it in the final manifest.
+Arrows mean “imports or depends on.” Public facades are not dependency layers.
 
-`architecture/layers.json` is the canonical machine-readable record for state,
-paths, dependency direction, and visibility. Dependency-cruiser derives graph rules
-from it, while concise contract tests pin the current state and filesystem. Foundation,
-source, materialization, Program, compiler, and the structured kernel are active; extensions
-remains future and has no source directory.
+`architecture/layers.json` is the canonical machine-readable record for layer paths and
+dependency direction. Dependency-cruiser derives graph rules from it. Foundation,
+source, materialization, Program, compiler, and kernel are the complete layer set.
 
 ```text
 source -------------> foundation
@@ -61,7 +59,6 @@ materialization ----> foundation + source contracts
 program ------------> foundation
 compiler/linker ----> foundation + source + materialization + program
 kernel -------------> foundation + program
-extensions/tooling -> source + materialization + compiler (compile time only)
 ```
 
 - **foundation** owns portable JSON, identifiers, diagnostics, bounds, canonicalization,
@@ -74,13 +71,12 @@ extensions/tooling -> source + materialization + compiler (compile time only)
 - **compiler/linker** validates, links, materializes, checks dataflow and bounds, lowers
   source constructs, and emits canonical program data.
 - **kernel** owns only state, events, commands, and deterministic advancement.
-- **extensions/tooling** may lower built-in authoring forms before canonical source
-  validation. The first alpha seam is internal and compile-time only.
 
 Stable boundaries are checked with standard TypeScript, oxlint, Vitest, and
 dependency-cruiser behavior. Cross-layer imports target the dependency layer's curated
-`index.ts`; same-layer peer imports are allowed. Layers do not import `src/index.ts`, and
-the inert root does not import a private layer. Dependency-cruiser evaluates the resolved
+`index.ts`; same-layer peer imports are allowed. Layers do not import `src/index.ts`.
+The root facade imports only the five curated indexes it exposes, while
+`src/kernel/public.ts` is the second package facade. Dependency-cruiser evaluates the resolved
 module graph, derives the layer DAG from the manifest, rejects classified nonproduction
 packages, and applies a production-package path allowlist derived from `package.json`.
 Tests and scripts retain their development tooling boundary.
@@ -89,7 +85,7 @@ These checks prevent ordinary architecture drift in a reviewed change. They do n
 every possible source spelling and are not a security sandbox against a contributor who
 changes code, configuration, and verification together.
 
-## Implemented private language and compiler
+## Language and compiler
 
 The foundation owns bounded portable JSON cloning/freezing, NFC and surrogate checks,
 identifiers, RFC 6901 pointers, fixed limits and overflow-safe arithmetic, the exact
@@ -110,7 +106,8 @@ Closed object schemas accept no structural options and allow only `$id`, `title`
 come only from the closed specification code catalog, contain exact frozen fields and a
 valid pointer, and never accept caller messages or accessor-backed entries. The private
 digest primitive checks the exact seven domains at runtime for both canonical input and
-raw canonical bytes; it does not add readiness-gated public digest wrappers.
+raw canonical bytes. The public digest helpers validate their complete owned input and
+return only a digest or a generic value-redacted `TypeError`.
 
 The only production dependencies are exact `typebox@1.3.10` and
 `canonicalize@3.0.0`. Ajv, XState, `fast-check`, and host/runtime packages are absent.
@@ -135,24 +132,20 @@ are path-local, so distinct agent paths may deliberately share one slot key. Nor
 source and materialization documents have separate domain-separated digests.
 
 Program owns the recursively closed nine-kind IR, derived generic/vote result schemas,
-abstract requirements, complete provenance, and the exact digest-input contract while
-depending only on foundation. The compiler composes the existing source/materialization
+abstract requirements, complete provenance, shared Program admission, and the exact
+digest-input contract while depending only on foundation. The compiler composes the existing source/materialization
 gates, then performs package linking, route-sensitive dataflow, overflow-safe activity
 bounds, exact lowering, requirement/provenance emission, recursive ownership, and the
-`pipeline-program/v1` digest. Neither layer is imported by the inert root.
-
-Publication remains blocked by `private: true`, absent public entrypoints, and an
-unconditional failing `prepublishOnly` hook. A concise contract test checks the ordinary
-reviewed state: exact production dependencies, no public package fields, an inert root,
-and `ci.yml` as the only workflow. Review remains responsible for workflow changes.
+`pipeline-program/v1` digest. Compiler emission and `computeProgramDigest` use the same
+own-once validation and hashing path.
 
 ## Public boundary
 
-There is no public runtime boundary. After readiness acceptance, the root export becomes
-the exact schema/identity-helper/compiler/digest manifest declared by Conformance v1,
-and `@revisium/revo-pipeline/kernel` becomes the exact narrow Program IR and pure machine
-manifest. No other deep import is public. Earlier work items must not expose either
-entrypoint.
+`@revisium/revo-pipeline` exposes the exact schema, identity-helper, compiler, and digest
+manifest declared by Conformance v1. `@revisium/revo-pipeline/kernel` exposes the exact
+narrow Program and pure-machine manifest. No other deep import is public. These are
+under-development Draft contracts available from npm `alpha` prereleases and local or
+CI-built tarballs, without a compatibility guarantee.
 
 ## Cross-package ownership
 
@@ -226,15 +219,6 @@ no hidden cache or million-activity allocation is permitted. See
 
 ## Traceability
 
-The ownership matrix contains 103 unique traceability rows. Primary ownership is
-compiler 22, kernel 32, core 7, and run 42. Compiler plus kernel produce 54
-pipeline-evidence obligations; core plus run produce 49 host/cross-package evidence
-obligations. These counts preserve intent and ownership; they do not request 103
-separate pipeline implementations.
-
-The delivery-plan requirement table assigns a stable ID, specification section, group,
-owner, item, suite, and evidence state. A structural test checks its 62 unique rows,
-derives coverage of all 48 specification sections, and resolves active suite paths and
-markers without duplicating the table. Planned evidence creates no future layers early.
-The canonical schedule and history live only in the delivery plan and ADR 0005.
-Readiness acceptance does not itself publish; release remains a separate human gate.
+The ownership matrix records the pipeline/core/run boundary for the existing 103 intent
+identifiers. It is ownership evidence, not a roadmap or a list of pipeline
+implementations.

@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { compilePipeline, emitProgramBundle } from '../../../src/compiler/index.js';
+import {
+  admitLoweredProgram,
+  compilePipeline,
+  emitProgramBundle,
+  type LoweredProgram,
+} from '../../../src/compiler/index.js';
 import type { JsonPointer } from '../../../src/foundation/index.js';
 import type {
   NodeProvenance,
   PipelineProgram,
+  ProgramAdmissionReceipt,
   ProgramNodeId,
   ProgramRegion,
 } from '../../../src/program/index.js';
@@ -38,6 +44,15 @@ const failureCodes = (result: ReturnType<typeof emitProgramBundle>): readonly st
   return result.diagnostics.map(({ code }) => code);
 };
 
+const admit = (program: PipelineProgram): ProgramAdmissionReceipt => {
+  const lowered = { program, requirementUses: [], nodeProvenance: [] };
+  const result = admitLoweredProgram(lowered);
+  if (!result.ok) {
+    throw new TypeError(`Expected Program admission: ${JSON.stringify(result.diagnostics)}`);
+  }
+  return result.receipt;
+};
+
 const structuralIds = (region: ProgramRegion): readonly ProgramNodeId[] => [
   region.id,
   ...region.nodes.flatMap((node) => [
@@ -62,7 +77,7 @@ describe('compiler emission invariants', () => {
       entry: activity.id,
       nodes: [activity, end],
     };
-    const result = emitProgramBundle({
+    const lowered = {
       program: withRegion(region),
       requirementUses: [],
       nodeProvenance: [
@@ -70,7 +85,8 @@ describe('compiler emission invariants', () => {
         provenance(activity.id, '/modules/0/region/nodes/0'),
         provenance(end.id, '/modules/0/region/nodes/1'),
       ],
-    });
+    } satisfies LoweredProgram;
+    const result = emitProgramBundle(lowered, admit(lowered.program));
 
     expect(failureCodes(result)).toContain('REQUIREMENT_MISSING');
   });
@@ -79,7 +95,7 @@ describe('compiler emission invariants', () => {
     const program = pipelineProgram();
     const region = program.modules[0].region;
     const end = region.nodes[0];
-    const result = emitProgramBundle({
+    const lowered = {
       program,
       nodeProvenance: [
         provenance(region.id, '/modules/0/region'),
@@ -98,7 +114,8 @@ describe('compiler emission invariants', () => {
           materializationPath: null,
         },
       ],
-    });
+    } satisfies LoweredProgram;
+    const result = emitProgramBundle(lowered, admit(lowered.program));
 
     expect(failureCodes(result)).toContain('REQUIREMENT_UNUSED');
   });
@@ -111,16 +128,21 @@ describe('compiler emission invariants', () => {
       entry: end.id,
       nodes: [end],
     };
-    const result = emitProgramBundle({
+    const lowered = {
       program: withRegion(region),
       requirementUses: [],
       nodeProvenance: [
         provenance(end.id, '/modules/0/region'),
         provenance(end.id, '/modules/0/region/nodes/0'),
       ],
-    });
+    } satisfies LoweredProgram;
+    const result = admitLoweredProgram(lowered);
 
-    expect(failureCodes(result)).toContain('LOWERING_ID_COLLISION');
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new TypeError('Expected duplicate lowered identities to be rejected.');
+    }
+    expect(result.diagnostics.map(({ code }) => code)).toContain('LOWERING_ID_COLLISION');
   });
 
   it('covers every emitted region and node with exactly one provenance record', () => {

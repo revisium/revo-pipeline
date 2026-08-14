@@ -10,7 +10,7 @@ describe('kernel structured operations', () => {
   it.each([
     ['missing', { kind: 'scopeInput', pointer: '/missing' }],
     ['schema-mismatched', { kind: 'literal', value: 1 }],
-  ] as const)('routes a %s activity input through failed', (_name, selector) => {
+  ] as const)('rejects a statically %s activity input', (_name, selector) => {
     const activity = programNodeExamples().find((node) => node.kind === 'activity');
     if (activity?.kind !== 'activity') {
       throw new TypeError('Expected an activity example.');
@@ -32,8 +32,8 @@ describe('kernel structured operations', () => {
       kernelModule('main', kernelRegion([node, end], { entry: node.id })),
     ]);
     expect(createInitialPipelineState(bundle, {})).toMatchObject({
-      state: { status: 'succeeded' },
-      commands: [{ kind: 'complete' }],
+      state: { status: 'failed', fault: { code: 'PROGRAM_INVALID' } },
+      commands: [{ kind: 'fail', code: 'PROGRAM_INVALID' }],
     });
   });
 

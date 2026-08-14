@@ -1,13 +1,11 @@
 import { isPipelineFailureSchema } from '../../foundation/index.js';
-import type { ProgramNode, ProgramParallelNode, ProgramRegion } from '../../program/index.js';
+import type { ProgramNode, ProgramParallelNode, ProgramRegion } from '../contracts/index.js';
 import { isStrictlySorted, sameOrderedKeys } from './ordering.js';
 import { hasValidVoteTopology } from './vote-topology.js';
 
 type Classification = { readonly outcome: string; readonly classification: string };
 
-export type StructuredValidationCounters = {
-  classificationExitInspections: number;
-};
+export type StructuredValidationCounters = { classificationExitInspections: number };
 
 const hasValidClassifications = (
   region: ProgramRegion,
@@ -52,14 +50,11 @@ const hasValidGateAnswers = (
   );
 };
 
-const hasSortedBranchKeys = (branches: readonly { readonly key: string }[]): boolean =>
-  isStrictlySorted(branches, ({ key }) => key);
-
 const hasValidParallel = (
   node: ProgramParallelNode,
   counters?: StructuredValidationCounters,
 ): boolean => {
-  if (!hasSortedBranchKeys(node.branches)) {
+  if (!isStrictlySorted(node.branches as readonly { readonly key: string }[], ({ key }) => key)) {
     return false;
   }
   if (node.mode === 'generic') {

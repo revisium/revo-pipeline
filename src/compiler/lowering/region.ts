@@ -3,7 +3,7 @@ import {
   compareUnicodeCodePoints,
   type JsonPointer,
 } from '../../foundation/index.js';
-import type { ProgramNode, ProgramRegion } from '../../program/index.js';
+import { programNodeTargets, type ProgramNode, type ProgramRegion } from '../../program/index.js';
 import type { SourceNode, SourceRegion } from '../../source/index.js';
 import { lowerExplicitConsensus, lowerSlotConsensus } from './consensus.js';
 import type { LoweredNodeFragment, LoweredRegion, LoweringContext } from './contracts.js';
@@ -53,6 +53,30 @@ const nonEmptyNodes = (nodes: ProgramNode[]): ProgramRegion['nodes'] => {
   return Object.freeze([first, ...rest]);
 };
 
+const reachableNodeIds = (
+  entry: ProgramNode['id'],
+  fragments: readonly LoweredNodeFragment[],
+): ReadonlySet<ProgramNode['id']> => {
+  const nodes = new Map(
+    fragments.flatMap(({ nodes: fragmentNodes }) => fragmentNodes.map((node) => [node.id, node])),
+  );
+  const reachable = new Set<ProgramNode['id']>();
+  const pending = [entry];
+  while (pending.length > 0) {
+    const nodeId = pending.pop();
+    if (nodeId === undefined || reachable.has(nodeId)) {
+      continue;
+    }
+    const node = nodes.get(nodeId);
+    if (node === undefined) {
+      continue;
+    }
+    reachable.add(nodeId);
+    pending.push(...programNodeTargets(node));
+  }
+  return reachable;
+};
+
 export const lowerRegion = (
   region: SourceRegion,
   path: JsonPointer,
@@ -67,6 +91,8 @@ export const lowerRegion = (
   if (entry === undefined) {
     throw new TypeError('Expected a validated region entry.');
   }
+  const reachable = reachableNodeIds(entry, fragments);
+  const retained = fragments.filter(({ nodes }) => nodes.some(({ id }) => reachable.has(id)));
   return Object.freeze({
     region: Object.freeze({
       id: identity.id,
@@ -74,12 +100,14 @@ export const lowerRegion = (
       entry,
       outputSchema: region.outputSchema,
       exits: region.exits,
-      nodes: nonEmptyNodes(fragments.flatMap(({ nodes }) => nodes)),
+      nodes: nonEmptyNodes(
+        retained.flatMap(({ nodes }) => nodes.filter(({ id }) => reachable.has(id))),
+      ),
     }),
     provenance: Object.freeze([
       identity.provenance,
-      ...fragments.flatMap(({ provenance }) => provenance),
+      ...retained.flatMap(({ provenance }) => provenance),
     ]),
-    requirements: Object.freeze(fragments.flatMap(({ requirements }) => requirements)),
+    requirements: Object.freeze(retained.flatMap(({ requirements }) => requirements)),
   });
 };

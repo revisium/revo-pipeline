@@ -10,6 +10,8 @@ export {
   PipelineProgramSchema,
   type GenericParallelBranchResult,
   type GenericParallelOutput,
+  type AgentProgramRequirement,
+  type EffectProgramRequirement,
   type LoweringRole,
   type NodeProvenance,
   type PipelineProgram,
@@ -37,6 +39,7 @@ export {
   type ProgramVoteBranch,
   type ProgramWaitNode,
   type RequirementProvenance,
+  type ScriptProgramRequirement,
   type VoteParallelBranchResult,
   type VoteParallelOutput,
 } from './contracts/index.js';
@@ -63,3 +66,24 @@ export {
   type ProgramStructureMeasure,
   type WorkEnvelope,
 } from './analysis/index.js';
+export {
+  admitOwnedPipelineProgram,
+  admitSchemaValidatedPipelineProgram,
+  inspectOwnedPipelineProgram,
+  inspectPipelineProgram,
+  isStrictlySorted,
+  programNodeTargets,
+  sameOrderedKeys,
+  type OwnedProgramAdmission,
+  type ProgramAdmissionReceipt,
+  type ProgramIndex,
+  type ProgramInspection,
+  type ProgramValidationCounters,
+} from './admission/index.js';
+export {
+  admitOwnedProgramDigestInput,
+  admitProgramDigestInput,
+  admitSchemaValidatedProgramDigestInput,
+  computeProgramDigest,
+  type AdmittedProgramDigestInput,
+} from './digest.js';

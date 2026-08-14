@@ -1,76 +1,43 @@
 # Review Contract
 
-Findings cite a concrete file and line, the violated contract, the risk, and the smallest
-sufficient correction.
+Findings cite a concrete file and line, violated contract, risk, and smallest sufficient
+correction.
 
 ## Blocking findings
 
-- The package can publish, exposes a runtime value, or contains a release/publish
-  workflow before readiness acceptance.
-- `package.json` gains a public entrypoint, files manifest, publish configuration,
-  prepack hook, or a production dependency other than exact `typebox@1.3.10` and
-  `canonicalize@3.0.0` before readiness acceptance.
-- A Draft root or `./kernel` API is exposed before readiness acceptance.
-- An adapter, converter, dual reader, deprecated alias, compatibility package, hidden
-  interpreter, or runtime node-kind plugin is introduced.
-- Source or IR contains a kind outside the exact 12-kind or nine-kind closed vocabulary.
-- Pipeline decisions depend on run IDs, time, persistence, DBOS, attempts, leases,
-  retries, authorization, resolved bindings, or other host state.
-- A deep import, broad barrel, forbidden dependency, value/type cycle, or unresolved
-  import bypasses the approved DAG.
-- `architecture/layers.json` drifts from the canonical seven records, a future layer
-  directory appears early, an active layer is missing, or a layer/root import bypasses
-  the manifest-derived rules.
-- Foundation validation invokes an accessor, accepts non-NFC or unpaired Unicode,
-  custom prototypes, cycles, sparse arrays, unsafe/fractional numbers, or exceeds a
-  declared bound.
-- Portable JSON incorrectly applies the 512-code-point display/diagnostic limit to
-  general strings or object keys, or reflection failures from hostile/revoked proxies
-  throw or expose trap details.
-- The closed-object helper accepts schema structure outside `$id`, `title`, and
-  `description`; invokes option accessors; or allows proxy failures to escape.
-- Diagnostics accept a code outside the fixed catalog, an invalid JSON Pointer, an
-  arbitrary message, extra fields, accessors, or proxy-backed entries.
-- Canonicalization runs on rejected input, uses a digest domain outside the exact seven,
-  omits the length-delimited prefix, truncates SHA-256, or introduces a readiness-gated public
-  digest wrapper.
-- The package stops being ESM, the resolved source graph adds a Node core dependency
-  beyond the current crypto use or a classified nonproduction package, or dependency
-  rules omit cycle, root/private, unresolved-local, DAG, production-package, or
-  curated-index enforcement.
-- `.github/workflows/` contains a release/publish workflow or anything beyond the
-  reviewed `ci.yml` before readiness acceptance.
-- Observable semantics lack behavior or contract coverage at the owning boundary.
-- The 103-row ownership matrix has a gap, duplicate, extra ID, or owner-count drift.
-- Verification failures or warnings are suppressed.
+- Package metadata differs from the approved `0.1.0-alpha.1` prerelease, `publishConfig`
+  differs from `{ access: public, tag: alpha }`, a publication-blocking hook or
+  `private` flag returns, or a release/publish workflow appears.
+- Root or `./kernel` runtime/type inventories differ from Pipeline Conformance v1, a
+  deep/default/CommonJS/wildcard export appears, or the shared `PipelineProgramSchema`
+  is not the same runtime value.
+- A compatibility adapter, dual reader, deprecated alias, hidden interpreter, runtime
+  plugin, or source/IR kind outside the closed 12/9 vocabularies appears.
+- Pipeline behavior depends on run IDs, time, persistence, attempts, leases, retries,
+  resolved bindings, authorization, or other host state.
+- The six-layer DAG, curated indexes, exact root allowlist, no-layer-to-root rule, or
+  reserved `src/extensions` prohibition is bypassed.
+- Foundation hostile-input, portable-value, schema, diagnostic, canonicalization, or
+  full SHA-256 invariants regress.
+- Program digest admission omits complete Program semantics or requirement/provenance
+  cross-references, validates/hashes different owned values, leaks rejected input, or
+  diverges from compiler emission.
+- Observable compiler/kernel semantics lack behavior tests, packed output contains
+  maps/source, the package smoke links the checkout, or a verification warning is
+  suppressed.
 
 ## Required evidence
 
 - `corepack pnpm verify` passes on the reviewed tree.
-- Package tests check the private ESM manifest, absent public exports, exact two
-  production dependencies, inert root, sole reviewed CI workflow, and failing publish
-  hook.
-- Foundation suites cover bounds, hostile portable input, identifiers and RFC 6901,
-  the fixed diagnostic catalog/order/truncation/redaction, defensive TypeBox closure,
-  exact RFC 8785 edge and round-trip bytes, runtime digest-domain rejection, and
-  normative vectors.
-- Source and materialization suites cover the exact 12-kind contracts, keyed-set
-  normalization, local and nested CFG semantics, selector contexts, finite choice
-  coverage, canonical agent paths, source-relative slot totality/policies, exact
-  diagnostics, and normative source/materialization digest vectors.
-- Program and compiler suites cover the closed nine-kind IR, linking, dataflow,
-  overflow-safe composed bounds, exact lowering, requirements, provenance, ownership,
-  and full compiler-bundle digest vectors.
-- Architecture suites pin the active manifest/filesystem and use representative
-  dependency-cruiser fixtures for the DAG, cycles, root/deep imports, resolution, Node
-  core use, and resolved production-versus-development package boundaries.
-- Workflow and shell conditional checks pass when those files change.
-- The matrix contains exactly 103 unique IDs with compiler 22, kernel 32, core 7, and run
-  42; evidence counts remain pipeline 54 and host/cross-package 49.
-- The delivery plan contains 62 unique structurally valid rows, covers all 48
-  specification sections, and resolves active suite path/marker references.
-- CI, configured Sonar analysis, and valid review threads are green on the same exact
-  head after publication to a review branch.
+- Exact production dependencies and tool pins remain unchanged.
+- Foundation, source/materialization, Program/compiler, and kernel suites cover their
+  owning contracts and hostile/error boundaries.
+- Package verification proves the exact ESM entrypoints and file inventory, declarations,
+  negative deep/default/CommonJS imports, and execution of the tracked quick-start from
+  an installed tarball.
+- The intent ownership matrix is byte-identical unless a separately approved ownership
+  change is in scope.
+- CI, Sonar, and valid review threads are green on the same exact PR head.
 
-Local verification assumes a reviewed contributor change. It is not evidence that a
-malicious committer cannot modify implementation, configuration, and checks together.
+These are reviewed-change guardrails, not a security sandbox against a contributor who
+changes implementation and verification together.

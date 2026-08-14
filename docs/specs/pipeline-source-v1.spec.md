@@ -10,9 +10,9 @@ RFC 8174) when, and only when, they appear in all capitals.
 
 ## Scope
 
-This specification defines the complete public source-language document. The schemas
-and API remain Draft and unavailable from the package root while conformance is
-incomplete. TypeBox schemas are the runtime source of truth; the exact static shapes
+This specification defines the complete public source-language document. The contract
+remains Draft; its unstable API is available from npm `alpha` prereleases and local or
+CI-built tarballs without a compatibility guarantee. TypeBox schemas are the runtime source of truth; the exact static shapes
 below MUST be derived from them. Every object schema MUST use
 `additionalProperties: false`. Unknown fields, versions, and union kinds MUST be
 rejected.

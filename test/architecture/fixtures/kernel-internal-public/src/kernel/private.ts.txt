@@ -1,0 +1,3 @@
+import { publicKernelValue } from './public.js';
+
+export const privateKernelValue = publicKernelValue;

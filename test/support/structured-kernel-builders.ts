@@ -35,7 +35,19 @@ const end = (
   output: ProgramEndNode['output'],
 ): ProgramEndNode => Object.freeze({ kind: 'end', id, outcome, output });
 
-const mapBody = (): ProgramRegion => {
+const stringLiteralUnion = (values: readonly string[]): ValueSchema => {
+  const alternatives = values.map((value) => ({
+    type: 'string' as const,
+    enum: [value] as readonly [string],
+  }));
+  const [first, second, ...remaining] = alternatives;
+  if (first === undefined) {
+    throw new TypeError('Expected at least one map item key.');
+  }
+  return second === undefined ? first : { anyOf: [first, second, ...remaining] };
+};
+
+const mapBody = (idSchema: ValueSchema): ProgramRegion => {
   const activityId = structuredId(101);
   const cancelled = end(structuredId(102), 'cancelled', {});
   const failed = end(structuredId(103), 'failed', {
@@ -59,7 +71,7 @@ const mapBody = (): ProgramRegion => {
   };
   return {
     id: structuredId(100),
-    inputSchema: objectSchema({ id: { type: 'string' } }),
+    inputSchema: objectSchema({ id: idSchema }),
     entry: activity.id,
     outputSchema: { anyOf: [EmptyObjectSchema, PipelineFailureValueSchema] },
     exits: [
@@ -248,27 +260,30 @@ export const repeatActivityProgram = (options: {
   return kernelProgram([kernelModule('main', region)]);
 };
 
-const mapNode = (remaining: 'drain' | 'cancel'): ProgramMapNode => ({
-  kind: 'map',
-  id: structuredId(1),
-  items: { kind: 'literal', value: [{ id: 'z' }, { id: 'a' }] },
-  itemKeyPointer: '/id',
-  maximumItems: 2,
-  maximumConcurrency: 2,
-  bodyInput: { id: { kind: 'map', value: 'item', pointer: '/id' } },
-  body: mapBody(),
-  bodyExits: [
-    { outcome: 'cancelled', classification: 'cancelled' },
-    { outcome: 'failed', classification: 'failed' },
-    { outcome: 'succeeded', classification: 'completed' },
-  ],
-  failure: { kind: 'failFast', remaining },
-  routes: {
-    completed: structuredId(2),
-    failed: structuredId(3),
-    cancelled: structuredId(4),
-  },
-});
+const mapNode = (remaining: 'drain' | 'cancel'): ProgramMapNode => {
+  const values = [{ id: 'z' }, { id: 'a' }] as const;
+  return {
+    kind: 'map',
+    id: structuredId(1),
+    items: { kind: 'literal', value: values },
+    itemKeyPointer: '/id',
+    maximumItems: 2,
+    maximumConcurrency: 2,
+    bodyInput: { id: { kind: 'map', value: 'item', pointer: '/id' } },
+    body: mapBody(stringLiteralUnion(values.map(({ id }) => id))),
+    bodyExits: [
+      { outcome: 'cancelled', classification: 'cancelled' },
+      { outcome: 'failed', classification: 'failed' },
+      { outcome: 'succeeded', classification: 'completed' },
+    ],
+    failure: { kind: 'failFast', remaining },
+    routes: {
+      completed: structuredId(2),
+      failed: structuredId(3),
+      cancelled: structuredId(4),
+    },
+  };
+};
 
 export const failFastMapProgram = (remaining: 'drain' | 'cancel') => {
   const map = mapNode(remaining);
@@ -299,17 +314,16 @@ export const activityMapProgram = (
   itemCount = 2,
 ) => {
   const base = mapNode('drain');
+  const values =
+    itemCount === 2
+      ? ([{ id: 'z' }, { id: 'a' }] as const)
+      : Array.from({ length: itemCount }, (_, ordinal) => ({
+          id: `item-${String(ordinal).padStart(4, '0')}`,
+        }));
   const map: ProgramMapNode = {
     ...base,
-    items:
-      itemCount === 2
-        ? base.items
-        : {
-            kind: 'literal',
-            value: Array.from({ length: itemCount }, (_, ordinal) => ({
-              id: `item-${String(ordinal).padStart(4, '0')}`,
-            })),
-          },
+    items: { kind: 'literal', value: values },
+    body: mapBody(stringLiteralUnion(values.map(({ id }) => id))),
     maximumItems: itemCount,
     maximumConcurrency,
     failure,

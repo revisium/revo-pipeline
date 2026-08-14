@@ -10,8 +10,9 @@ RFC 8174) when, and only when, they appear in all capitals.
 
 ## Scope and exact functions
 
-This specification defines the final pure machine API. It remains Draft and unavailable
-from the package root while conformance is incomplete. TypeBox schemas are authoritative
+This specification defines the pure machine API. The contract remains Draft; its
+under-development API is available from npm `alpha` prereleases and local or CI-built
+tarballs without a compatibility guarantee. TypeBox schemas are authoritative
 and every object rejects unknown fields.
 
 ```ts

@@ -6,16 +6,18 @@ import {
   escapeJsonPointerToken,
   valueSchemasEqual,
 } from '../../foundation/index.js';
+import type {
+  ProgramActivityNode,
+  ProgramEndNode,
+  ProgramParallelNode,
+  ProgramValueMapping,
+  ProgramVoteBranch,
+} from '../contracts/index.js';
 import {
   ConsensusParticipantRegionOutputSchema,
   VoteExitSchema,
   VoteValueSchema,
-  type ProgramActivityNode,
-  type ProgramEndNode,
-  type ProgramParallelNode,
-  type ProgramValueMapping,
-  type ProgramVoteBranch,
-} from '../../program/index.js';
+} from '../derived-schemas.js';
 
 type VoteParallelNode = Extract<ProgramParallelNode, { readonly mode: 'votes' }>;
 
@@ -55,9 +57,7 @@ const hasExactEnds = (activity: ProgramActivityNode, nodes: readonly ProgramEndN
     activity.routes.succeeded === vote.id &&
     activity.routes.failed === failed.id &&
     activity.routes.cancelled === cancelled.id &&
-    equalValue(vote.output, {
-      vote: { kind: 'nodeOutput', nodeId: activity.id, pointer: '' },
-    }) &&
+    equalValue(vote.output, { vote: { kind: 'nodeOutput', nodeId: activity.id, pointer: '' } }) &&
     equalValue(failed.output, {
       code: { kind: 'nodeFailure', nodeId: activity.id, pointer: '/code' },
       path: { kind: 'nodeFailure', nodeId: activity.id, pointer: '/path' },

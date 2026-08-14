@@ -1,15 +1,13 @@
-import { Compile } from 'typebox/compile';
-
 import {
-  PIPELINE_LIMITS,
-  canonicalizeOwnedValue,
   createDiagnosticCollector,
-  digestCanonicalBytes,
-  normalizeOwnedEnvelope,
   type Digest,
   type PipelineDiagnostic,
 } from '../../foundation/index.js';
-import { ProgramDigestInputSchema, type ProgramDigestInput } from '../../program/index.js';
+import {
+  admitOwnedProgramDigestInput,
+  type ProgramAdmissionReceipt,
+  type ProgramDigestInput,
+} from '../../program/index.js';
 import type { LoweredProgram } from '../lowering/index.js';
 import { emitProvenance } from './provenance.js';
 import { emitRequirements } from './requirements.js';
@@ -23,11 +21,12 @@ export type BundleEmissionResult =
     }
   | { readonly ok: false; readonly diagnostics: readonly PipelineDiagnostic[] };
 
-const bundleValidator = Compile(ProgramDigestInputSchema);
-
-export const emitProgramBundle = (lowered: LoweredProgram): BundleEmissionResult => {
+export const emitProgramBundle = (
+  lowered: LoweredProgram,
+  receipt: ProgramAdmissionReceipt,
+): BundleEmissionResult => {
   const collector = createDiagnosticCollector();
-  const structure = inspectProgramStructure(lowered.program);
+  const structure = inspectProgramStructure(receipt);
   const emittedRequirements = emitRequirements(
     lowered.requirementUses,
     structure,
@@ -45,20 +44,20 @@ export const emitProgramBundle = (lowered: LoweredProgram): BundleEmissionResult
     return { ok: false, diagnostics };
   }
 
-  const owned = normalizeOwnedEnvelope(
-    { program: lowered.program, requirements: emittedRequirements.requirements, provenance },
-    PIPELINE_LIMITS.sourcePackage.totalActivities,
-  );
-  if (!owned.ok || !bundleValidator.Check(owned.value)) {
+  const bundle = Object.freeze({
+    program: lowered.program,
+    requirements: emittedRequirements.requirements,
+    provenance,
+  });
+  const admitted = admitOwnedProgramDigestInput(bundle, receipt);
+  if (admitted === null) {
     const failureCollector = createDiagnosticCollector();
-    failureCollector.add('CANONICAL_INPUT', owned.ok ? '' : owned.failure.path);
+    failureCollector.add('CANONICAL_INPUT', '');
     return { ok: false, diagnostics: failureCollector.finalize() };
   }
-  const bundle = owned.value;
-  const canonical = canonicalizeOwnedValue(bundle);
   return Object.freeze({
     ok: true,
-    bundle,
-    programDigest: digestCanonicalBytes('pipeline-program/v1', canonical.bytes),
+    bundle: admitted.value,
+    programDigest: admitted.digest,
   });
 };

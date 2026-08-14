@@ -2,11 +2,10 @@
 
 ## Lifecycle
 
-The host contract remains Draft, and this checkout exports no root runtime API. The
-private compiler emits the immutable bundle described below and the final private
-kernel executes the complete bounded Machine v1 slice. Public manifests and host-owned
-plan admission remain later work. The flow defines the consumer boundary that complete
-conformance evidence must prove.
+The host contract remains Draft. Npm `alpha` prereleases and local or CI-built tarballs
+expose the exact compiler and kernel facades for consumer evaluation, without a
+compatibility or host-readiness guarantee. Host-owned plan admission and durability
+remain outside this package.
 
 ## Host flow
 
@@ -24,7 +23,7 @@ conformance evidence must prove.
    exactly that bundle, persists the trusted `{program,programDigest}` pair and kernel
    state, and drives durable effects around pure transitions.
 
-The final `./kernel` API described below is not currently exported:
+The `./kernel` API is used as follows:
 
 ```ts
 const kernelProgram = { program: plan.program, programDigest: plan.programDigest };
@@ -107,6 +106,6 @@ semantic intent through 54 pipeline-evidence and 49 host/cross-package evidence
 obligations; it does not preserve data structures or request 103 pipeline
 implementations.
 
-The package remains publication-blocked until the exact root and `./kernel` manifests
-pass all conformance and consumer-readiness gates. Publication remains a later human
-decision.
+The package remains under development, Draft, and unstable even when published under
+the npm `alpha` tag. Publication does not claim that `revo-core` or `revo-run` is ready
+and does not change the pipeline package API or its digests.

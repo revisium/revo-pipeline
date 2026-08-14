@@ -4,7 +4,11 @@ import { advancePipeline, createInitialPipelineState } from '../../src/kernel/in
 import type { ProgramNode } from '../../src/program/index.js';
 import type { SourceNode } from '../../src/source/index.js';
 import { kernelModule, kernelProgram, kernelRegion } from '../support/kernel-builders.js';
-import { programEnd, programNodeExamples } from '../support/program-builders.js';
+import {
+  reverseNestedKeyMapInput,
+  reverseNestedKeyMapProgram,
+} from '../support/large-map-builders.js';
+import { programEnd } from '../support/program-builders.js';
 import { endNode, sourceNodeBuilders } from '../support/source-builders.js';
 import { compileStructuredNode } from '../support/structured-machine.js';
 
@@ -17,15 +21,10 @@ describe('kernel structured execution', () => {
         commands: [{ kind: 'complete' }],
       });
     }
-    const map = programNodeExamples().find(({ kind }) => kind === 'map');
-    if (map?.kind !== 'map') {
-      throw new TypeError('Expected the Program map example.');
-    }
-    const end = programEnd();
-    const bundle = kernelProgram([
-      kernelModule('main', kernelRegion([map, end], { entry: map.id })),
-    ]);
-    const initial = createInitialPipelineState(bundle, {});
+    const initial = createInitialPipelineState(
+      reverseNestedKeyMapProgram(0),
+      reverseNestedKeyMapInput(0),
+    );
     expect(initial).toMatchObject({
       state: { status: 'succeeded', frames: [], pending: [] },
       commands: [{ kind: 'complete' }],
@@ -43,7 +42,7 @@ describe('kernel structured execution', () => {
     });
   });
 
-  it('fails a choice whose selector is unavailable', () => {
+  it('rejects a Program whose choice selector is statically unavailable', () => {
     const end = programEnd();
     const choice: ProgramNode = {
       kind: 'choice',
@@ -56,8 +55,8 @@ describe('kernel structured execution', () => {
       kernelModule('main', kernelRegion([choice, end], { entry: choice.id })),
     ]);
     expect(createInitialPipelineState(bundle, {})).toMatchObject({
-      state: { status: 'failed', fault: { code: 'DATA_POINTER_MISSING' } },
-      commands: [{ kind: 'fail', code: 'DATA_POINTER_MISSING' }],
+      state: { status: 'failed', fault: { code: 'PROGRAM_INVALID' } },
+      commands: [{ kind: 'fail', code: 'PROGRAM_INVALID' }],
     });
   });
 

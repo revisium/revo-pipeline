@@ -1,54 +1,38 @@
 # Repository Agent Instructions
 
-This repository is the source of `@revisium/revo-pipeline`.
+This repository is the source of the under-development `@revisium/revo-pipeline`
+package.
 
 ## Source of truth
 
-Read in this order:
+Read `README.md`, accepted ADRs, the six Draft specifications, `docs/architecture.md`,
+`docs/host-integration.md`, and then the repository verification/review overlays.
 
-1. `README.md` for current work-item and publication status.
-2. Accepted ADRs 0005 through 0008 and `docs/architecture.md` for cutover, replay,
-   initialization identity, and bounded live-state boundaries.
-3. The six Draft specifications under `docs/specs/` for work-item constraints.
-4. `docs/delivery-plan.md` for sequential scope and spec-section traceability.
-5. `docs/host-integration.md` and the intent ownership matrix for consumer boundaries.
-6. `REPOSITORY.md`, `VERIFICATION.md`, and `REVIEW.md` for local structure and gates.
+## Boundary
 
-The six specifications remain Draft until conformance and consumer readiness are
-accepted. Do not expose a Draft API from `src/index.ts` or add the final root or
-`./kernel` package exports before that acceptance.
+The package owns source contracts, materialization validation, compilation, graph
+semantics, canonical Program data, digests, and pure machine transitions. It does not
+own persistence, attempts, leases, clocks, DBOS workflows, retries, binding resolution,
+authorization, subscriptions, or host frameworks. Do not add `revo-run`, Prisma, DBOS,
+queues, NestJS, GraphQL, MCP, CLI, or provider SDK dependencies.
 
-## Non-negotiable boundary
+The only consumer entrypoints are `@revisium/revo-pipeline` and
+`@revisium/revo-pipeline/kernel`, with the exact manifests in Pipeline Conformance v1.
+Do not add deep exports, wildcard barrels, default or CommonJS exports, adapters,
+deprecated aliases, dual readers, hidden interpreters, or runtime node-kind plugins.
 
-Keep this package pure and portable. It owns source contracts, materialization
-validation, compilation, graph semantics, canonical program data, digests, and pure
-machine transitions. It does not own run state persistence, attempts, leases, clocks,
-DBOS workflows, retries, binding resolution, authorization, subscriptions, or host
-frameworks. Never add `@revisium/revo-run`, Prisma, DBOS, a queue, NestJS, GraphQL, MCP,
-or CLI dependencies.
+Keep production dependencies exactly `typebox@1.3.10` and `canonicalize@3.0.0`. The
+under-development package may be published only as an unstable prerelease under the npm
+`alpha` tag. This does not establish compatibility or `revo-core`/`revo-run` readiness.
+No release or publish workflow belongs in this repository state.
 
-## Direct-cutover policy
+## Changes
 
-- Foundation, source, materialization, Program, compiler, and the base kernel are intentionally private
-  and publication-blocked; the root module has no runtime exports.
-- Do not add an adapter, converter, dual reader, deprecated alias, compatibility
-  package, hidden interpreter, or runtime node-kind plugin.
-- Implement only the scope explicitly assigned by the canonical delivery plan.
-- Treat `architecture/layers.json` as the layer-state and dependency source of
-  truth. Do not create the future extensions directory.
-- Keep release workflows and public package exports absent until readiness is
-  proved and separately approved.
-
-## Change policy
-
-- Architecture or public contract changes require an accepted ADR amendment before
-  implementation.
-- Add behavior tests at the owning boundary before production behavior.
-- Keep production dependencies exactly `typebox@1.3.10` and `canonicalize@3.0.0`; use
-  `node:crypto` for SHA-256 and do not add Ajv, XState, or a host dependency.
-- Use TypeScript, oxlint, Vitest, dependency-cruiser, build, and audit as ordinary
-  contributor checks. Do not add a custom source parser, mutation security framework, or
-  duplicated documentation oracle; these gates are not a security sandbox against
-  coordinated edits to code and verification.
+- Inspect existing implementation and tests before editing; use CodeGraph first when
+  `.codegraph/` exists.
+- Public contract changes require an accepted ADR amendment.
+- Add behavior tests at the owning boundary.
+- Preserve the six-layer DAG in `architecture/layers.json` and keep `src/extensions`
+  absent.
 - Run `corepack pnpm verify` before handoff.
 - Do not commit, push, merge, tag, release, or publish without the applicable approval.

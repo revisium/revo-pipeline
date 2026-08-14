@@ -79,3 +79,4 @@ export {
   type EnvelopeValidator,
   type EnvelopeValidatorOptions,
 } from './validation/envelope.js';
+export { computeSourceDigest, definePipelineSource } from './public.js';

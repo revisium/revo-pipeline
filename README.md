@@ -12,109 +12,94 @@
 </div>
 
 > [!IMPORTANT]
-> Publication is blocked. The implemented foundation, source, materialization, Program,
-> compiler, and final private kernel layers are private, the root module has no runtime exports, and this is
-> not an installable consumer API.
+> This package is under development. Version `0.1.0-alpha.1` is an unstable prerelease,
+> not a 1.0 API, and carries no compatibility guarantee. Alpha publication does not
+> claim that `revo-core` or `revo-run` integration is ready.
 
-## Status
+## About
 
-Accepted [ADR 0005](docs/adr/0005-greenfield-language-compiler-kernel-cutover.md)
-establishes a direct greenfield cutover to one source-language/compiler/closed-IR/pure-
-kernel architecture. There is no adapter, converter, dual reader, deprecated alias,
-compatibility window, hidden interpreter, or runtime node-kind plugin.
+`@revisium/revo-pipeline` validates a closed pipeline source language, materializes
+abstract agent selections, compiles the result into a deterministic Program, and
+advances that Program through a pure state machine. It performs no I/O and owns no
+database, queue, clock, provider, authorization, retry, or durable run state.
 
-The six normative contracts remain Draft until conformance and consumer readiness are accepted:
+The source language contains 12 node kinds and compiles to a closed nine-kind IR. The
+package exposes two curated ESM entrypoints: the authoring/compiler API at `.` and the
+machine API at `./kernel`. No internal folder is a supported deep import.
 
-- [Pipeline Source v1](docs/specs/pipeline-source-v1.spec.md)
-- [Pipeline Materialization v1](docs/specs/pipeline-materialization-v1.spec.md)
-- [Pipeline Program v1](docs/specs/pipeline-program-v1.spec.md)
-- [Pipeline Machine v1](docs/specs/pipeline-machine-v1.spec.md)
-- [Pipeline Canonicalization v1](docs/specs/pipeline-canonicalization-v1.spec.md)
-- [Pipeline Conformance v1](docs/specs/pipeline-conformance-v1.spec.md)
+## Usage
 
-The current private implementation includes the exact
-12-kind TypeBox source language, recursive local-region semantics, canonical source
-normalization and digesting, reachable agent-slot paths, and source-pinned portable
-profile materialization. It also includes the closed nine-kind Program IR and a compiler
-that links, checks dataflow and composed bounds, lowers all source forms, emits complete
-requirements/provenance, and hashes an immutable bundle.
-Its production dependencies are exactly `typebox@1.3.10` and `canonicalize@3.0.0`;
-hashing uses `node:crypto`. `src/index.ts` remains deliberately inert. The final `.` and
-`./kernel` exports are introduced only after conformance and consumer
-readiness are proved. Lifecycle acceptance still does not publish a release;
-publication remains a separate human gate.
+Install the current prerelease explicitly from the npm `alpha` tag:
 
-The private kernel materializes the complete Machine v1 schemas and structural
-identities, shares bounded Program admission with the compiler, and executes all nine IR
-node kinds to global quiescence. It includes waits, gates, structured parallel/vote,
-repeat, bounded map refill, overlapping cancellation acknowledgement, replay, and the
-final private `createInitialPipelineState` / `advancePipeline` functions. The root and
-package subpath remain unavailable until conformance readiness.
-
-## Contract shape
-
-The source language has exactly 12 node kinds: `agent`, `script`, `effect`, `choice`,
-`parallel`, `repeat`, `map`, `wait`, `humanGate`, `consensus`, `call`, and `end`.
-Compilation produces exactly nine IR node kinds: `activity`, `choice`, `call`,
-`parallel`, `repeat`, `map`, `wait`, `humanGate`, and `end`. Control flow uses targets
-and structured regions; there is no sequence node.
-
-The intended flow is:
-
-```text
-PipelineSourcePackage + ProfileMaterialization
-                       |
-                       v
-             compile/link/materialize
-                       |
-                       v
-PipelineProgram + ProgramRequirements + ProgramProvenance + programDigest
-                       |
-                       v
-           pure state transition + host commands
+```bash
+corepack pnpm add @revisium/revo-pipeline@alpha
 ```
 
-The package performs no I/O. `revo-core` resolves exact bindings and constructs a plan;
-`revo-run` owns durable execution, attempts, retries, timers, reconciliation,
-authorization, events, subscriptions, and dynamic identities.
+For development against this checkout, build and install a local tarball:
 
-The [ownership matrix](docs/conformance/revo-run-intent-ownership.md) has 103 unique
-traceability rows: compiler 22, kernel 32, core 7, and run 42. Those rows partition into
-pipeline evidence 54 and host evidence 49; host evidence includes core/run
-cross-package fixtures. They are traceability requirements, not 103 pipeline
-implementations.
+```bash
+corepack pnpm pack
+corepack pnpm add --offline ./revisium-revo-pipeline-0.1.0-alpha.1.tgz
+```
 
-The machine-readable [layer manifest](architecture/layers.json) marks `foundation`,
-`source`, `materialization`, `program`, `compiler`, and `kernel` active. Extensions
-remains a future private record; its directory does not exist yet. Imports
-between active layers must use the target layer's curated `index.ts`, same-layer peer
-imports are allowed, and no layer may import the inert root module.
+## API at a glance
 
-The canonical sequential schedule and evidence state live only in the
-[delivery plan](docs/delivery-plan.md). Every intermediate state remains nonpublishable.
+The root entrypoint validates source and materialization documents, computes their
+digests, compiles them, and verifies a complete Program bundle digest. The `./kernel`
+entrypoint creates and advances the pure machine state:
+
+```ts
+import { compilePipeline, computeProgramDigest } from '@revisium/revo-pipeline';
+import { advancePipeline, createInitialPipelineState } from '@revisium/revo-pipeline/kernel';
+
+const compiled = compilePipeline(source, materialization);
+if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+
+const programDigest = computeProgramDigest({
+  program: compiled.program,
+  requirements: compiled.requirements,
+  provenance: compiled.provenance,
+});
+const bundle = { program: compiled.program, programDigest };
+const initial = createInitialPipelineState(bundle, input);
+const next = advancePipeline(bundle, initial.state, event);
+```
+
+Use `definePipelineSource`, `defineProfileMaterialization`, `computeSourceDigest`, and
+`computeMaterializationDigest` when constructing those inputs. The complete executable
+example is [examples/quick-start.ts](examples/quick-start.ts). It compiles an agent
+activity followed by a script activity, checks all three public digests, advances both
+activities, and verifies idempotent event replay:
+
+```bash
+node examples/quick-start.ts
+```
+
+Package verification runs that exact tracked file against the normally packed tarball
+inside an isolated consumer.
+
+The host persists state, applies returned commands, and passes resulting semantic events
+to `advancePipeline`. See [host integration](docs/host-integration.md) for that boundary.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [Delivery plan and specification traceability](docs/delivery-plan.md)
 - [Host integration](docs/host-integration.md)
-- [Specifications](docs/specs/)
-- [Architecture decision](docs/adr/0005-greenfield-language-compiler-kernel-cutover.md)
+- [Draft specifications](docs/specs/)
+- [Architecture decisions](docs/adr/)
 - [Intent ownership](docs/conformance/revo-run-intent-ownership.md)
 - [Repository map](REPOSITORY.md)
 - [Verification](VERIFICATION.md)
 
 ## Development
 
-Requires Node.js `>=24.11.1 <25` and pnpm 11.13.0 through Corepack.
+Requires Node.js `>=24.11.1 <25` and pnpm `11.13.0` through Corepack.
 
 ```bash
 corepack pnpm install --frozen-lockfile
 corepack pnpm verify
 ```
 
-Focused work can use
-`corepack pnpm exec vitest run test/foundation test/source test/materialization test/program test/compiler test/kernel`
-before the required full gate. Architecture and package checks remain part of `verify`.
-
-Publishing, tagging, releasing, and merging require separate approval.
+`verify` builds the declarations and JavaScript, checks one tarball with publint and Are
+the Types Wrong, installs it into a clean external ESM/TypeScript consumer, and runs the
+tracked quick-start. Declaration and source maps are omitted.

@@ -39,9 +39,9 @@ const eventFor = (
 
 describe('structured repeat runtime outcomes', () => {
   it.each([
-    ['activitySucceeded', iterationEquals(99), 'completed'],
-    ['activityFailed', iterationEquals(99), 'failed'],
-    ['activityCancelled', iterationEquals(99), 'cancelled'],
+    ['activitySucceeded', iterationEquals(1), 'completed'],
+    ['activityFailed', iterationEquals(1), 'failed'],
+    ['activityCancelled', iterationEquals(1), 'cancelled'],
   ] as const)('routes a %s body to its declared terminal', (kind, condition, outcome) => {
     const bundle = repeatActivityProgram({ condition });
     const initial = createInitialPipelineState(bundle, {});
@@ -95,21 +95,16 @@ describe('structured repeat runtime outcomes', () => {
     [
       'final output pointer',
       {
-        condition: iterationEquals(99),
+        condition: iterationEquals(1),
         output: { value: { kind: 'regionOutput', pointer: '/missing' } },
       },
     ],
-  ] as const)('routes an invalid %s through failed', (_name, options) => {
+  ] as const)('rejects a Program with an invalid %s', (_name, options) => {
     const bundle = repeatActivityProgram(options);
     const initial = createInitialPipelineState(bundle, {});
-    const failed = advancePipeline(
-      bundle,
-      initial.state,
-      eventFor(activityCommand(initial.commands), 'activitySucceeded'),
-    );
-    expect(failed).toMatchObject({
-      state: { status: 'succeeded', result: { outcome: 'failed' } },
-      commands: [{ kind: 'complete' }],
+    expect(initial).toMatchObject({
+      state: { status: 'failed', fault: { code: 'PROGRAM_INVALID' } },
+      commands: [{ kind: 'fail', code: 'PROGRAM_INVALID' }],
     });
   });
 });

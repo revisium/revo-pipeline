@@ -81,6 +81,26 @@ export const valueSchemaText = (schema: ValueSchema): string => canonicalizeOwne
 export const valueSchemasEqual = (left: ValueSchema, right: ValueSchema): boolean =>
   Equal(left, right);
 
+type IntegerSchema = Extract<ValueSchema, { readonly type: 'integer' }>;
+type NumberSchema = Extract<ValueSchema, { readonly type: 'number' }>;
+
+const lowerBoundFits = (producer: IntegerSchema, consumer: NumberSchema): boolean =>
+  consumer.minimum === undefined ||
+  (producer.minimum !== undefined && producer.minimum >= consumer.minimum);
+
+const upperBoundFits = (producer: IntegerSchema, consumer: NumberSchema): boolean =>
+  consumer.maximum === undefined ||
+  (producer.maximum !== undefined && producer.maximum <= consumer.maximum);
+
+export const valueSchemaIsCompatible = (producer: ValueSchema, consumer: ValueSchema): boolean =>
+  valueSchemasEqual(producer, consumer) ||
+  ('type' in producer &&
+    'type' in consumer &&
+    producer.type === 'integer' &&
+    consumer.type === 'number' &&
+    lowerBoundFits(producer, consumer) &&
+    upperBoundFits(producer, consumer));
+
 export const isPipelineFailureSchema = (schema: ValueSchema): boolean =>
   valueSchemasEqual(schema, PipelineFailureValueSchema);
 
