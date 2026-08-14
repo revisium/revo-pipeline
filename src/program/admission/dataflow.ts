@@ -2,7 +2,6 @@ import {
   PipelineFailureValueSchema,
   canonicalizeOwnedValue,
   casesCoverFiniteDomain,
-  compareUnicodeCodePoints,
   projectValueSchema,
   valueSchemaIsCompatible,
   type JsonScalar,
@@ -20,8 +19,10 @@ import type {
   ProgramValueSelector,
 } from '../contracts/index.js';
 import {
+  closedObject,
   genericParallelOutputSchema,
   humanGateOutputSchema,
+  stringEnum,
   voteParallelOutputSchema,
 } from '../derived-schemas.js';
 
@@ -254,24 +255,6 @@ const schemaUnion = (schemas: readonly ValueSchema[]): ValueSchema | null => {
   }
   const alternatives: [ValueSchema, ValueSchema, ...ValueSchema[]] = [first, second, ...rest];
   return Object.freeze({ anyOf: Object.freeze(alternatives) });
-};
-
-const stringEnum = (...values: readonly string[]): ValueSchema =>
-  Object.freeze({
-    type: 'string',
-    enum: Object.freeze([...new Set(values)].sort(compareUnicodeCodePoints)),
-  });
-
-const closedObject = (properties: Readonly<Record<string, ValueSchema>>): ValueSchema => {
-  const entries = Object.entries(properties).sort(([left], [right]) =>
-    compareUnicodeCodePoints(left, right),
-  );
-  return Object.freeze({
-    type: 'object',
-    properties: Object.freeze(Object.fromEntries(entries)),
-    required: Object.freeze(entries.map(([key]) => key)),
-    additionalProperties: false,
-  });
 };
 
 const isJsonObject = (value: JsonValue): value is Readonly<Record<string, JsonValue>> =>
@@ -533,9 +516,9 @@ const mappingMatches = (
   });
 };
 
-const scalarMatches = (value: JsonScalar, schema: ValueSchema): boolean => {
+export const scalarMatchesValueSchema = (value: JsonScalar, schema: ValueSchema): boolean => {
   if ('anyOf' in schema) {
-    return schema.anyOf.some((alternative) => scalarMatches(value, alternative));
+    return schema.anyOf.some((alternative) => scalarMatchesValueSchema(value, alternative));
   }
   if (value === null) {
     return schema.type === 'null';
@@ -572,7 +555,7 @@ const conditionMatches = (
     return schema !== null;
   }
   const values = condition.kind === 'equals' ? [condition.value] : condition.values;
-  return values.every((value) => scalarMatches(value, schema));
+  return values.every((value) => scalarMatchesValueSchema(value, schema));
 };
 
 const choiceMatches = (
@@ -590,7 +573,7 @@ const choiceMatches = (
   const unique = new Set(values.map((value) => canonicalizeOwnedValue(value).text));
   return (
     unique.size === values.length &&
-    values.every((value) => scalarMatches(value, schema)) &&
+    values.every((value) => scalarMatchesValueSchema(value, schema)) &&
     (node.otherwise !== null || casesCoverFiniteDomain(schema, domains))
   );
 };

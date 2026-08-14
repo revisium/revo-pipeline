@@ -1,7 +1,7 @@
-import { valueSchemaIsCompatible, type ValueSchema } from '../../foundation/index.js';
+import type { ValueSchema } from '../../foundation/index.js';
 import type { ValueMapping } from '../../source/index.js';
 
-export { valueSchemaIsCompatible };
+export { valueSchemaIsCompatible } from '../../foundation/index.js';
 
 export const mappingShapeMatches = (mapping: ValueMapping, target: ValueSchema): boolean => {
   if (!('type' in target) || target.type !== 'object') {

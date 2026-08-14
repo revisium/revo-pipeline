@@ -28,13 +28,13 @@ export const ConsensusParticipantRegionOutputSchema = Object.freeze({
   anyOf: Object.freeze(consensusParticipantAlternatives),
 }) satisfies ValueSchema;
 
-const stringEnum = (...values: readonly string[]): ValueSchema =>
+export const stringEnum = (...values: readonly string[]): ValueSchema =>
   Object.freeze({
     type: 'string',
     enum: Object.freeze([...new Set(values)].sort(compareUnicodeCodePoints)),
   });
 
-const closedObject = (properties: Readonly<Record<string, ValueSchema>>): ValueSchema => {
+export const closedObject = (properties: Readonly<Record<string, ValueSchema>>): ValueSchema => {
   const entries = Object.entries(properties).sort(([left], [right]) =>
     compareUnicodeCodePoints(left, right),
   );

@@ -63,8 +63,7 @@ const hasValidCrossReferences = (
       if (node.kind === 'activity') {
         const requirement = requirements.get(node.requirementKey);
         if (
-          requirement === undefined ||
-          requirement.kind !== node.activityKind ||
+          requirement?.kind !== node.activityKind ||
           !valueSchemasEqual(node.inputSchema, requirement.inputSchema) ||
           !valueSchemasEqual(node.outputSchema, requirement.outputSchema)
         ) {

@@ -1,9 +1,5 @@
-import type {
-  PipelineProgram,
-  ProgramNode,
-  ProgramNodeId,
-  ProgramRegion,
-} from '../contracts/index.js';
+import { localTargets as programNodeTargets } from '../admission/graphs.js';
+import type { PipelineProgram, ProgramNode, ProgramRegion } from '../contracts/index.js';
 import type { ProgramModuleGraph } from './module-graph.js';
 
 export type ProgramStructureMeasure = {
@@ -16,41 +12,6 @@ export type ProgramStructureMeasure = {
   readonly nodeTargetCounts: ReadonlyMap<string, number>;
   readonly nodeIds: ReadonlySet<string>;
   readonly regionIds: ReadonlySet<string>;
-};
-
-export const programNodeTargets = (node: ProgramNode): readonly ProgramNodeId[] => {
-  switch (node.kind) {
-    case 'activity':
-      return Object.values(node.routes);
-    case 'choice':
-      return [
-        ...node.cases.map(({ target }) => target),
-        ...(node.otherwise === null ? [] : [node.otherwise]),
-      ];
-    case 'call':
-      return [
-        ...node.routes.outcomes.map(({ target }) => target),
-        node.routes.failed,
-        node.routes.cancelled,
-      ];
-    case 'parallel':
-      return [node.next];
-    case 'repeat':
-    case 'map':
-    case 'wait':
-      return Object.values(node.routes);
-    case 'humanGate':
-      return [
-        ...node.routes.answers.map(({ target }) => target),
-        node.routes.conflict,
-        node.routes.deadline,
-        node.routes.cancelled,
-      ];
-    case 'end':
-      return [];
-  }
-  node satisfies never;
-  throw new TypeError('Unexpected Program node kind.');
 };
 
 const childRegions = (node: ProgramNode): readonly ProgramRegion[] => {

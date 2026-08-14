@@ -6,28 +6,9 @@ import {
   type JsonScalar,
   type ValueSchema,
 } from '../../foundation/index.js';
+import { scalarMatchesValueSchema } from '../../program/index.js';
 import type { RepeatCondition } from '../../source/index.js';
 import type { SchemaResolver, SelectorEnvironment } from './schema-resolver.js';
-
-const scalarMatches = (value: JsonScalar, schema: ValueSchema): boolean => {
-  if ('anyOf' in schema) {
-    return schema.anyOf.some((alternative) => scalarMatches(value, alternative));
-  }
-  if (value === null) {
-    return schema.type === 'null';
-  }
-  if (typeof value === 'boolean') {
-    return schema.type === 'boolean';
-  }
-  if (typeof value === 'string') {
-    return schema.type === 'string' && (schema.enum === undefined || schema.enum.includes(value));
-  }
-  return (
-    (schema.type === 'integer' || schema.type === 'number') &&
-    (schema.minimum === undefined || value >= schema.minimum) &&
-    (schema.maximum === undefined || value <= schema.maximum)
-  );
-};
 
 const domainValues = (domain: ChoiceDomain): readonly JsonScalar[] =>
   domain.kind === 'equals' ? [domain.value] : domain.values;
@@ -38,7 +19,7 @@ export const validateChoiceDomains = (
   path: JsonPointer,
   collector: DiagnosticCollector,
 ): void => {
-  if (domains.flatMap(domainValues).some((value) => !scalarMatches(value, schema))) {
+  if (domains.flatMap(domainValues).some((value) => !scalarMatchesValueSchema(value, schema))) {
     collector.add('DATA_SCHEMA_INCOMPATIBLE', path);
   }
 };

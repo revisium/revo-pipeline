@@ -11,3 +11,4 @@ export {
 } from './validation.js';
 export { isStrictlySorted, sameOrderedKeys } from './ordering.js';
 export { localTargets as programNodeTargets } from './graphs.js';
+export { scalarMatchesValueSchema } from './dataflow.js';

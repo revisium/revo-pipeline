@@ -73,6 +73,7 @@ export {
   inspectPipelineProgram,
   isStrictlySorted,
   programNodeTargets,
+  scalarMatchesValueSchema,
   sameOrderedKeys,
   type OwnedProgramAdmission,
   type ProgramAdmissionReceipt,
