@@ -7,7 +7,8 @@ correction.
 
 - Package metadata differs from the approved `0.1.0-alpha.1` prerelease, `publishConfig`
   differs from `{ access: public, tag: alpha }`, a publication-blocking hook or
-  `private` flag returns, or a release/publish workflow appears.
+  `private` flag returns, or release automation can publish from a pull request,
+  untrusted fork, non-alpha tag, or version-mismatched tag.
 - Root or `./kernel` runtime/type inventories differ from Pipeline Conformance v1, a
   deep/default/CommonJS/wildcard export appears, or the shared `PipelineProgramSchema`
   is not the same runtime value.
@@ -35,6 +36,8 @@ correction.
 - Package verification proves the exact ESM entrypoints and file inventory, declarations,
   negative deep/default/CommonJS imports, and execution of the tracked quick-start from
   an installed tarball.
+- Workflow changes pass `actionlint`; release jobs retain explicit triggers, least
+  permissions, concurrency controls, verification, and exact-version publication guards.
 - The intent ownership matrix is byte-identical unless a separately approved ownership
   change is in scope.
 - CI, Sonar, and valid review threads are green on the same exact PR head.

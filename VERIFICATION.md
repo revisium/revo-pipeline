@@ -50,7 +50,7 @@ test -d src/program
 test -d src/compiler
 test -d src/kernel
 test ! -d src/extensions
-test "$(ls -1 .github/workflows)" = ci.yml
+test "$(ls -1 .github/workflows | sort | tr '\n' ' ')" = "ci.yml npm-publish.yml release-train.yml "
 git diff --check
 ```
 

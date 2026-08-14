@@ -29,7 +29,8 @@ declarations under `dist/`, without source or declaration maps. The package is v
 `0.1.0-alpha.1` and may be published publicly only under the npm `alpha` tag. It remains
 Draft and unstable, with no compatibility or `revo-core`/`revo-run` readiness claim.
 Production dependencies are exactly `typebox@1.3.10` and `canonicalize@3.0.0`; no
-release workflow is present.
+workflow publishes from pull requests. Release-train transitions are manual; automated
+npm publication requires an explicit version-matched alpha tag.
 
 Direct cutover means there is no compatibility implementation or parallel API. See
 [README](README.md), [architecture](docs/architecture.md), [verification](VERIFICATION.md),
