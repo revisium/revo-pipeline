@@ -4,6 +4,7 @@ import type {
   ProgramNodeId,
   ProgramRegion,
 } from '../contracts/index.js';
+import { topologicalIndexes } from '../topological-order.js';
 
 export type ModuleCallEdge = { readonly from: string; readonly to: string };
 
@@ -11,32 +12,18 @@ export const hasValidCallGraph = (
   modules: ReadonlyMap<string, ProgramModule>,
   edges: readonly ModuleCallEdge[],
 ): boolean => {
-  const outgoing = new Map<string, string[]>([...modules.keys()].map((key) => [key, []]));
-  const indegree = new Map<string, number>([...modules.keys()].map((key) => [key, 0]));
+  const keys = [...modules.keys()];
+  const indexByKey = new Map(keys.map((key, index) => [key, index]));
+  const outgoing = keys.map(() => [] as number[]);
   for (const { from, to } of edges) {
-    outgoing.get(from)?.push(to);
-    indegree.set(to, (indegree.get(to) ?? 0) + 1);
-  }
-  const depths = new Map<string, number>([...modules.keys()].map((key) => [key, 0]));
-  const pending = [...indegree].filter(([, degree]) => degree === 0).map(([key]) => key);
-  let visited = 0;
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (current === undefined) {
-      break;
+    const fromIndex = indexByKey.get(from);
+    const toIndex = indexByKey.get(to);
+    if (fromIndex === undefined || toIndex === undefined) {
+      return false;
     }
-    visited += 1;
-    for (const target of outgoing.get(current) ?? []) {
-      const depth = (depths.get(current) ?? 0) + 1;
-      depths.set(target, Math.max(depths.get(target) ?? 0, depth));
-      const degree = (indegree.get(target) ?? 0) - 1;
-      indegree.set(target, degree);
-      if (degree === 0) {
-        pending.push(target);
-      }
-    }
+    outgoing[fromIndex]?.push(toIndex);
   }
-  return visited === modules.size;
+  return topologicalIndexes(outgoing).complete;
 };
 
 export const localTargets = (node: ProgramNode): readonly ProgramNodeId[] => {
@@ -123,29 +110,15 @@ const reverseGraph = (edges: ReadonlyMap<ProgramNodeId, readonly ProgramNodeId[]
 };
 
 const isAcyclic = (edges: ReadonlyMap<ProgramNodeId, readonly ProgramNodeId[]>): boolean => {
-  const indegree = new Map<ProgramNodeId, number>([...edges.keys()].map((key) => [key, 0]));
-  for (const targets of edges.values()) {
-    for (const target of targets) {
-      indegree.set(target, (indegree.get(target) ?? 0) + 1);
-    }
-  }
-  const pending = [...indegree].filter(([, degree]) => degree === 0).map(([key]) => key);
-  let visited = 0;
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (current === undefined) {
-      break;
-    }
-    visited += 1;
-    for (const target of edges.get(current) ?? []) {
-      const degree = (indegree.get(target) ?? 0) - 1;
-      indegree.set(target, degree);
-      if (degree === 0) {
-        pending.push(target);
-      }
-    }
-  }
-  return visited === edges.size;
+  const keys = [...edges.keys()];
+  const indexByKey = new Map(keys.map((key, index) => [key, index]));
+  const outgoing = keys.map((key) =>
+    (edges.get(key) ?? []).flatMap((target) => {
+      const index = indexByKey.get(target);
+      return index === undefined ? [] : [index];
+    }),
+  );
+  return topologicalIndexes(outgoing).complete;
 };
 
 export const hasValidRegionGraph = (region: ProgramRegion): boolean => {

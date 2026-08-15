@@ -71,7 +71,7 @@ describe('structured runtime primitives', () => {
         selector: { kind: 'scopeInput', pointer: '/object' },
         value: null,
       },
-      { ok: false },
+      { ok: false, path: '/object' },
     ],
     [
       {
@@ -89,7 +89,7 @@ describe('structured runtime primitives', () => {
           },
         ],
       },
-      { ok: false },
+      { ok: false, path: '/missing' },
     ],
   ] satisfies readonly (readonly [ProgramRepeatCondition, unknown])[])(
     'evaluates recursive condition %j',

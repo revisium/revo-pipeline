@@ -18,7 +18,7 @@ I/O and knows no runtime provider, model, DBOS workflow, attempt, database, queu
 subscription.
 
 Its only production dependencies are exact `typebox@1.3.10` and
-`canonicalize@3.0.0`; hashing uses `node:crypto`. `fast-check`, Ajv, XState, and
+`canonicalize@4.0.0`; hashing uses `node:crypto`. `fast-check`, Ajv, XState, and
 host/runtime libraries are not installed.
 
 ```text
@@ -90,7 +90,7 @@ changes code, configuration, and verification together.
 The foundation owns bounded portable JSON cloning/freezing, NFC and surrogate checks,
 identifiers, RFC 6901 pointers, fixed limits and overflow-safe arithmetic, the exact
 `PipelineFailure` shape `{code,path}`, diagnostic definitions/order/truncation, closed
-TypeBox object construction, RFC 8785 serialization through exact `canonicalize@3.0.0`,
+TypeBox object construction, RFC 8785 serialization through exact `canonicalize@4.0.0`,
 and domain-separated full SHA-256 through `node:crypto`.
 
 Canonicalization validates portable input before serialization. It rejects custom
@@ -110,7 +110,7 @@ raw canonical bytes. The public digest helpers validate their complete owned inp
 return only a digest or a generic value-redacted `TypeError`.
 
 The only production dependencies are exact `typebox@1.3.10` and
-`canonicalize@3.0.0`. Ajv, XState, `fast-check`, and host/runtime packages are absent.
+`canonicalize@4.0.0`. Ajv, XState, `fast-check`, and host/runtime packages are absent.
 The current foundation implementation uses `node:crypto` for SHA-256; dependency-cruiser
 flags resolved imports of other Node core modules.
 

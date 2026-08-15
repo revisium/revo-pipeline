@@ -3,7 +3,6 @@ import { Compile } from 'typebox/compile';
 import {
   PIPELINE_LIMITS,
   canonicalizeOwnedValue,
-  compareUnicodeCodePoints,
   computeRedactedDigest,
   digestCanonicalBytes,
   normalizeOwnedEnvelope,
@@ -12,6 +11,7 @@ import {
 } from '../foundation/index.js';
 import {
   admitSchemaValidatedPipelineProgram,
+  isStrictlySorted,
   type ProgramAdmissionReceipt,
 } from './admission/index.js';
 import {
@@ -28,29 +28,11 @@ export type AdmittedProgramDigestInput = {
   readonly receipt: ProgramAdmissionReceipt;
 };
 
-const isStrictlySortedBy = <Value>(
-  values: readonly Value[],
-  key: (value: Value) => string,
-): boolean => {
-  for (let index = 1; index < values.length; index += 1) {
-    const previous = values[index - 1];
-    const current = values[index];
-    if (
-      previous === undefined ||
-      current === undefined ||
-      compareUnicodeCodePoints(key(previous), key(current)) >= 0
-    ) {
-      return false;
-    }
-  }
-  return true;
-};
-
 const hasValidCrossReferences = (
   input: ProgramDigestInput,
   regions: ReadonlyMap<string, ProgramDigestInput['program']['modules'][number]['region']>,
 ): boolean => {
-  if (!isStrictlySortedBy(input.requirements.entries, ({ key }) => key)) {
+  if (!isStrictlySorted(input.requirements.entries, ({ key }) => key)) {
     return false;
   }
   const requirements = new Map(input.requirements.entries.map((entry) => [entry.key, entry]));
@@ -76,7 +58,7 @@ const hasValidCrossReferences = (
   if (usedRequirements.size !== requirements.size) {
     return false;
   }
-  if (!isStrictlySortedBy(input.provenance.nodes, ({ programNodeId }) => programNodeId)) {
+  if (!isStrictlySorted(input.provenance.nodes, ({ programNodeId }) => programNodeId)) {
     return false;
   }
   const provenanceIds = new Set(input.provenance.nodes.map(({ programNodeId }) => programNodeId));
@@ -87,7 +69,7 @@ const hasValidCrossReferences = (
     return false;
   }
   if (
-    !isStrictlySortedBy(input.provenance.requirements, ({ requirementKey }) => requirementKey) ||
+    !isStrictlySorted(input.provenance.requirements, ({ requirementKey }) => requirementKey) ||
     input.provenance.requirements.length !== requirements.size
   ) {
     return false;
@@ -95,8 +77,8 @@ const hasValidCrossReferences = (
   return input.provenance.requirements.every(
     (record) =>
       requirements.has(record.requirementKey) &&
-      isStrictlySortedBy(record.sourcePaths, (path) => path) &&
-      isStrictlySortedBy(record.materializationPaths, (path) => path),
+      isStrictlySorted(record.sourcePaths, (path) => path) &&
+      isStrictlySorted(record.materializationPaths, (path) => path),
   );
 };
 

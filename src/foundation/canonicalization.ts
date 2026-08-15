@@ -1,5 +1,6 @@
 import canonicalize from 'canonicalize';
 
+import { isOwnedCanonicalJsonValue } from './json-value-traversal.js';
 import { normalizePortableValue, type JsonValue, type PipelineFailure } from './portable-value.js';
 
 export type CanonicalizedValue = {
@@ -20,11 +21,18 @@ export type CanonicalizationResult =
 const textEncoder = new TextEncoder();
 
 export const canonicalizeOwnedValue = (input: unknown): CanonicalizedOwnedValue => {
-  const text = canonicalize(input);
-  if (text === undefined) {
+  if (!isOwnedCanonicalJsonValue(input)) {
     throw new TypeError('Invalid owned canonical value.');
   }
-  return Object.freeze({ text, bytes: textEncoder.encode(text) });
+  try {
+    const text = canonicalize(input);
+    if (text === undefined) {
+      throw new TypeError('Invalid owned canonical value.');
+    }
+    return Object.freeze({ text, bytes: textEncoder.encode(text) });
+  } catch {
+    throw new TypeError('Invalid owned canonical value.');
+  }
 };
 
 export const canonicalizePortableValue = (input: unknown): CanonicalizationResult => {

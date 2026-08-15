@@ -8,7 +8,8 @@
 
 The package needs one portable boundary for versioned playbook source, profile-selected
 agent slots, linked modules, typed dataflow, bounded structured coordination, and a pure
-command-producing kernel consumed by `revo-run`.
+command-producing kernel. `revo-run` is a future consumer, not a prerequisite for package
+development or alpha publication.
 
 Evolving incompatible contracts in parallel would preserve competing languages and
 force consumers to depend on transition artifacts before the future core/run boundary is
@@ -19,18 +20,18 @@ ready.
 Adopt one greenfield source-language/compiler/closed-IR/pure-kernel architecture through
 a direct cutover. No converter, adapter, dual reader, deprecated alias, compatibility
 package, hidden second interpreter, or runtime node-kind plugin will be built.
-`revo-run` imports the narrow kernel only after `rp-06`; `revo-pipeline` never imports a
-host.
+`revo-pipeline` never imports a host. Any future `revo-run` integration imports the narrow
+kernel only and is a separate compatibility decision.
 
 The first alpha permits an internal compile-time lowering seam only. Starting with the
 foundation work item, production dependencies are exactly `typebox@1.3.10` and
-`canonicalize@3.0.0`; SHA-256 uses `node:crypto`. `fast-check` may be exact-pinned for
+`canonicalize@4.0.0`; SHA-256 uses `node:crypto`. `fast-check` may be exact-pinned for
 development tests. Ajv and XState are not production dependencies.
 
 Acceptance of this decision authorizes the architecture and direct reset. The six
-normative specifications remain Draft through `rp-06`. The root and `./kernel` manifests
-remain absent until conformance and consumer readiness are complete. Publication and
-release remain separate human gates.
+normative specifications remain Draft through `rp-06`. The root and `./kernel` facades may
+be evaluated and published as unstable alpha artifacts before consumer readiness; this
+creates no compatibility guarantee. Publication and release remain separate human gates.
 
 ## Sequential delivery
 
@@ -43,8 +44,8 @@ release remain separate human gates.
    digests.
 5. `rp-04` implements the base pure kernel.
 6. `rp-05` implements structured coordination, cancellation, waits, and gates.
-7. `rp-06` completes conformance and consumer readiness, accepts the six specs, and
-   introduces the exact final manifests.
+7. `rp-06` completes package conformance and introduces the exact alpha manifests.
+   Consumer readiness and specification acceptance remain separate follow-up decisions.
 
 Every intermediate work item is nonpublishable. `rp-06` acceptance still does not
 publish.

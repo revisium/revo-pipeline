@@ -44,7 +44,7 @@ const normalizeScalarSet = (
     }
     seen.add(key);
   }
-  return Object.freeze([...values].sort(compareCanonicalScalars));
+  return Object.freeze(values.toSorted(compareCanonicalScalars));
 };
 
 const normalizeStringSet = (
@@ -59,7 +59,7 @@ const normalizeStringSet = (
     }
     seen.add(value);
   }
-  return Object.freeze([...values].sort(compareUnicodeCodePoints));
+  return Object.freeze(values.toSorted(compareUnicodeCodePoints));
 };
 
 const normalizeBounds = (
@@ -92,14 +92,23 @@ const upperBoundFits = (producer: IntegerSchema, consumer: NumberSchema): boolea
   consumer.maximum === undefined ||
   (producer.maximum !== undefined && producer.maximum <= consumer.maximum);
 
-export const valueSchemaIsCompatible = (producer: ValueSchema, consumer: ValueSchema): boolean =>
-  valueSchemasEqual(producer, consumer) ||
-  ('type' in producer &&
-    'type' in consumer &&
-    producer.type === 'integer' &&
-    consumer.type === 'number' &&
-    lowerBoundFits(producer, consumer) &&
-    upperBoundFits(producer, consumer));
+export const valueSchemaIsCompatible = (producer: ValueSchema, consumer: ValueSchema): boolean => {
+  if ('anyOf' in producer) {
+    return producer.anyOf.every((alternative) => valueSchemaIsCompatible(alternative, consumer));
+  }
+  if ('anyOf' in consumer) {
+    return consumer.anyOf.some((alternative) => valueSchemaIsCompatible(producer, alternative));
+  }
+  return (
+    valueSchemasEqual(producer, consumer) ||
+    ('type' in producer &&
+      'type' in consumer &&
+      producer.type === 'integer' &&
+      consumer.type === 'number' &&
+      lowerBoundFits(producer, consumer) &&
+      upperBoundFits(producer, consumer))
+  );
+};
 
 export const isPipelineFailureSchema = (schema: ValueSchema): boolean =>
   valueSchemasEqual(schema, PipelineFailureValueSchema);
@@ -230,6 +239,7 @@ export const normalizeValueSchema = (
 ): ValueSchema => {
   if (depth > PIPELINE_LIMITS.portableValue.depth) {
     collector.add('BOUND_EXCEEDED', path);
+    return Object.freeze({ type: 'null' });
   }
   if ('anyOf' in schema) {
     return normalizeUnionSchema(schema, path, collector, depth);

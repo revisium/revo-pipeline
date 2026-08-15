@@ -135,8 +135,6 @@ const familyPriority: Readonly<Record<PipelineDiagnosticFamily, number>> = Objec
   CANONICAL: 7,
 });
 
-const createdDiagnostics = new WeakSet<object>();
-
 const invalidDiagnostic = (): never => {
   throw new TypeError('Invalid pipeline diagnostic input.');
 };
@@ -144,8 +142,54 @@ const invalidDiagnostic = (): never => {
 const isDiagnosticCode = (value: unknown): value is PipelineDiagnosticCode =>
   typeof value === 'string' && Object.hasOwn(PIPELINE_DIAGNOSTIC_CATALOG, value);
 
-const isCreatedDiagnostic = (value: unknown): value is PipelineDiagnostic =>
-  typeof value === 'object' && value !== null && createdDiagnostics.has(value);
+const capturePipelineDiagnostic = (value: unknown): PipelineDiagnostic | null => {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+  const prototype = Reflect.getPrototypeOf(value);
+  const keys = Reflect.ownKeys(value);
+  if (
+    (prototype !== Object.prototype && prototype !== null) ||
+    keys.length !== 4 ||
+    !['family', 'code', 'path', 'message'].every((key) => keys.includes(key))
+  ) {
+    return null;
+  }
+  const codeDescriptor = Reflect.getOwnPropertyDescriptor(value, 'code');
+  const pathDescriptor = Reflect.getOwnPropertyDescriptor(value, 'path');
+  const familyDescriptor = Reflect.getOwnPropertyDescriptor(value, 'family');
+  const messageDescriptor = Reflect.getOwnPropertyDescriptor(value, 'message');
+  if (
+    !codeDescriptor?.enumerable ||
+    !('value' in codeDescriptor) ||
+    !pathDescriptor?.enumerable ||
+    !('value' in pathDescriptor) ||
+    !familyDescriptor?.enumerable ||
+    !('value' in familyDescriptor) ||
+    !messageDescriptor?.enumerable ||
+    !('value' in messageDescriptor)
+  ) {
+    return null;
+  }
+  const code: unknown = codeDescriptor.value;
+  const path: unknown = pathDescriptor.value;
+  if (!isDiagnosticCode(code) || !isJsonPointer(path)) {
+    return null;
+  }
+  const catalogEntry = PIPELINE_DIAGNOSTIC_CATALOG[code];
+  if (
+    familyDescriptor.value !== catalogEntry.family ||
+    messageDescriptor.value !== catalogEntry.message
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    family: catalogEntry.family,
+    code,
+    path,
+    message: catalogEntry.message,
+  });
+};
 
 export const createPipelineDiagnostic = (
   code: PipelineDiagnosticCode,
@@ -155,29 +199,35 @@ export const createPipelineDiagnostic = (
     return invalidDiagnostic();
   }
   const catalogEntry = PIPELINE_DIAGNOSTIC_CATALOG[code];
-  const diagnostic = Object.freeze({
+  return Object.freeze({
     family: catalogEntry.family,
     code,
     path,
     message: catalogEntry.message,
   });
-  createdDiagnostics.add(diagnostic);
-  return diagnostic;
+};
+
+const compareCapturedPipelineDiagnostics = (
+  left: PipelineDiagnostic,
+  right: PipelineDiagnostic,
+): number =>
+  familyPriority[left.family] - familyPriority[right.family] ||
+  compareUnicodeCodePoints(left.path, right.path) ||
+  compareUnicodeCodePoints(left.code, right.code);
+
+const captureComparatorInput = (value: unknown): PipelineDiagnostic => {
+  try {
+    return capturePipelineDiagnostic(value) ?? invalidDiagnostic();
+  } catch {
+    return invalidDiagnostic();
+  }
 };
 
 export const comparePipelineDiagnostics = (
   left: PipelineDiagnostic,
   right: PipelineDiagnostic,
-): number => {
-  if (!isCreatedDiagnostic(left) || !isCreatedDiagnostic(right)) {
-    return invalidDiagnostic();
-  }
-  return (
-    familyPriority[left.family] - familyPriority[right.family] ||
-    compareUnicodeCodePoints(left.path, right.path) ||
-    compareUnicodeCodePoints(left.code, right.code)
-  );
-};
+): number =>
+  compareCapturedPipelineDiagnostics(captureComparatorInput(left), captureComparatorInput(right));
 
 const copyDiagnosticList = (input: readonly PipelineDiagnostic[]): PipelineDiagnostic[] => {
   try {
@@ -202,14 +252,14 @@ const copyDiagnosticList = (input: readonly PipelineDiagnostic[]): PipelineDiagn
     const copy: PipelineDiagnostic[] = [];
     for (let index = 0; index < length; index += 1) {
       const descriptor = Reflect.getOwnPropertyDescriptor(input, String(index));
-      if (
-        !descriptor?.enumerable ||
-        !('value' in descriptor) ||
-        !isCreatedDiagnostic(descriptor.value)
-      ) {
+      if (!descriptor?.enumerable || !('value' in descriptor)) {
         return invalidDiagnostic();
       }
-      copy.push(descriptor.value);
+      const diagnostic = capturePipelineDiagnostic(descriptor.value);
+      if (diagnostic === null) {
+        return invalidDiagnostic();
+      }
+      copy.push(diagnostic);
     }
     return copy;
   } catch {
@@ -220,7 +270,7 @@ const copyDiagnosticList = (input: readonly PipelineDiagnostic[]): PipelineDiagn
 export const finalizePipelineDiagnostics = (
   diagnostics: readonly PipelineDiagnostic[],
 ): readonly PipelineDiagnostic[] => {
-  const ordered = copyDiagnosticList(diagnostics).sort(comparePipelineDiagnostics);
+  const ordered = copyDiagnosticList(diagnostics).sort(compareCapturedPipelineDiagnostics);
   if (ordered.length <= PIPELINE_LIMITS.diagnostics) {
     return Object.freeze(ordered);
   }

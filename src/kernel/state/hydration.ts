@@ -12,6 +12,7 @@ import { PipelineStateSchema, type PipelineState } from '../contracts/state.js';
 import type { MapMachineFrame } from '../contracts/structured-frames.js';
 import { findSorted } from '../program/lookup.js';
 import { stateFitsMachineLimits } from './bounds.js';
+import { walkFrameAncestry } from './frame-ancestry.js';
 
 const stateValidator = Compile(PipelineStateSchema);
 
@@ -97,6 +98,13 @@ const hasCanonicalFrameArrays = (frame: MachineFrame): boolean => {
   ) {
     return false;
   }
+  if (
+    frame.kind === 'parallel' &&
+    (!isStrictlySorted(Object.keys(frame.branchRegionKeys), (key) => key) ||
+      !isStrictlySorted(Object.keys(frame.branchResults), (key) => key))
+  ) {
+    return false;
+  }
   return frame.kind !== 'map'
     ? true
     : isStrictlySorted(frame.itemKeys, (key) => key) &&
@@ -124,12 +132,11 @@ const hasCancellationOwnerChain = (
   frames: ReadonlyMap<Digest, MachineFrame>,
 ): boolean => {
   const remaining = new Set(ownerKeys);
-  let frame = frames.get(operationFrameKey);
-  for (let depth = 0; frame !== undefined && depth <= 64; depth += 1) {
+  const complete = walkFrameAncestry(frames, operationFrameKey, (frame) => {
     remaining.delete(frame.key);
-    frame = frame.parentFrameKey === null ? undefined : frames.get(frame.parentFrameKey);
-  }
-  return remaining.size === 0;
+    return true;
+  });
+  return complete && remaining.size === 0;
 };
 
 const hasConsistentCancellationOwners = (state: PipelineState): boolean => {

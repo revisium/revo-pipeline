@@ -1,6 +1,7 @@
 import { compareUnicodeCodePoints, type Digest } from '../../../foundation/index.js';
 import type { PipelineCommand } from '../../contracts/commands.js';
 import type { MachineFrame } from '../../contracts/frames.js';
+import { walkFrameAncestry } from '../../state/frame-ancestry.js';
 import { cancelPendingCommand, nodeReference, pipelineReference } from '../commands.js';
 import type { TransitionDraft } from './draft.js';
 
@@ -10,26 +11,21 @@ const nonEmptyTargets = (targets: readonly Digest[]): readonly [Digest, ...Diges
 };
 
 const hasAncestor = (draft: TransitionDraft, frameKey: Digest, ancestorKey: Digest): boolean => {
-  let current = draft.frames.get(frameKey);
-  for (let depth = 0; current !== undefined && depth <= 64; depth += 1) {
-    if (current.key === ancestorKey) {
-      return true;
-    }
-    current =
-      current.parentFrameKey === null ? undefined : draft.frames.get(current.parentFrameKey);
-  }
-  return false;
+  let found = false;
+  walkFrameAncestry(draft.frames, frameKey, (frame) => {
+    found = frame.key === ancestorKey;
+    return !found;
+  });
+  return found;
 };
 
 export const pendingAncestorKeys = (draft: TransitionDraft): ReadonlySet<Digest> => {
   const ancestors = new Set<Digest>();
   for (const operation of draft.pending.values()) {
-    let current = draft.frames.get(operation.ref.frameKey);
-    for (let depth = 0; current !== undefined && depth <= 64; depth += 1) {
-      ancestors.add(current.key);
-      current =
-        current.parentFrameKey === null ? undefined : draft.frames.get(current.parentFrameKey);
-    }
+    walkFrameAncestry(draft.frames, operation.ref.frameKey, (frame) => {
+      ancestors.add(frame.key);
+      return true;
+    });
   }
   return ancestors;
 };
@@ -92,18 +88,18 @@ export const orderedCancellationOwners = (
 ): readonly Digest[] | null => {
   const remaining = new Set(ownerKeys);
   const ordered: Digest[] = [];
-  let current = draft.frames.get(frameKey);
-  for (let depth = 0; current !== undefined && depth <= 64; depth += 1) {
-    if (remaining.delete(current.key)) {
-      if (current.kind !== 'parallel' && current.kind !== 'map') {
-        return null;
+  let valid = true;
+  const complete = walkFrameAncestry(draft.frames, frameKey, (frame) => {
+    if (remaining.delete(frame.key)) {
+      if (frame.kind !== 'parallel' && frame.kind !== 'map') {
+        valid = false;
+        return false;
       }
-      ordered.push(current.key);
+      ordered.push(frame.key);
     }
-    current =
-      current.parentFrameKey === null ? undefined : draft.frames.get(current.parentFrameKey);
-  }
-  return remaining.size === 0 ? Object.freeze(ordered) : null;
+    return true;
+  });
+  return complete && valid && remaining.size === 0 ? Object.freeze(ordered) : null;
 };
 
 export const requestRegionCancellation = (

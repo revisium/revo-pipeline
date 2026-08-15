@@ -1,5 +1,10 @@
-import { localTargets as programNodeTargets } from '../admission/graphs.js';
-import type { PipelineProgram, ProgramNode, ProgramRegion } from '../contracts/index.js';
+import { childRegions, localTargets as programNodeTargets } from '../admission/graphs.js';
+import type { PipelineProgram } from '../contracts/index.js';
+import {
+  PROGRAM_ADMISSION_LIMITS,
+  type ProgramAdmissionLimit,
+  type ProgramAdmissionViolation,
+} from './limits.js';
 import type { ProgramModuleGraph } from './module-graph.js';
 
 export type ProgramStructureMeasure = {
@@ -14,11 +19,32 @@ export type ProgramStructureMeasure = {
   readonly regionIds: ReadonlySet<string>;
 };
 
-const childRegions = (node: ProgramNode): readonly ProgramRegion[] => {
-  if (node.kind === 'parallel') {
-    return node.branches.map(({ region }) => region);
+const violation = (
+  limit: ProgramAdmissionLimit,
+  actual: number,
+): ProgramAdmissionViolation | null => {
+  const maximum = PROGRAM_ADMISSION_LIMITS[limit];
+  return actual > maximum ? Object.freeze({ limit, actual, maximum }) : null;
+};
+
+export const firstProgramStructureViolation = (
+  structure: ProgramStructureMeasure,
+): ProgramAdmissionViolation | null => {
+  const checks: readonly (readonly [ProgramAdmissionLimit, number])[] = [
+    ['modules', structure.modules],
+    ['nodes', structure.nodes],
+    ['regions', structure.regions],
+    ['targets', structure.targets],
+    ['nestingDepth', structure.nestingDepth],
+    ['callDepth', structure.callDepth],
+  ];
+  for (const [limit, actual] of checks) {
+    const exceeded = violation(limit, actual);
+    if (exceeded !== null) {
+      return exceeded;
+    }
   }
-  return node.kind === 'repeat' || node.kind === 'map' ? [node.body] : [];
+  return null;
 };
 
 export const measureProgramStructure = (

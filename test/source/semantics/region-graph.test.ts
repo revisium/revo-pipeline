@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PipelineSourcePackage, SourceNode } from '../../../src/source/index.js';
+import type { PipelineSourcePackage, SourceNode, ValueSchema } from '../../../src/source/index.js';
 import {
   childRegion,
   endNode,
@@ -8,9 +8,75 @@ import {
   sourceNodeBuilders,
   sourceWithNodes,
 } from '../../support/source-builders.js';
-import { sourceDiagnostics } from '../../support/source-validation.js';
+import { expectValidSource, sourceDiagnostics } from '../../support/source-validation.js';
+
+const sourceWithRegionOutput = (
+  exitOutputSchema: ValueSchema,
+  regionOutputSchema: ValueSchema,
+): PipelineSourcePackage => {
+  const source = sourceWithNodes([endNode()]);
+  const module = source.modules[0];
+  return {
+    ...source,
+    modules: [
+      {
+        ...module,
+        outputSchema: regionOutputSchema,
+        region: {
+          ...module.region,
+          outputSchema: regionOutputSchema,
+          exits: [{ outcome: 'ok', outputSchema: exitOutputSchema }],
+        },
+      },
+    ],
+  };
+};
 
 describe('source region graph', () => {
+  it.each([
+    ['exact equality', { type: 'string' }, { type: 'string' }],
+    [
+      'safe integer-to-number widening',
+      { type: 'integer', minimum: 1, maximum: 3 },
+      { type: 'number', minimum: 0, maximum: 4 },
+    ],
+  ] as const)('accepts region exit output schemas by %s', (_name, exitSchema, regionSchema) => {
+    expect(
+      expectValidSource(sourceWithRegionOutput(exitSchema, regionSchema)).source.modules,
+    ).toHaveLength(1);
+  });
+
+  it('rejects an exit output schema not accepted by the region output schema', () => {
+    const source = sourceWithRegionOutput({ type: 'number' }, { type: 'integer' });
+
+    expect(sourceDiagnostics(source)).toContainEqual({
+      code: 'DATA_SCHEMA_INCOMPATIBLE',
+      path: '/modules/0/region/exits/0/outputSchema',
+    });
+  });
+
+  it('keeps module-to-region input and output checks exact', () => {
+    const source = sourceWithRegionOutput({ type: 'integer' }, { type: 'number' });
+    const module = source.modules[0];
+    const invalid: PipelineSourcePackage = {
+      ...source,
+      modules: [
+        {
+          ...module,
+          outputSchema: { type: 'integer' },
+          region: { ...module.region, inputSchema: { type: 'null' } },
+        },
+      ],
+    };
+
+    expect(sourceDiagnostics(invalid)).toEqual(
+      expect.arrayContaining([
+        { code: 'CANONICAL_INPUT', path: '/modules/0/region/inputSchema' },
+        { code: 'CANONICAL_INPUT', path: '/modules/0/region/outputSchema' },
+      ]),
+    );
+  });
+
   it.each([
     ['unknown entry', 'entry', '/modules/0/region/entry'],
     ['unknown target', 'target', '/modules/0/region/nodes/0/routes/completed'],

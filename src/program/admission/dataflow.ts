@@ -1,8 +1,8 @@
 import {
   PipelineFailureValueSchema,
-  canonicalizeOwnedValue,
   casesCoverFiniteDomain,
   projectValueSchema,
+  scalarKey,
   valueSchemaIsCompatible,
   type JsonScalar,
   type JsonValue,
@@ -22,9 +22,11 @@ import {
   closedObject,
   genericParallelOutputSchema,
   humanGateOutputSchema,
+  schemaUnion,
   stringEnum,
   voteParallelOutputSchema,
 } from '../derived-schemas.js';
+import { topologicalIndexes } from '../topological-order.js';
 
 type RouteStatus = 'succeeded' | 'failed' | 'cancelled' | 'neutral';
 type RouteEdge = { readonly target: ProgramNodeId; readonly status: RouteStatus };
@@ -162,29 +164,12 @@ const buildRegionRouteGraph = (region: ProgramRegion) => {
     }),
   );
   const predecessors = region.nodes.map(() => [] as number[]);
-  const indegrees = region.nodes.map(() => 0);
   for (const [from, targets] of outgoing.entries()) {
     for (const target of targets) {
       predecessors[target]?.push(from);
-      indegrees[target] = (indegrees[target] ?? 0) + 1;
     }
   }
-  const pending = indegrees.flatMap((degree, index) => (degree === 0 ? [index] : []));
-  const topologicalOrder: number[] = [];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (current === undefined) {
-      break;
-    }
-    topologicalOrder.push(current);
-    for (const target of outgoing[current] ?? []) {
-      const degree = (indegrees[target] ?? 0) - 1;
-      indegrees[target] = degree;
-      if (degree === 0) {
-        pending.push(target);
-      }
-    }
-  }
+  const topologicalOrder = topologicalIndexes(outgoing).indexes;
   return { indexById, routes, outgoing, predecessors, topologicalOrder };
 };
 
@@ -240,21 +225,6 @@ const regionFacts = (region: ProgramRegion): RegionFacts => {
       return reachesConsumer;
     },
   });
-};
-
-const schemaUnion = (schemas: readonly ValueSchema[]): ValueSchema | null => {
-  const unique = new Map(
-    schemas.map((schema) => [canonicalizeOwnedValue(schema).text, schema] as const),
-  );
-  const [first, second, ...rest] = [...unique.values()];
-  if (first === undefined) {
-    return null;
-  }
-  if (second === undefined) {
-    return first;
-  }
-  const alternatives: [ValueSchema, ValueSchema, ...ValueSchema[]] = [first, second, ...rest];
-  return Object.freeze({ anyOf: Object.freeze(alternatives) });
 };
 
 const isJsonObject = (value: JsonValue): value is Readonly<Record<string, JsonValue>> =>
@@ -570,7 +540,7 @@ const choiceMatches = (
   const values = domains.flatMap((domain) =>
     domain.kind === 'equals' ? [domain.value] : [...domain.values],
   );
-  const unique = new Set(values.map((value) => canonicalizeOwnedValue(value).text));
+  const unique = new Set(values.map(scalarKey));
   return (
     unique.size === values.length &&
     values.every((value) => scalarMatchesValueSchema(value, schema)) &&

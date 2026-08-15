@@ -117,7 +117,7 @@ const completeRepeatValue = (
   };
   const condition = evaluateRepeatCondition(node.continueWhen, environment);
   if (!condition.ok) {
-    return failRepeat(context, owner, node, failure('DATA_POINTER_MISSING'));
+    return failRepeat(context, owner, node, failure('DATA_POINTER_MISSING', condition.path));
   }
   const updated = Object.freeze({ ...owner, previousOutput: result.output, bodyRegionKey: null });
   context.draft.setFrame(updated);

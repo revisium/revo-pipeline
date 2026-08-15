@@ -1,12 +1,8 @@
-import {
-  compareUnicodeCodePoints,
-  type JsonValue,
-  type PipelineFailure,
-} from '../../../foundation/index.js';
+import { type JsonValue, type PipelineFailure } from '../../../foundation/index.js';
 import type { ProgramMapNode } from '../../../program/index.js';
 import type { RegionTerminalResult } from '../../contracts/results.js';
 import type { MapItemResult, MapMachineFrame } from '../../contracts/structured-frames.js';
-import { findSorted } from '../../program/lookup.js';
+import { findSorted, findSortedInsertionIndex } from '../../program/lookup.js';
 import { readPipelineFailure } from './results.js';
 
 export const toMapItemResult = (
@@ -41,18 +37,8 @@ export const insertMapItemResult = (
   values: readonly MapItemResult[],
   value: MapItemResult,
 ): readonly MapItemResult[] => {
-  let lower = 0;
-  let upper = values.length;
-  while (lower < upper) {
-    const middle = lower + Math.floor((upper - lower) / 2);
-    const candidate = values[middle];
-    if (candidate !== undefined && compareUnicodeCodePoints(candidate.itemKey, value.itemKey) < 0) {
-      lower = middle + 1;
-    } else {
-      upper = middle;
-    }
-  }
-  return Object.freeze([...values.slice(0, lower), value, ...values.slice(lower)]);
+  const insertion = findSortedInsertionIndex(values, value.itemKey, ({ itemKey }) => itemKey);
+  return Object.freeze([...values.slice(0, insertion), value, ...values.slice(insertion)]);
 };
 
 export const projectMapItems = (items: readonly MapItemResult[]): JsonValue =>

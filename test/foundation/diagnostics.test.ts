@@ -3,9 +3,21 @@ import { describe, expect, it } from 'vitest';
 import {
   PIPELINE_DIAGNOSTIC_CATALOG,
   PIPELINE_LIMITS,
+  comparePipelineDiagnostics,
   createPipelineDiagnostic,
   finalizePipelineDiagnostics,
 } from '../../src/foundation/index.js';
+
+const captureInvalidDiagnosticInput = (input: unknown): Error => {
+  try {
+    Reflect.apply(finalizePipelineDiagnostics, undefined, [input]);
+  } catch (error) {
+    if (error instanceof Error) {
+      return error;
+    }
+  }
+  throw new TypeError('Expected diagnostic finalization to fail.');
+};
 
 const diagnosticCodes = [
   'SOURCE_DIAGNOSTIC_LIMIT',
@@ -71,6 +83,116 @@ describe('pipeline diagnostics', () => {
       'DATA:/b',
       'CANONICAL:/a',
     ]);
+    expect(
+      comparePipelineDiagnostics(
+        createPipelineDiagnostic('SOURCE_GATE_ANSWER_BIJECTION', '/z'),
+        createPipelineDiagnostic('DATA_POINTER_STATIC', '/a'),
+      ),
+    ).toBeLessThan(0);
+  });
+
+  it('compares captured proxy fields without invoking throwing or substituting gets', () => {
+    let getCalls = 0;
+    const throwing = new Proxy(
+      { ...createPipelineDiagnostic('SOURCE_GATE_ANSWER_BIJECTION', '/z') },
+      {
+        get() {
+          getCalls += 1;
+          throw new Error('compare-get-secret');
+        },
+      },
+    );
+    const substituting = new Proxy(
+      { ...createPipelineDiagnostic('DATA_POINTER_STATIC', '/a') },
+      {
+        get(_target, key) {
+          getCalls += 1;
+          return key === 'family' ? 'CANONICAL' : '/substituted';
+        },
+      },
+    );
+
+    expect(comparePipelineDiagnostics(throwing, substituting)).toBeLessThan(0);
+    expect(
+      comparePipelineDiagnostics(substituting, createPipelineDiagnostic('CANONICAL_INPUT', '/a')),
+    ).toBeLessThan(0);
+    expect(getCalls).toBe(0);
+  });
+
+  it('rejects malformed direct comparator inputs with one redacted error', () => {
+    const valid = createPipelineDiagnostic('DATA_POINTER_STATIC', '/a');
+    const accessor = { ...valid };
+    Object.defineProperty(accessor, 'path', {
+      enumerable: true,
+      get() {
+        throw new Error('compare-accessor-secret');
+      },
+    });
+    const descriptorProxy = new Proxy(
+      { ...valid },
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error('compare-proxy-secret');
+        },
+      },
+    );
+
+    for (const malformed of [accessor, descriptorProxy, { ...valid, unexpected: true }]) {
+      for (const [left, right] of [
+        [malformed, valid],
+        [valid, malformed],
+      ]) {
+        let thrown: unknown;
+        try {
+          Reflect.apply(comparePipelineDiagnostics, undefined, [left, right]);
+        } catch (error) {
+          thrown = error;
+        }
+        expect(thrown).toBeInstanceOf(TypeError);
+        if (!(thrown instanceof Error)) {
+          throw new TypeError('Expected an Error instance.');
+        }
+        expect(thrown.message).toBe('Invalid pipeline diagnostic input.');
+        expect(Object.hasOwn(thrown, 'cause')).toBe(false);
+      }
+    }
+  });
+
+  it('captures unbranded diagnostics into exact individually frozen owned values', () => {
+    const mutable = { ...createPipelineDiagnostic('DATA_SCHEMA_MISMATCH', '/mutable') };
+    const alreadyFrozen = Object.freeze({
+      ...createPipelineDiagnostic('CANONICAL_INPUT', '/frozen'),
+    });
+
+    const finalized = finalizePipelineDiagnostics([alreadyFrozen, mutable]);
+    mutable.path = '/changed';
+
+    expect(finalized).toEqual([
+      createPipelineDiagnostic('DATA_SCHEMA_MISMATCH', '/mutable'),
+      createPipelineDiagnostic('CANONICAL_INPUT', '/frozen'),
+    ]);
+    expect(finalized[0]).not.toBe(mutable);
+    expect(finalized[1]).not.toBe(alreadyFrozen);
+    expect(finalized.every((diagnostic) => Object.isFrozen(diagnostic))).toBe(true);
+    expect(Object.isFrozen(finalized)).toBe(true);
+  });
+
+  it('sorts only captured descriptor fields without invoking hostile gets', () => {
+    let getCalls = 0;
+    const input = { ...createPipelineDiagnostic('DATA_SCHEMA_MISMATCH', '/captured') };
+    const hostile = new Proxy(input, {
+      get() {
+        getCalls += 1;
+        throw new Error('get-secret');
+      },
+    });
+
+    const finalized = finalizePipelineDiagnostics([hostile]);
+
+    expect(finalized).toEqual([createPipelineDiagnostic('DATA_SCHEMA_MISMATCH', '/captured')]);
+    expect(Object.is(finalized[0], hostile)).toBe(false);
+    expect(Object.isFrozen(finalized[0])).toBe(true);
+    expect(getCalls).toBe(0);
   });
 
   it('returns the first 99 ordered diagnostics plus the fixed overflow marker', () => {
@@ -134,10 +256,46 @@ describe('pipeline diagnostics', () => {
     const revoked = Proxy.revocable([valid], {});
     revoked.revoke();
 
-    for (const list of [accessorList, proxyList, revoked.proxy, [new Proxy(valid, {})]]) {
-      expect(() => {
-        Reflect.apply(finalizePipelineDiagnostics, undefined, [list]);
-      }).toThrow('Invalid pipeline diagnostic input.');
+    for (const list of [accessorList, proxyList, revoked.proxy]) {
+      const error = captureInvalidDiagnosticInput(list);
+      expect(error).toBeInstanceOf(TypeError);
+      expect(error.message).toBe('Invalid pipeline diagnostic input.');
+      expect(Object.hasOwn(error, 'cause')).toBe(false);
+    }
+  });
+
+  it('rejects malformed and hostile diagnostic entries with one redacted error', () => {
+    const valid = createPipelineDiagnostic('DATA_SCHEMA_MISMATCH', '');
+    const accessor = { ...valid };
+    Object.defineProperty(accessor, 'path', {
+      enumerable: true,
+      get() {
+        throw new Error('entry-getter-secret');
+      },
+    });
+    const descriptorProxy = new Proxy(
+      { ...valid },
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error('entry-proxy-secret');
+        },
+      },
+    );
+    const revoked = Proxy.revocable({ ...valid }, {});
+    revoked.revoke();
+
+    for (const diagnostic of [
+      accessor,
+      descriptorProxy,
+      revoked.proxy,
+      { ...valid, unexpected: true },
+      { ...valid, family: 'CANONICAL' },
+      Object.assign(Object.create(Date.prototype), valid),
+    ]) {
+      const error = captureInvalidDiagnosticInput([diagnostic]);
+      expect(error).toBeInstanceOf(TypeError);
+      expect(error.message).toBe('Invalid pipeline diagnostic input.');
+      expect(Object.hasOwn(error, 'cause')).toBe(false);
     }
   });
 });

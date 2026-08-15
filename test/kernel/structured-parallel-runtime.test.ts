@@ -6,6 +6,7 @@ import {
   type PipelineCommand,
   type PipelineState,
 } from '../../src/kernel/index.js';
+import { hydratePipelineState } from '../support/kernel-internal.js';
 import { unstartedParallelProgram } from '../support/parallel-unstarted-builders.js';
 import {
   parallelActivityProgram,
@@ -66,6 +67,45 @@ describe('structured parallel runtime outcomes', () => {
       terminalEvent(right, 'activitySucceeded'),
     );
     expect(completed).toMatchObject({
+      state: { status: 'succeeded', frames: [], pending: [] },
+      commands: [{ kind: 'complete' }],
+    });
+  });
+
+  it('keeps live branch result records canonical across out-of-order acknowledgements', () => {
+    const bundle = parallelActivityProgram('drain', { kind: 'all' }, {}, ['a', 'b', 'c']);
+    const initial = createInitialPipelineState(bundle, {});
+    const commands = branchCommands(initial.state, initial.commands);
+    const a = commands.a;
+    const b = commands.b;
+    const c = commands.c;
+    if (a === undefined || b === undefined || c === undefined) {
+      throw new TypeError('Expected three parallel branch dispatches.');
+    }
+
+    const afterC = advancePipeline(bundle, initial.state, terminalEvent(c, 'activitySucceeded'));
+    const hydratedAfterC = hydratePipelineState(
+      JSON.parse(JSON.stringify(afterC.state)) as unknown,
+    );
+    if (hydratedAfterC === null) {
+      throw new TypeError('Expected the live parallel state to hydrate.');
+    }
+    const afterA = advancePipeline(bundle, hydratedAfterC, terminalEvent(a, 'activitySucceeded'));
+    const owner = afterA.state.frames.find((frame) => frame.kind === 'parallel');
+    if (owner?.kind !== 'parallel') {
+      throw new TypeError('Expected a live parallel owner.');
+    }
+    expect(Object.keys(owner.branchResults)).toEqual(['a', 'c']);
+
+    const hydratedAfterA = hydratePipelineState(
+      JSON.parse(JSON.stringify(afterA.state)) as unknown,
+    );
+    if (hydratedAfterA === null) {
+      throw new TypeError('Expected the updated parallel state to hydrate.');
+    }
+    expect(
+      advancePipeline(bundle, hydratedAfterA, terminalEvent(b, 'activitySucceeded')),
+    ).toMatchObject({
       state: { status: 'succeeded', frames: [], pending: [] },
       commands: [{ kind: 'complete' }],
     });

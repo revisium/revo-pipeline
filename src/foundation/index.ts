@@ -35,6 +35,7 @@ export {
 export { computeRedactedDigest } from './digest-redaction.js';
 export { isDisplayString, isIdentifier } from './identifier.js';
 export { countJsonValues } from './json-values.js';
+export { readOwnDataValue, reflectOwnKeys } from './hostile-reflection.js';
 export {
   ConsensusPolicySchema,
   ParallelBranchClassificationSchema,
@@ -71,7 +72,7 @@ export {
   type PortableNormalizationSession,
   type PortableValueResult,
 } from './portable-value.js';
-export { closedObject, type ClosedObjectOptions } from './schema.js';
+export { closedObject } from './schema.js';
 export {
   DigestSchema,
   DisplayStringSchema,
@@ -105,6 +106,7 @@ export {
   isPipelineFailureSchema,
   normalizeChoiceDomain,
   normalizeValueSchema,
+  scalarKey,
   valueSchemaIsCompatible,
   valueSchemasEqual,
 } from './value-schema/normalization.js';

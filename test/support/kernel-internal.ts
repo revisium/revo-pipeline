@@ -14,6 +14,7 @@ export {
 } from '../../src/kernel/execution/selectors.js';
 export type { RuntimeContext } from '../../src/kernel/execution/runtime/context.js';
 export { createTransitionDraft } from '../../src/kernel/execution/runtime/draft.js';
+export { pendingAncestorKeys } from '../../src/kernel/execution/runtime/cancellation.js';
 export { preflightMap } from '../../src/kernel/execution/runtime/map-preflight.js';
 export {
   reconstructMapItem,

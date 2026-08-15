@@ -18,3 +18,9 @@ export const PROGRAM_ADMISSION_LIMITS = Object.freeze({
 });
 
 export type ProgramAdmissionLimit = keyof typeof PROGRAM_ADMISSION_LIMITS;
+
+export type ProgramAdmissionViolation = {
+  readonly limit: ProgramAdmissionLimit;
+  readonly actual: number;
+  readonly maximum: number;
+};

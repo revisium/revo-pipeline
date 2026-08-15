@@ -1,6 +1,6 @@
 import { reflectOwnDescriptor, reflectOwnKeys, reflectPrototype } from './hostile-reflection.js';
 import { appendJsonPointer, type JsonPointer } from './json-pointer.js';
-import { type PipelineFailure } from './portable-value.js';
+import type { PipelineFailure } from './json-value-contracts.js';
 import { compareUnicodeCodePoints, isNfcString } from './unicode.js';
 
 type InspectionFailure = {
@@ -30,6 +30,7 @@ export const inspectArray = (
   input: object,
   path: JsonPointer,
   maximumArrayItems: number,
+  boundFailureCode: PipelineFailure['code'] = 'BOUND_EXCEEDED',
 ): { readonly values: readonly unknown[] } | InspectionFailure => {
   const prototype = reflectPrototype(input);
   const keys = reflectOwnKeys(input);
@@ -45,7 +46,7 @@ export const inspectArray = (
     return failure('CANONICAL_INPUT', path);
   }
   if (length > maximumArrayItems) {
-    return failure('BOUND_EXCEEDED', path);
+    return failure(boundFailureCode, path);
   }
   const values: unknown[] = [];
   for (let index = 0; index < length; index += 1) {
@@ -62,6 +63,7 @@ export const inspectObject = (
   input: object,
   path: JsonPointer,
   maximumObjectProperties: number,
+  boundFailureCode: PipelineFailure['code'] = 'BOUND_EXCEEDED',
 ): { readonly entries: readonly (readonly [string, unknown])[] } | InspectionFailure => {
   const prototype = reflectPrototype(input);
   const ownKeys = reflectOwnKeys(input);
@@ -69,7 +71,7 @@ export const inspectObject = (
     return failure('CANONICAL_INPUT', path);
   }
   if (ownKeys.length > maximumObjectProperties) {
-    return failure('BOUND_EXCEEDED', path);
+    return failure(boundFailureCode, path);
   }
   const keys: string[] = [];
   for (const key of ownKeys) {
@@ -78,6 +80,7 @@ export const inspectObject = (
     }
     keys.push(key);
   }
+  // Normalized objects use code-point order; RFC 8785/JCS later serializes in UTF-16 order.
   keys.sort(compareUnicodeCodePoints);
   const entries: [string, unknown][] = [];
   for (const key of keys) {

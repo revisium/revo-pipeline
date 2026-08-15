@@ -12,6 +12,7 @@ export const validateExitClassifications = (
 ): void => {
   const outcomes = child.exits.map(({ outcome }) => outcome);
   const classified = classifications.map(({ outcome }) => outcome);
+  // Both arrays are normalized into canonical order before serialization-based equality.
   if (JSON.stringify(outcomes) !== JSON.stringify(classified)) {
     collector.add('CANONICAL_INPUT', classificationsPath);
   }
@@ -34,6 +35,7 @@ export const validateGateBijection = (
 ): void => {
   const answers = node.answers;
   const routes = node.routes.answers.map(({ answer }) => answer);
+  // Both arrays are normalized into canonical order before serialization-based equality.
   if (
     new Set(answers).size !== answers.length ||
     new Set(routes).size !== routes.length ||

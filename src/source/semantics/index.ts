@@ -2,6 +2,7 @@ import {
   PIPELINE_LIMITS,
   appendJsonPointer,
   compareUnicodeCodePoints,
+  valueSchemaIsCompatible,
   type DiagnosticCollector,
   type JsonPointer,
 } from '../../foundation/index.js';
@@ -128,7 +129,9 @@ const validateNodeSemantics = (
             ...bodyEnvironment(environment, node, collector, path),
             regionOutput: node.body.outputSchema,
           }
-        : bodyEnvironment(environment, node, collector, path);
+        : node.kind === 'map'
+          ? bodyEnvironment(environment, node, collector, path)
+          : environment;
     validateSelectors(selectors, scoped, collector);
   }
   validateNestedRegions(node, path, environment, collector, registry);
@@ -142,6 +145,14 @@ const validateRegionSemantics = (
   registry: SourceRegistry,
 ): void => {
   registry.nodeCount += region.nodes.length;
+  for (const [index, exit] of region.exits.entries()) {
+    if (!valueSchemaIsCompatible(exit.outputSchema, region.outputSchema)) {
+      collector.add(
+        'DATA_SCHEMA_INCOMPATIBLE',
+        nestedPath(path, 'exits', String(index), 'outputSchema'),
+      );
+    }
+  }
   const reachable = validateRegionGraph(region, path, collector, registry);
   const environment: SelectorEnvironment = {
     ...inherited,

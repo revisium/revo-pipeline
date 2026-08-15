@@ -1,9 +1,10 @@
+import type { JsonPointer } from '../../../foundation/index.js';
 import type { ProgramRepeatCondition } from '../../../program/index.js';
 import { resolveSelector, type SelectorEnvironment } from '../selectors.js';
 
 export type ConditionResult =
   | { readonly ok: true; readonly value: boolean }
-  | { readonly ok: false };
+  | { readonly ok: false; readonly path: JsonPointer };
 
 export const evaluateRepeatCondition = (
   condition: ProgramRepeatCondition,
@@ -31,8 +32,12 @@ export const evaluateRepeatCondition = (
   if (condition.kind === 'exists') {
     return Object.freeze({ ok: true, value: selected.ok });
   }
-  if (!selected.ok || (typeof selected.value === 'object' && selected.value !== null)) {
-    return Object.freeze({ ok: false });
+  if (!selected.ok) {
+    return selected;
+  }
+  if (typeof selected.value === 'object' && selected.value !== null) {
+    const path = 'pointer' in condition.selector ? condition.selector.pointer : '';
+    return Object.freeze({ ok: false, path });
   }
   const scalar = selected.value;
   return Object.freeze({
