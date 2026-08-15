@@ -11,7 +11,7 @@ import {
   type NodeProvenance,
   type ProgramAdmissionReceipt,
   type ProgramAdmissionViolation,
-  type ProgramAnalysis,
+  type ProgramStructureMeasure,
 } from '../../program/index.js';
 import type { LoweredProgram } from '../lowering/index.js';
 
@@ -59,25 +59,25 @@ const crossingPath = (
 
 const violationPath = (
   violation: ProgramAdmissionViolation,
-  analysis: ProgramAnalysis,
+  structure: ProgramStructureMeasure,
   provenance: readonly NodeProvenance[],
 ): JsonPointer => {
   const ordered = [...provenance].sort(compareProvenance);
   if (violation.limit === 'nodes') {
     return crossingPath(ordered, violation.maximum, ({ programNodeId }) =>
-      analysis.structure.nodeIds.has(programNodeId) ? 1 : 0,
+      structure.nodeIds.has(programNodeId) ? 1 : 0,
     );
   }
   if (violation.limit === 'regions') {
     return crossingPath(ordered, violation.maximum, ({ programNodeId }) =>
-      analysis.structure.regionIds.has(programNodeId) ? 1 : 0,
+      structure.regionIds.has(programNodeId) ? 1 : 0,
     );
   }
   if (violation.limit === 'targets') {
     return crossingPath(
       ordered,
       violation.maximum,
-      ({ programNodeId }) => analysis.structure.nodeTargetCounts.get(programNodeId) ?? 0,
+      ({ programNodeId }) => structure.nodeTargetCounts.get(programNodeId) ?? 0,
     );
   }
   return ordered[0]?.sourcePath ?? '';
@@ -101,7 +101,7 @@ export const admitLoweredProgram = (lowered: LoweredProgram): LoweredProgramAdmi
   if (result.reason === 'bounds') {
     collector.add(
       'BOUND_EXCEEDED',
-      violationPath(result.violation, result.analysis, lowered.nodeProvenance),
+      violationPath(result.violation, result.structure, lowered.nodeProvenance),
     );
   } else {
     collector.add('CANONICAL_INPUT', '');

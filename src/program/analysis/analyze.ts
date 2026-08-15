@@ -1,16 +1,18 @@
 import type { PipelineProgram } from '../contracts/index.js';
 import { acknowledgementWork, reverseIndexWork } from './cancellation-envelope.js';
-import { PROGRAM_ADMISSION_LIMITS, type ProgramAdmissionLimit } from './limits.js';
+import {
+  PROGRAM_ADMISSION_LIMITS,
+  type ProgramAdmissionLimit,
+  type ProgramAdmissionViolation,
+} from './limits.js';
 import { measureProgramModuleGraph } from './module-graph.js';
 import { analyseRegionWork, type WorkEnvelope } from './quiescence.js';
 import { measureProgramResources, type ProgramResourceEnvelope } from './resources.js';
-import { measureProgramStructure, type ProgramStructureMeasure } from './structure.js';
-
-export type ProgramAdmissionViolation = {
-  readonly limit: ProgramAdmissionLimit;
-  readonly actual: number;
-  readonly maximum: number;
-};
+import {
+  firstProgramStructureViolation,
+  measureProgramStructure,
+  type ProgramStructureMeasure,
+} from './structure.js';
 
 export type ProgramAnalysis = {
   readonly structure: ProgramStructureMeasure;
@@ -61,6 +63,10 @@ const violation = (
 
 const firstViolation = (analysis: ProgramAnalysis): ProgramAdmissionViolation | null => {
   const { structure, work, resources } = analysis;
+  const structural = firstProgramStructureViolation(structure);
+  if (structural !== null) {
+    return structural;
+  }
   const synchronousWork = Math.max(
     work.start,
     work.resume,
@@ -68,12 +74,6 @@ const firstViolation = (analysis: ProgramAnalysis): ProgramAdmissionViolation | 
     reverseIndexWork(resources.cancellation) + acknowledgementWork(resources.cancellation),
   );
   const checks: readonly (readonly [ProgramAdmissionLimit, number])[] = [
-    ['modules', structure.modules],
-    ['nodes', structure.nodes],
-    ['regions', structure.regions],
-    ['targets', structure.targets],
-    ['nestingDepth', structure.nestingDepth],
-    ['callDepth', structure.callDepth],
     ['synchronousWork', synchronousWork],
     ['liveFrames', resources.frames],
     ['liveOperations', resources.operations],
@@ -94,8 +94,17 @@ const firstViolation = (analysis: ProgramAnalysis): ProgramAdmissionViolation | 
 
 export const analyzeProgram = (program: PipelineProgram): ProgramAnalysisResult => {
   const moduleGraph = measureProgramModuleGraph(program);
+  const structure = measureProgramStructure(program, moduleGraph);
+  return analyzeMeasuredProgram(program, moduleGraph, structure);
+};
+
+export const analyzeMeasuredProgram = (
+  program: PipelineProgram,
+  moduleGraph: import('./module-graph.js').ProgramModuleGraph,
+  structure: ProgramStructureMeasure,
+): ProgramAnalysisResult => {
   const analysis: ProgramAnalysis = Object.freeze({
-    structure: measureProgramStructure(program, moduleGraph),
+    structure,
     work: measureWork(program, moduleGraph.dependencyOrder),
     resources: measureProgramResources(program, moduleGraph.dependencyOrder),
   });

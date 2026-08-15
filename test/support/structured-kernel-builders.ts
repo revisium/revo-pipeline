@@ -119,33 +119,26 @@ export const parallelActivityProgram = (
   remaining: 'drain' | 'cancel',
   policy: Extract<ProgramParallelNode, { readonly mode: 'generic' }>['policy'] = { kind: 'all' },
   leftInput: ProgramValueMapping = {},
-  branchKeys: readonly [string, string] = ['left', 'right'],
+  branchKeys: readonly [string, string, ...string[]] = ['left', 'right'],
 ) => {
+  const branch = (key: string, index: number): ProgramParallelBranch => ({
+    key,
+    input: index === 0 ? leftInput : {},
+    region: activityRegion(200 + index * 100),
+    exits: [
+      { outcome: 'cancelled', classification: 'cancelled' },
+      { outcome: 'failed', classification: 'failed' },
+      { outcome: 'succeeded', classification: 'qualifies' },
+    ],
+  });
   const parallel: ProgramParallelNode = {
     kind: 'parallel',
     id: structuredId(1),
     mode: 'generic',
     branches: [
-      {
-        key: branchKeys[0],
-        input: leftInput,
-        region: activityRegion(200),
-        exits: [
-          { outcome: 'cancelled', classification: 'cancelled' },
-          { outcome: 'failed', classification: 'failed' },
-          { outcome: 'succeeded', classification: 'qualifies' },
-        ],
-      },
-      {
-        key: branchKeys[1],
-        input: {},
-        region: activityRegion(300),
-        exits: [
-          { outcome: 'cancelled', classification: 'cancelled' },
-          { outcome: 'failed', classification: 'failed' },
-          { outcome: 'succeeded', classification: 'qualifies' },
-        ],
-      },
+      branch(branchKeys[0], 0),
+      branch(branchKeys[1], 1),
+      ...branchKeys.slice(2).map((key, index) => branch(key, index + 2)),
     ],
     policy,
     remaining,

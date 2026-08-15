@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canonicalizeOwnedValue,
+  valueSchemaIsCompatible,
   valueSchemasEqual,
   type ValueSchema,
 } from '../../src/foundation/index.js';
@@ -75,6 +76,16 @@ const schemaPopulation = (): readonly ValueSchema[] => {
 };
 
 describe('ValueSchema equality equivalence', () => {
+  it('recognizes union coverage in producer-to-consumer compatibility', () => {
+    const integer: ValueSchema = { type: 'integer' };
+    const string: ValueSchema = { type: 'string' };
+    const union: ValueSchema = { anyOf: [integer, string] };
+
+    expect(valueSchemaIsCompatible(integer, union)).toBe(true);
+    expect(valueSchemaIsCompatible(union, union)).toBe(true);
+    expect(valueSchemaIsCompatible(union, integer)).toBe(false);
+  });
+
   it('matches canonical equality for the exhaustive generated variant matrix', () => {
     const schemas = schemaPopulation();
 

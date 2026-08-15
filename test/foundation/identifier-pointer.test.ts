@@ -59,10 +59,11 @@ describe('RFC 6901 JSON pointers', () => {
     expect(readJsonPointer(value, '/')).toEqual({ found: true, value: 'empty-token' });
   });
 
-  it('treats sparse and accessor properties as missing without invoking a getter', () => {
+  it('treats sparse, non-enumerable, and accessor properties as missing without getters', () => {
     let getterCalls = 0;
     const value: { readonly items: unknown[]; readonly secret?: string } = { items: [] };
     value.items.length = 1;
+    Object.defineProperty(value, 'nonEnumerable', { enumerable: false, value: 'secret' });
     Object.defineProperty(value, 'secret', {
       enumerable: true,
       get() {
@@ -72,6 +73,7 @@ describe('RFC 6901 JSON pointers', () => {
     });
 
     expect(readJsonPointer(value, '/items/0')).toEqual({ found: false });
+    expect(readJsonPointer(value, '/nonEnumerable')).toEqual({ found: false });
     expect(readJsonPointer(value, '/secret')).toEqual({ found: false });
     expect(getterCalls).toBe(0);
   });

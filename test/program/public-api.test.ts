@@ -410,6 +410,23 @@ describe('public authoring and digest helpers', () => {
           ],
         };
       })(),
+      (() => {
+        const program = structuredClone(base.program);
+        const module = program.modules[0];
+        const node = module?.region.nodes[0];
+        if (module === undefined || node === undefined) {
+          throw new TypeError('Expected a compiled Program node.');
+        }
+        return {
+          ...program,
+          modules: [
+            {
+              ...module,
+              region: { ...module.region, id: node.id },
+            },
+          ],
+        };
+      })(),
       nestedProgram(33),
     ];
 

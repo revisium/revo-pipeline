@@ -52,7 +52,9 @@ export const appendJsonPointer = (pointer: JsonPointer, token: string): JsonPoin
 const readOwnDataProperty = (value: object, token: string): JsonPointerLookup => {
   try {
     const descriptor = Reflect.getOwnPropertyDescriptor(value, token);
-    return descriptor && 'value' in descriptor ? { found: true, value: descriptor.value } : missing;
+    return descriptor?.enumerable && 'value' in descriptor
+      ? { found: true, value: descriptor.value }
+      : missing;
   } catch {
     return missing;
   }

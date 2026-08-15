@@ -35,7 +35,7 @@ command targets, and map results use the ordering declared by their owning speci
 ## Serialization and hash preimage
 
 Normalized data MUST serialize with RFC 8785 JSON Canonicalization Scheme to UTF-8 with
-no BOM or whitespace. Implementations MUST use exact `canonicalize@3.0.0` behavior or
+no BOM or whitespace. Implementations MUST use exact `canonicalize@4.0.0` behavior or
 prove byte equality for every vector. They MUST use SHA-256 from the platform crypto
 implementation; Node uses `node:crypto`.
 

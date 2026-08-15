@@ -1,4 +1,5 @@
 import type { PipelineProgram, ProgramRegion } from '../contracts/index.js';
+import { topologicalIndexes } from '../topological-order.js';
 
 export type ProgramModuleGraph = {
   readonly dependencyOrder: readonly string[];
@@ -29,21 +30,24 @@ const collectRegionDependencies = (
 };
 
 const dependencyOrder = (dependencies: ReadonlyMap<string, ReadonlySet<string>>): string[] => {
-  const remaining = new Set(dependencies.keys());
-  const ordered: string[] = [];
-  while (remaining.size > 0) {
-    const ready = [...remaining].filter((key) =>
-      [...(dependencies.get(key) ?? [])].every((dependency) => !remaining.has(dependency)),
-    );
-    if (ready.length === 0) {
-      break;
+  const keys = [...dependencies.keys()];
+  const indexByKey = new Map(keys.map((key, index) => [key, index]));
+  const dependents = keys.map(() => [] as number[]);
+  for (const [key, values] of dependencies) {
+    const dependent = indexByKey.get(key);
+    if (dependent === undefined) {
+      continue;
     }
-    for (const key of ready) {
-      remaining.delete(key);
-      ordered.push(key);
+    for (const dependency of values) {
+      const dependencyIndex = indexByKey.get(dependency);
+      if (dependencyIndex !== undefined) {
+        dependents[dependencyIndex]?.push(dependent);
+      }
     }
   }
-  return ordered;
+  return topologicalIndexes(dependents, 'fifo')
+    .indexes.map((index) => keys[index]!)
+    .filter(Boolean);
 };
 
 const maximumCallDepth = (

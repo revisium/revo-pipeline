@@ -84,6 +84,7 @@ export const casesCoverFiniteDomain = (
   const numericValues = new Set(
     values.filter((value): value is number => typeof value === 'number'),
   );
+  // Admitted numeric scalars are safe integers, so interval cardinality proves exhaustiveness.
   const expectedCount = finite.numericIntervals.reduce(
     (sum, [minimum, maximum]) => sum + maximum - minimum + 1,
     0,

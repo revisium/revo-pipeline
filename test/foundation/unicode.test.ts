@@ -21,6 +21,11 @@ const referenceCompare = (left: string, right: string): number => {
 const sign = (value: number): number => Math.sign(value);
 
 describe('Unicode scalar utilities', () => {
+  it('uses the platform well-formed UTF-16 predicate at the NFC boundary', () => {
+    expect('😀'.isWellFormed()).toBe(true);
+    expect('\ud800'.isWellFormed()).toBe(false);
+  });
+
   it('matches the allocating reference across BMP, astral, and prefix populations', () => {
     const scalars = ['', '\0', 'A', 'é', '\u{e000}', '\u{ffff}', '😀', '\u{10000}', '\u{10ffff}'];
     const population = [

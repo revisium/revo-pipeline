@@ -1,5 +1,6 @@
 import {
   appendJsonPointer,
+  scalarKey,
   type DiagnosticCollector,
   type JsonPointer,
   type JsonScalar,
@@ -346,7 +347,7 @@ export const validateChoice = (
   for (const choiceCase of node.cases) {
     const local = new Set<string>();
     for (const value of domainValues(choiceCase.when)) {
-      const key = `${typeof value}:${JSON.stringify(value)}`;
+      const key = scalarKey(value);
       if (local.has(key)) {
         continue;
       }

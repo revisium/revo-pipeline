@@ -58,4 +58,16 @@ describe('owned-envelope hostile reflection', () => {
       value: ['safe'],
     });
   });
+
+  it('bounds repeated visits through a shared acyclic object graph', () => {
+    let shared: unknown = null;
+    for (let depth = 0; depth < 8; depth += 1) {
+      shared = [shared, shared];
+    }
+
+    expect(normalizeOwnedEnvelope(shared, 16, undefined, 64)).toEqual({
+      ok: false,
+      failure: { code: 'BOUND_EXCEEDED', path: '/0/0/0/1/1/1/1/0' },
+    });
+  });
 });

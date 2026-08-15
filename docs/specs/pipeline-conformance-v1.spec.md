@@ -129,7 +129,7 @@ forbidden.
 ## Exact dependency contract
 
 Production dependencies MUST be exactly `typebox@1.3.10` and
-`canonicalize@3.0.0`. SHA-256 MUST use built-in `node:crypto`. `fast-check` MAY be an
+`canonicalize@4.0.0`. SHA-256 MUST use built-in `node:crypto`. `fast-check` MAY be an
 exact-pinned development dependency. Ajv and XState MUST NOT be production dependencies.
 No `revo-run`, DBOS, Prisma, queue, NestJS, GraphQL, MCP, CLI, model/provider SDK,
 persistence, timer, or authorization dependency is allowed.

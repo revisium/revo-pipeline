@@ -1,11 +1,11 @@
 import {
   appendJsonPointer,
-  compareUnicodeCodePoints,
   readJsonPointer,
   type JsonPointer,
   type JsonValue,
 } from '../../../foundation/index.js';
 import type { ProgramMapNode } from '../../../program/index.js';
+import { findSortedIndex } from '../../program/lookup.js';
 import { resolveSelector, type SelectorEnvironment } from '../selectors.js';
 import {
   constructItemInputs,
@@ -42,28 +42,17 @@ export const sourceIndexFor = (
   itemKey: string,
   counters?: MapPreflightCounters,
 ): number | null => {
-  let lower = 0;
-  let upper = owner.itemKeys.length - 1;
-  while (lower <= upper) {
-    const middle = lower + Math.floor((upper - lower) / 2);
-    const candidate = owner.itemKeys[middle];
-    if (candidate === undefined) {
-      return null;
-    }
-    if (counters !== undefined) {
-      counters.sourceIndexComparisons += 1;
-    }
-    const order = compareUnicodeCodePoints(candidate, itemKey);
-    if (order === 0) {
-      return owner.itemSourceIndexes[middle] ?? null;
-    }
-    if (order < 0) {
-      lower = middle + 1;
-    } else {
-      upper = middle - 1;
-    }
-  }
-  return null;
+  const index = findSortedIndex(
+    owner.itemKeys,
+    itemKey,
+    (candidate) => candidate,
+    () => {
+      if (counters !== undefined) {
+        counters.sourceIndexComparisons += 1;
+      }
+    },
+  );
+  return index === null ? null : (owner.itemSourceIndexes[index] ?? null);
 };
 
 const descriptorFrom = (

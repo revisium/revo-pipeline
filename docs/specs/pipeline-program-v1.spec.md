@@ -117,6 +117,10 @@ region. Every module top-region `inputSchema` is canonically equal to its module
 `inputSchema`; all other region schemas are the normalized receiving schemas emitted by
 the compiler.
 
+Every Program region exit `outputSchema` MUST be accepted by its region `outputSchema`
+under the Source v1 compatibility relation. Program admission enforces this rule for both
+compiler output and host-supplied Program IR before kernel execution.
+
 ## Program selectors
 
 ```ts

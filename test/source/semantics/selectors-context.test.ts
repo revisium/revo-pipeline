@@ -73,6 +73,23 @@ describe('source selectors and contexts', () => {
     ).toHaveLength(1);
   });
 
+  it('rejects repeat-result selectors in the pre-body initial input', () => {
+    const repeat = sourceNodeBuilders.repeat();
+    expect(
+      sourceDiagnostics(
+        sourceForNode({
+          ...repeat,
+          initialInput: {
+            iteration: { kind: 'repeat', value: 'iteration', pointer: '' },
+          },
+        }),
+      ),
+    ).toContainEqual({
+      code: 'DATA_SCOPE',
+      path: '/modules/0/region/nodes/0/initialInput/iteration',
+    });
+  });
+
   it('reports missing producers and impossible static pointers precisely', () => {
     const missingProducer: SourceNode = {
       kind: 'end',

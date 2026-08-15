@@ -23,6 +23,7 @@ const outcomeKeysMatch = (
   callOutcomes: readonly { readonly outcome: string }[],
   moduleOutcomes: readonly { readonly outcome: string }[],
 ): boolean =>
+  // Source normalization makes serialization a valid ordered-value equality check here.
   JSON.stringify(callOutcomes.map(({ outcome }) => outcome)) ===
   JSON.stringify(moduleOutcomes.map(({ outcome }) => outcome));
 

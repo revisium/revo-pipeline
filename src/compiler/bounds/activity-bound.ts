@@ -239,6 +239,9 @@ export const proveActivityBound = (
     collector.add('BOUND_EXCEEDED', '/maximumTotalActivities');
   }
   const diagnostics = collector.finalize();
+  if (maximumActivities === null && diagnostics.length === 0) {
+    throw new TypeError('Invalid internal activity bound state.');
+  }
   return diagnostics.length > 0 || maximumActivities === null
     ? { ok: false, diagnostics }
     : { ok: true, maximumActivities };

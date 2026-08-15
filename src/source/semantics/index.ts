@@ -2,6 +2,7 @@ import {
   PIPELINE_LIMITS,
   appendJsonPointer,
   compareUnicodeCodePoints,
+  valueSchemaIsCompatible,
   type DiagnosticCollector,
   type JsonPointer,
 } from '../../foundation/index.js';
@@ -122,16 +123,26 @@ const validateNodeSemantics = (
     validateGateBijection(node, path, collector);
   }
   for (const [selectors, timing] of nodeSelectorGroups(node, path)) {
-    const scoped =
-      timing === 'child-exit' && (node.kind === 'repeat' || node.kind === 'map')
-        ? {
-            ...bodyEnvironment(environment, node, collector, path),
-            regionOutput: node.body.outputSchema,
-          }
-        : bodyEnvironment(environment, node, collector, path);
+    const scoped = selectorEnvironmentFor(node, timing, environment, collector, path);
     validateSelectors(selectors, scoped, collector);
   }
   validateNestedRegions(node, path, environment, collector, registry);
+};
+
+const selectorEnvironmentFor = (
+  node: SourceNode,
+  timing: 'base' | 'child-exit',
+  environment: SelectorEnvironment,
+  collector: DiagnosticCollector,
+  path: JsonPointer,
+): SelectorEnvironment => {
+  if (timing === 'child-exit' && (node.kind === 'map' || node.kind === 'repeat')) {
+    return {
+      ...bodyEnvironment(environment, node, collector, path),
+      regionOutput: node.body.outputSchema,
+    };
+  }
+  return node.kind === 'map' ? bodyEnvironment(environment, node, collector, path) : environment;
 };
 
 const validateRegionSemantics = (
@@ -142,6 +153,14 @@ const validateRegionSemantics = (
   registry: SourceRegistry,
 ): void => {
   registry.nodeCount += region.nodes.length;
+  for (const [index, exit] of region.exits.entries()) {
+    if (!valueSchemaIsCompatible(exit.outputSchema, region.outputSchema)) {
+      collector.add(
+        'DATA_SCHEMA_INCOMPATIBLE',
+        nestedPath(path, 'exits', String(index), 'outputSchema'),
+      );
+    }
+  }
   const reachable = validateRegionGraph(region, path, collector, registry);
   const environment: SelectorEnvironment = {
     ...inherited,

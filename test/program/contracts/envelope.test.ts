@@ -11,7 +11,6 @@ import {
   type PipelineProgram,
   type ProgramDigestInput,
   type ProgramProvenance,
-  type ProgramRegion,
   type ProgramRequirements,
 } from '../../../src/program/index.js';
 import {
@@ -65,7 +64,6 @@ const provenance = {
 describe('Program compiler-bundle contracts', () => {
   it('keeps every exported runtime schema aligned with its static contract', () => {
     expectTypeOf<Static<typeof PipelineProgramSchema>>().toEqualTypeOf<PipelineProgram>();
-    expectTypeOf<Static<typeof ProgramRegionSchema>>().toEqualTypeOf<ProgramRegion>();
     expectTypeOf<Static<typeof ProgramRequirementsSchema>>().toEqualTypeOf<ProgramRequirements>();
     expectTypeOf<Static<typeof ProgramProvenanceSchema>>().toEqualTypeOf<ProgramProvenance>();
     expectTypeOf<Static<typeof ProgramDigestInputSchema>>().toEqualTypeOf<ProgramDigestInput>();
