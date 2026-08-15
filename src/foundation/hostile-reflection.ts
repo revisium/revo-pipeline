@@ -32,3 +32,11 @@ export const reflectIsArray = (value: object): boolean | null => {
     return null;
   }
 };
+
+export const readOwnDataValue = (input: unknown, key: PropertyKey): unknown => {
+  if (typeof input !== 'object' || input === null) {
+    return undefined;
+  }
+  const descriptor = reflectOwnDescriptor(input, key);
+  return descriptor !== null && 'value' in descriptor ? descriptor.value : undefined;
+};

@@ -1,6 +1,11 @@
+import canonicalize from 'canonicalize';
 import { describe, expect, it } from 'vitest';
 
-import { canonicalizePortableValue, computeDomainDigest } from '../../src/foundation/index.js';
+import {
+  canonicalizeOwnedValue,
+  canonicalizePortableValue,
+  computeDomainDigest,
+} from '../../src/foundation/index.js';
 
 const canonical = (value: unknown) => {
   const result = canonicalizePortableValue(value);
@@ -11,8 +16,19 @@ const canonical = (value: unknown) => {
   return result.canonical;
 };
 
+const captureOwnedCanonicalFailure = (value: unknown): Error => {
+  try {
+    canonicalizeOwnedValue(value);
+  } catch (error) {
+    if (error instanceof Error) {
+      return error;
+    }
+  }
+  throw new TypeError('Expected owned canonicalization to fail.');
+};
+
 describe('validated RFC 8785 canonicalization', () => {
-  it('uses exact canonicalize@3.0.0 bytes after portable validation', () => {
+  it('uses exact canonicalize@4.0.0 bytes after portable validation', () => {
     const left = canonical({ z: -0, text: 'é', escaped: '\b\n"\\', a: [2, 1] });
     const right = canonical({ a: [2, 1], escaped: '\b\n"\\', text: 'é', z: 0 });
 
@@ -106,5 +122,73 @@ describe('validated RFC 8785 canonicalization', () => {
     expect(Object.keys(input.order)).toEqual(originalOrderKeys);
     expect(input).toEqual(inputSnapshot);
     expect(Object.is(input.zero, -0)).toBe(true);
+  });
+});
+
+describe('owned canonical value invariants', () => {
+  it('accepts deep trusted-owned data beyond the portable depth limit without mutation', () => {
+    let value: unknown = 'é';
+    for (let depth = 0; depth < 64; depth += 1) {
+      value = { nested: value };
+    }
+    const snapshot = JSON.stringify(value);
+
+    const portable = canonicalizePortableValue(value);
+    expect(portable.ok).toBe(false);
+    if (portable.ok) {
+      throw new TypeError('Expected portable depth rejection.');
+    }
+    expect(portable.failure.code).toBe('CANONICAL_INPUT');
+    expect(canonicalizeOwnedValue(value).text).toContain('é');
+    expect(JSON.stringify(value)).toBe(snapshot);
+  });
+
+  it.each([
+    ['fractional number', { value: 1.5 }],
+    ['unsafe integer', { value: Number.MAX_SAFE_INTEGER + 1 }],
+    ['decomposed string', { value: 'e\u0301' }],
+    ['unpaired surrogate string', { value: '\ud800' }],
+    ['decomposed object key', Object.fromEntries([['e\u0301', null]])],
+    ['unpaired surrogate object key', Object.fromEntries([['\ud800', null]])],
+  ])('rejects an invalid owned %s with one fixed error', (_name, value) => {
+    const error = captureOwnedCanonicalFailure(value);
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error.message).toBe('Invalid owned canonical value.');
+    expect(Object.hasOwn(error, 'cause')).toBe(false);
+  });
+
+  it('delegates trusted owned serialization directly to canonicalize@4.0.0', () => {
+    const value = { order: { '\ue000': 2, '😀': 1 }, text: 'é', values: [2, 1] };
+    expect(canonicalizeOwnedValue(value).text).toBe(canonicalize(value));
+  });
+
+  it('keeps hostile reflection at the portable boundary before library serialization', () => {
+    let getterCalls = 0;
+    const accessor = {};
+    Object.defineProperty(accessor, 'secret', {
+      enumerable: true,
+      get() {
+        getterCalls += 1;
+        throw new Error('getter-secret');
+      },
+    });
+    const hostile = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error('proxy-secret');
+        },
+      },
+    );
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+
+    for (const value of [accessor, hostile, revoked.proxy]) {
+      expect(canonicalizePortableValue(value)).toMatchObject({
+        ok: false,
+        failure: { code: 'CANONICAL_INPUT' },
+      });
+    }
+    expect(getterCalls).toBe(0);
   });
 });

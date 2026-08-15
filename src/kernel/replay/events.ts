@@ -3,6 +3,7 @@ import { Compile } from 'typebox/compile';
 import {
   canonicalizeOwnedValue,
   normalizePortableValue,
+  readOwnDataValue,
   type Digest,
 } from '../../foundation/index.js';
 import { PipelineEventSchema, type PipelineEvent } from '../contracts/events.js';
@@ -31,9 +32,7 @@ const looksLikeExecutorOutcome = (value: unknown): boolean => {
   if (Object.hasOwn(value, 'status') || Object.hasOwn(value, 'outcome')) {
     return true;
   }
-  const descriptor = Reflect.getOwnPropertyDescriptor(value, 'kind');
-  const kind: unknown =
-    descriptor !== undefined && 'value' in descriptor ? descriptor.value : undefined;
+  const kind = readOwnDataValue(value, 'kind');
   return typeof kind === 'string' && kind.startsWith('activity') && !activityEvents.has(kind);
 };
 

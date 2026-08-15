@@ -85,10 +85,10 @@ const withBranchResult = (
     Object.fromEntries(Object.entries(owner.branchRegionKeys).filter(([key]) => key !== branchKey)),
   );
   if (owner.mode === 'generic' && node.mode === 'generic') {
-    const branchResults = Object.freeze({
-      ...owner.branchResults,
-      [branchKey]: genericResult(node, branchKey, result),
-    });
+    const branchResults = canonicalRecord([
+      ...Object.entries(owner.branchResults),
+      [branchKey, genericResult(node, branchKey, result)],
+    ]);
     const selected = classifyGenericParallel(node, branchResults, owner.selected);
     return Object.freeze({
       ...owner,
@@ -104,10 +104,10 @@ const withBranchResult = (
     });
   }
   if (owner.mode === 'votes' && node.mode === 'votes') {
-    const branchResults = Object.freeze({
-      ...owner.branchResults,
-      [branchKey]: voteResult(result),
-    });
+    const branchResults = canonicalRecord([
+      ...Object.entries(owner.branchResults),
+      [branchKey, voteResult(result)],
+    ]);
     const selected = classifyVoteParallel(node, branchResults, owner.selected);
     return Object.freeze({
       ...owner,
@@ -124,6 +124,15 @@ const withBranchResult = (
   }
   return owner;
 };
+
+const canonicalRecord = <Value>(
+  entries: readonly (readonly [string, Value])[],
+): Readonly<Record<string, Value>> =>
+  Object.freeze(
+    Object.fromEntries(
+      [...entries].sort(([left], [right]) => compareUnicodeCodePoints(left, right)),
+    ),
+  );
 
 const cancelUnstartedBranches = (
   context: RuntimeContext,
@@ -144,21 +153,27 @@ const cancelUnstartedBranches = (
   if (!pruneFrameTrees(context.draft, idle, context.discard)) {
     return owner;
   }
-  const branchRegionKeys = Object.freeze(Object.fromEntries(branchRegionKeyEntries));
-  const cancelled = Object.freeze(Object.fromEntries(cancelledEntries));
+  const branchRegionKeys = canonicalRecord(branchRegionKeyEntries);
+  const cancelled = canonicalRecord(cancelledEntries);
   if (owner.mode === 'generic') {
     return Object.freeze({
       ...owner,
       mode: 'generic',
       branchRegionKeys,
-      branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
+      branchResults: canonicalRecord([
+        ...Object.entries(owner.branchResults),
+        ...Object.entries(cancelled),
+      ]),
     });
   }
   return Object.freeze({
     ...owner,
     mode: 'votes',
     branchRegionKeys,
-    branchResults: Object.freeze({ ...owner.branchResults, ...cancelled }),
+    branchResults: canonicalRecord([
+      ...Object.entries(owner.branchResults),
+      ...Object.entries(cancelled),
+    ]),
   });
 };
 
@@ -258,13 +273,7 @@ export const settleParallelOwner = (
   if (!total || owner.selected === null || context.draft.regionCancellations.has(owner.key)) {
     return true;
   }
-  const ordered = Object.fromEntries(
-    Object.entries(owner.branchResults).sort(([left], [right]) =>
-      compareUnicodeCodePoints(left, right),
-    ),
-  );
-  const completed = Object.freeze({ ...owner, branchResults: Object.freeze(ordered) });
-  context.draft.setFrame(completed);
+  const completed = owner;
   context.draft.deleteFrame(owner.key);
   const cleanup = context.cleanupFor(owner.key);
   if (cleanup !== null && (cleanup.ownerKeys.length > 0 || cleanup.run)) {

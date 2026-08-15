@@ -8,6 +8,7 @@ import type {
 import type { MachineFrame } from '../../contracts/frames.js';
 import type { RegionMachineFrame } from '../../contracts/region-frames.js';
 import { findSorted, type LookupCounters } from '../../program/lookup.js';
+import { walkFrameAncestry } from '../../state/frame-ancestry.js';
 import type { TransitionDraft } from './draft.js';
 
 type RegionOwner = {
@@ -84,17 +85,15 @@ const moduleInputFor = (
   frame: RegionMachineFrame,
   draft: TransitionDraft,
 ): RegionMachineFrame['scopeInput'] | null => {
-  let current: MachineFrame | undefined = frame;
-  for (let depth = 0; depth <= 64; depth += 1) {
+  let input: RegionMachineFrame['scopeInput'] | null = null;
+  walkFrameAncestry(draft.frames, frame.key, (current) => {
     if (current.kind === 'rootRegion' || current.kind === 'callRegion') {
-      return current.scopeInput;
+      input = current.scopeInput;
+      return false;
     }
-    current = draft.frames.get(current.parentFrameKey);
-    if (current === undefined) {
-      return null;
-    }
-  }
-  return null;
+    return true;
+  });
+  return input;
 };
 
 const nestedRegionOwner = (

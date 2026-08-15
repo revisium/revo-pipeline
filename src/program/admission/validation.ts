@@ -3,9 +3,15 @@ import { Compile } from 'typebox/compile';
 import {
   PIPELINE_LIMITS,
   normalizeOwnedEnvelope,
+  valueSchemaIsCompatible,
   valueSchemasEqual,
 } from '../../foundation/index.js';
-import { analyzeProgram } from '../analysis/index.js';
+import {
+  analyzeMeasuredProgram,
+  firstProgramStructureViolation,
+  measureProgramModuleGraph,
+  measureProgramStructure,
+} from '../analysis/index.js';
 import {
   PipelineProgramSchema,
   type PipelineProgram,
@@ -44,7 +50,7 @@ export type OwnedProgramAdmission =
   | {
       readonly ok: false;
       readonly reason: 'bounds';
-      readonly analysis: import('../analysis/index.js').ProgramAnalysis;
+      readonly structure: import('../analysis/index.js').ProgramStructureMeasure;
       readonly violation: import('../analysis/index.js').ProgramAdmissionViolation;
     };
 
@@ -100,6 +106,7 @@ const indexNode = (
 ): boolean => {
   if (
     index.nodeIds.has(node.id) ||
+    index.regions.has(node.id) ||
     !hasValidStructuredSemantics(node, counters) ||
     (node.kind === 'end' && !task.region.exits.some(({ outcome }) => outcome === node.outcome)) ||
     (node.kind === 'call' && !callMatchesModule(node, index.modules))
@@ -133,8 +140,12 @@ const indexRegion = (
   const { region } = task;
   if (
     index.regions.has(region.id) ||
+    index.nodeIds.has(region.id) ||
     !isStrictlySorted(region.nodes, ({ id }) => id) ||
     !isStrictlySorted(region.exits, ({ outcome }) => outcome) ||
+    !region.exits.every(({ outputSchema }) =>
+      valueSchemaIsCompatible(outputSchema, region.outputSchema),
+    ) ||
     !hasValidRegionGraph(region)
   ) {
     return false;
@@ -197,6 +208,17 @@ export const admitSchemaValidatedPipelineProgram = (
   program: PipelineProgram,
   counters?: ProgramValidationCounters,
 ): OwnedProgramAdmission => {
+  const moduleGraph = measureProgramModuleGraph(program);
+  const structure = measureProgramStructure(program, moduleGraph);
+  const structuralViolation = firstProgramStructureViolation(structure);
+  if (structuralViolation !== null) {
+    return Object.freeze({
+      ok: false,
+      reason: 'bounds',
+      structure,
+      violation: structuralViolation,
+    });
+  }
   const index = buildProgramIndex(program, counters);
   if (index === null || !hasValidProgramDataflow(index.modules)) {
     return Object.freeze({ ok: false, reason: 'invalid' });
@@ -204,12 +226,12 @@ export const admitSchemaValidatedPipelineProgram = (
   if (counters !== undefined) {
     counters.admissionAnalyses += 1;
   }
-  const analyzed = analyzeProgram(program);
+  const analyzed = analyzeMeasuredProgram(program, moduleGraph, structure);
   if (!analyzed.ok) {
     return Object.freeze({
       ok: false,
       reason: 'bounds',
-      analysis: analyzed.analysis,
+      structure: analyzed.analysis.structure,
       violation: analyzed.violation,
     });
   }

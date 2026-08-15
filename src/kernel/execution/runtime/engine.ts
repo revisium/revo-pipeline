@@ -1,6 +1,8 @@
 import {
+  PIPELINE_LIMITS,
   isDigest,
   normalizePortableValue,
+  readOwnDataValue,
   type Digest,
   type PipelineFailure,
 } from '../../../foundation/index.js';
@@ -28,15 +30,7 @@ Object.freeze(emptyCommands);
 function ownValue(input: KernelProgram, key: 'program'): KernelProgram['program'] | undefined;
 function ownValue(input: unknown, key: string): unknown;
 function ownValue(input: unknown, key: string): unknown {
-  if (typeof input !== 'object' || input === null) {
-    return undefined;
-  }
-  try {
-    const descriptor = Reflect.getOwnPropertyDescriptor(input, key);
-    return descriptor !== undefined && 'value' in descriptor ? descriptor.value : undefined;
-  } catch {
-    return undefined;
-  }
+  return readOwnDataValue(input, key);
 }
 
 const rejected = (
@@ -80,10 +74,10 @@ const invariantAdvance = (state: PipelineState, rootFrameKey: Digest): PipelineT
     ),
   });
 
-export function createInitialPipelineState(
+const initializePipelineState = (
   bundleInput: unknown,
   input: unknown,
-): InitialPipelineTransition {
+): InitialPipelineTransition => {
   const inspection = inspectKernelProgram(bundleInput);
   if (!inspection.ok) {
     return initializationFailure(bundleInput, 'PROGRAM_INVALID');
@@ -120,6 +114,17 @@ export function createInitialPipelineState(
         ),
       })
     : Object.freeze({ kind: 'initialized', ...result });
+};
+
+export function createInitialPipelineState(
+  bundleInput: unknown,
+  input: unknown,
+): InitialPipelineTransition {
+  try {
+    return initializePipelineState(bundleInput, input);
+  } catch {
+    return initializationFailure(bundleInput, 'PROGRAM_INVALID');
+  }
 }
 
 const rootFrameKey = (state: PipelineState): Digest | null =>
@@ -132,7 +137,7 @@ const trustedBundle = (input: KernelProgram, programDigest: Digest): KernelProgr
   return typeof program === 'object' &&
     program !== null &&
     Array.isArray(modules) &&
-    modules.length <= 64 &&
+    modules.length <= PIPELINE_LIMITS.sourcePackage.modules &&
     typeof entryModule === 'string'
     ? Object.freeze({ program, programDigest })
     : null;

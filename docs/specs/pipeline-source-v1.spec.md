@@ -220,6 +220,12 @@ that region's exits and its output mapping MUST satisfy that exit schema. Exitin
 module region produces the module outcome/output. A structured parent consumes child
 region exits; a child `end` never terminates the whole pipeline directly.
 
+Every region exit `outputSchema` MUST be accepted by that region's `outputSchema`. Exact
+schema equality is compatible; an integer schema is compatible with a number schema when
+its declared bounds fit; and a union is compatible only when every producer alternative is
+accepted by the consumer. A module top region `outputSchema` remains exactly equal to the
+module `outputSchema`.
+
 Each region MUST have one reachable entry, unique node keys and exit outcomes, no
 unreachable node, and no path that can avoid an exit outside declared repeat/map bounds.
 Every target resolves inside the current region. Calls resolve modules in the package.
@@ -495,6 +501,10 @@ participation MUST be positive and no greater than `minimumParticipants`. Indepe
 thresholds MUST be positive; each MUST be no greater than `minimumParticipants`, and
 their sum MUST exceed `maximumParticipants`. Thus the policy is reachable and mutually
 exclusive for every allowed materialized count.
+
+After materialization selects an agent strategy, compile-time dataflow validates only the
+nodes reachable through that selected route. Structural source validation still applies to
+every node, including strategy-dead nodes.
 
 The slot `input` mapping MUST statically construct an object compatible with its
 `inputSchema` in the containing region scope. A `single` lowering applies that mapping

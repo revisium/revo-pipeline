@@ -193,9 +193,10 @@ const validateCoverage = (
       validateSlot(slot, index, agent, diagnostics);
     }
   }
+  const coveredPaths = new Set(slots.map(({ sourcePath }) => sourcePath));
   if (
     slots.length !== agents.length ||
-    agents.some(({ sourcePath }) => !slots.some((slot) => slot.sourcePath === sourcePath))
+    agents.some(({ sourcePath }) => !coveredPaths.has(sourcePath))
   ) {
     diagnostics.add('CANONICAL_INPUT', '/slots');
   }

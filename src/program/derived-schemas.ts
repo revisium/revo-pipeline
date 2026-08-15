@@ -46,11 +46,11 @@ export const closedObject = (properties: Readonly<Record<string, ValueSchema>>):
   });
 };
 
-const union = (schemas: readonly ValueSchema[]): ValueSchema => {
+export const schemaUnion = (schemas: readonly ValueSchema[]): ValueSchema | null => {
   const unique = new Map(schemas.map((schema) => [canonicalizeOwnedValue(schema).text, schema]));
   const [first, second, ...rest] = [...unique.values()];
   if (first === undefined) {
-    return EmptyObjectSchema;
+    return null;
   }
   if (second === undefined) {
     return first;
@@ -70,7 +70,7 @@ export const genericParallelOutputSchema = (
   const branchProperties = Object.fromEntries(
     branches.map((branch) => [
       branch.key,
-      union([
+      schemaUnion([
         ...branch.completed.map(({ outcome, outputSchema }) =>
           closedObject({
             status: stringEnum('completed'),
@@ -80,7 +80,7 @@ export const genericParallelOutputSchema = (
         ),
         closedObject({ status: stringEnum('failed'), failure: PipelineFailureValueSchema }),
         closedObject({ status: stringEnum('cancelled') }),
-      ]),
+      ]) ?? EmptyObjectSchema,
     ]),
   );
   return closedObject({
@@ -90,11 +90,12 @@ export const genericParallelOutputSchema = (
 };
 
 export const voteParallelOutputSchema = (participantKeys: readonly string[]): ValueSchema => {
-  const result = union([
-    closedObject({ status: stringEnum('vote'), vote: VoteValueSchema }),
-    closedObject({ status: stringEnum('failed'), failure: PipelineFailureValueSchema }),
-    closedObject({ status: stringEnum('cancelled') }),
-  ]);
+  const result =
+    schemaUnion([
+      closedObject({ status: stringEnum('vote'), vote: VoteValueSchema }),
+      closedObject({ status: stringEnum('failed'), failure: PipelineFailureValueSchema }),
+      closedObject({ status: stringEnum('cancelled') }),
+    ]) ?? EmptyObjectSchema;
   return closedObject({
     classification: stringEnum(
       'approved',
@@ -108,7 +109,7 @@ export const voteParallelOutputSchema = (participantKeys: readonly string[]): Va
 };
 
 export const humanGateOutputSchema = (answers: readonly string[]): ValueSchema =>
-  union([
+  schemaUnion([
     closedObject({
       kind: stringEnum('answer'),
       answer: stringEnum(...answers),
@@ -116,4 +117,4 @@ export const humanGateOutputSchema = (answers: readonly string[]): ValueSchema =
     }),
     closedObject({ kind: stringEnum('conflict') }),
     closedObject({ kind: stringEnum('deadline') }),
-  ]);
+  ]) ?? EmptyObjectSchema;

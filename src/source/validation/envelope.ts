@@ -34,7 +34,12 @@ export const createEnvelopeValidator = <Value>({
 
   return (input: unknown): EnvelopeValidationResult<Value> => {
     const collector = createDiagnosticCollector();
-    const envelope = normalizeOwnedEnvelope(input, PIPELINE_LIMITS.sourcePackage.nodes);
+    const envelope = normalizeOwnedEnvelope(
+      input,
+      PIPELINE_LIMITS.sourcePackage.nodes,
+      undefined,
+      PIPELINE_LIMITS.machine.serializedStateJsonValues,
+    );
     if (!envelope.ok) {
       collector.add(
         envelope.failure.code === 'BOUND_EXCEEDED' ? 'BOUND_EXCEEDED' : 'CANONICAL_INPUT',

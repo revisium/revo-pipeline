@@ -52,6 +52,9 @@ export const validateDataflow = (
       collector,
     });
     for (const node of region.nodes) {
+      if (!facts.isReachable(node.key)) {
+        continue;
+      }
       const nodePath = nodePaths.get(node.key) ?? path;
       validateNodeDataflow(node, region, {
         path: nodePath,

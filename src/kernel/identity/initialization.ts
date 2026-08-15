@@ -1,4 +1,4 @@
-import { isDigest, type Digest } from '../../foundation/index.js';
+import { isDigest, readOwnDataValue, type Digest } from '../../foundation/index.js';
 import { computeFrameKey } from './digests.js';
 
 const NULL_INITIALIZATION_FRAME_KEY: Digest =
@@ -10,20 +10,8 @@ export type InitializationIdentity = {
   readonly frameKey: Digest;
 };
 
-const readOwnValue = (input: unknown, key: string): unknown => {
-  if (typeof input !== 'object' || input === null) {
-    return undefined;
-  }
-  try {
-    const descriptor = Reflect.getOwnPropertyDescriptor(input, key);
-    return descriptor !== undefined && 'value' in descriptor ? descriptor.value : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
 export const readCandidateProgramDigest = (input: unknown): Digest | null => {
-  const candidate = readOwnValue(input, 'programDigest');
+  const candidate = readOwnDataValue(input, 'programDigest');
   return isDigest(candidate) ? candidate : null;
 };
 

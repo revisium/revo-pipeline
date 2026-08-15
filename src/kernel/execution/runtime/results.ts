@@ -1,5 +1,7 @@
 import {
   isJsonPointer,
+  readOwnDataValue,
+  reflectOwnKeys,
   type JsonPointer,
   type JsonValue,
   type PipelineFailure,
@@ -29,28 +31,17 @@ export const cleanupRegionResult = (result: NodeTerminalResult): RegionTerminalR
     : Object.freeze({ status: 'cancelled' });
 
 export const readPipelineFailure = (value: JsonValue): PipelineFailure => {
-  const code =
-    typeof value === 'object' && value !== null && !Array.isArray(value)
-      ? Reflect.getOwnPropertyDescriptor(value, 'code')
-      : undefined;
-  const path =
-    typeof value === 'object' && value !== null && !Array.isArray(value)
-      ? Reflect.getOwnPropertyDescriptor(value, 'path')
-      : undefined;
+  const record = typeof value === 'object' && value !== null && !Array.isArray(value);
+  const keys = record ? reflectOwnKeys(value) : null;
+  const code = record ? readOwnDataValue(value, 'code') : undefined;
+  const path = record ? readOwnDataValue(value, 'path') : undefined;
   if (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Reflect.ownKeys(value).length === 2 &&
-    code !== undefined &&
-    'value' in code &&
-    typeof code.value === 'string' &&
-    path !== undefined &&
-    'value' in path &&
-    typeof path.value === 'string' &&
-    isJsonPointer(path.value)
+    keys?.length === 2 &&
+    typeof code === 'string' &&
+    typeof path === 'string' &&
+    isJsonPointer(path)
   ) {
-    return Object.freeze({ code: code.value, path: path.value });
+    return Object.freeze({ code, path });
   }
   return failure('DATA_SCHEMA_MISMATCH');
 };

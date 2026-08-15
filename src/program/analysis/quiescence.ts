@@ -1,5 +1,6 @@
 import { localTargets as programNodeTargets } from '../admission/graphs.js';
 import type { ProgramNode, ProgramNodeId, ProgramRegion } from '../contracts/index.js';
+import { topologicalIndexes } from '../topological-order.js';
 import { PROGRAM_ADMISSION_LIMITS } from './limits.js';
 
 export type WorkEnvelope = {
@@ -190,31 +191,16 @@ const nodeEnvelope = (
 };
 
 const topologicalNodeOrder = (region: ProgramRegion): readonly ProgramNode[] => {
-  const nodes = new Map(region.nodes.map((node) => [node.id, node]));
-  const indegree = new Map<ProgramNodeId, number>(region.nodes.map((node) => [node.id, 0]));
-  for (const node of region.nodes) {
-    for (const target of programNodeTargets(node)) {
-      indegree.set(target, (indegree.get(target) ?? 0) + 1);
-    }
-  }
-  const ready = [...indegree].filter(([, count]) => count === 0).map(([id]) => id);
-  const ordered: ProgramNode[] = [];
-  while (ready.length > 0) {
-    const id = ready.pop();
-    const node = id === undefined ? undefined : nodes.get(id);
-    if (node === undefined) {
-      continue;
-    }
-    ordered.push(node);
-    for (const target of programNodeTargets(node)) {
-      const count = (indegree.get(target) ?? 0) - 1;
-      indegree.set(target, count);
-      if (count === 0) {
-        ready.push(target);
-      }
-    }
-  }
-  return ordered;
+  const indexById = new Map(region.nodes.map(({ id }, index) => [id, index]));
+  const outgoing = region.nodes.map((node) =>
+    programNodeTargets(node).flatMap((target) => {
+      const index = indexById.get(target);
+      return index === undefined ? [] : [index];
+    }),
+  );
+  return topologicalIndexes(outgoing)
+    .indexes.map((index) => region.nodes[index]!)
+    .filter(Boolean);
 };
 
 export const analyseRegionWork = (

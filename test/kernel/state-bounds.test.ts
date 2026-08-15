@@ -12,6 +12,7 @@ import { kernelDigest } from '../support/kernel-builders.js';
 import {
   createTransitionDraft,
   hydratePipelineState,
+  pendingAncestorKeys,
   stateFitsMachineLimits,
 } from '../support/kernel-internal.js';
 
@@ -47,11 +48,23 @@ const rootFrame = (
   selectedExit: null,
 });
 
-const operation = (ordinal: number): PendingOperation => ({
+const operation = (ordinal: number, frameKey = digest(50_000)): PendingOperation => ({
   kind: 'activity',
   commandKey: digest(ordinal),
-  ref: { programDigest: kernelDigest(), frameKey: digest(50_000), nodeId: digest(60_000) },
+  ref: { programDigest: kernelDigest(), frameKey, nodeId: digest(60_000) },
   requirementKey: 'work',
+});
+
+const callFrame = (ordinal: number, parentFrameKey: Digest): MachineFrame => ({
+  kind: 'call',
+  key: digest(ordinal),
+  parentFrameKey,
+  scopeInput: null,
+  nodeResults: {},
+  nodeId: digest(100_000 + ordinal),
+  childRegionKey: null,
+  childResult: null,
+  status: 'active',
 });
 
 const receipt = (ordinal: number): ResolvedOperation => ({
@@ -61,6 +74,29 @@ const receipt = (ordinal: number): ResolvedOperation => ({
 });
 
 describe('Machine semantic state bounds', () => {
+  it('tracks pending ancestors beyond the former depth-64 limit', () => {
+    const frames: MachineFrame[] = [rootFrame(1)];
+    for (let ordinal = 2; ordinal <= 130; ordinal += 1) {
+      const parent = frames.at(-1);
+      if (parent === undefined) {
+        throw new TypeError('Expected a parent frame.');
+      }
+      frames.push(callFrame(ordinal, parent.key));
+    }
+    const deepest = frames.at(-1);
+    if (deepest === undefined) {
+      throw new TypeError('Expected a deepest frame.');
+    }
+
+    const draft = createTransitionDraft(
+      state({ frames, pending: [operation(200_000, deepest.key)] }),
+    );
+    const ancestors = pendingAncestorKeys(draft);
+
+    expect(ancestors.size).toBe(130);
+    expect(frames.every(({ key }) => ancestors.has(key))).toBe(true);
+  });
+
   it('accepts and rejects the exact live-frame boundary', () => {
     const frames = Array.from({ length: 16_385 }, (_, index) => rootFrame(index + 1));
     expect(stateFitsMachineLimits(state({ frames: frames.slice(0, 16_384) }))).toBe(true);

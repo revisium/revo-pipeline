@@ -1,30 +1,10 @@
-import { compareUnicodeCodePoints, type Digest } from '../../foundation/index.js';
+import type { Digest } from '../../foundation/index.js';
 import type { NodeTerminalResult } from '../contracts/results.js';
+import { findSortedInsertionIndex } from '../program/lookup.js';
 
 export type NodeResultOrderingCounters = {
   comparisons: number;
   assignments: number;
-};
-
-const insertionIndex = (
-  keys: readonly string[],
-  nodeId: Digest,
-  counters?: NodeResultOrderingCounters,
-): number => {
-  let lower = 0;
-  let upper = keys.length;
-  while (lower < upper) {
-    const middle = lower + Math.floor((upper - lower) / 2);
-    if (counters !== undefined) {
-      counters.comparisons += 1;
-    }
-    if (compareUnicodeCodePoints(keys[middle] ?? '', nodeId) < 0) {
-      lower = middle + 1;
-    } else {
-      upper = middle;
-    }
-  }
-  return lower;
 };
 
 const assignResult = (
@@ -49,7 +29,16 @@ export const insertCanonicalNodeResult = (
     return null;
   }
   const keys = Object.keys(results);
-  const insertion = insertionIndex(keys, nodeId, counters);
+  const insertion = findSortedInsertionIndex(
+    keys,
+    nodeId,
+    (key) => key,
+    () => {
+      if (counters !== undefined) {
+        counters.comparisons += 1;
+      }
+    },
+  );
   const output: Record<string, NodeTerminalResult> = {};
   if (counters === undefined) {
     for (let index = 0; index < insertion; index += 1) {

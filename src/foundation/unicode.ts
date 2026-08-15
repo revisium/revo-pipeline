@@ -1,16 +1,5 @@
-export const hasUnpairedSurrogate = (value: string): boolean => {
-  for (let index = 0; index < value.length;) {
-    const point = value.codePointAt(index);
-    if (point === undefined || (point >= 0xd800 && point <= 0xdfff)) {
-      return true;
-    }
-    index += point > 0xffff ? 2 : 1;
-  }
-  return false;
-};
-
 export const isNfcString = (value: string): boolean =>
-  !hasUnpairedSurrogate(value) && value === value.normalize('NFC');
+  value.isWellFormed() && value === value.normalize('NFC');
 
 export const unicodeCodePointLength = (value: string): number => {
   let length = 0;
