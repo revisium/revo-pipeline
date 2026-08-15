@@ -200,6 +200,42 @@ const normalizePrimitive = (input: unknown, path: JsonPointer): PrimitiveDisposi
 
 const writeScalar = (value: JsonScalar, assign: Assignment | null): void => assign?.(value);
 
+const processExitTask = (task: ExitTask, activeObjects: WeakSet<object>): void => {
+  activeObjects.delete(task.input);
+  if (task.output !== null && task.assign !== null) {
+    task.assign(Object.freeze(task.output));
+  }
+};
+
+const processVisitTask = (
+  task: VisitTask,
+  policy: JsonValueTraversalPolicy,
+  visited: { count: number },
+  activeObjects: WeakSet<object>,
+  tasks: TraversalTask[],
+): JsonValueTraversalResult | null => {
+  visited.count += 1;
+  if (visited.count > policy.maximumVisitedValues) {
+    return failure(policy.boundFailureCode, task.path);
+  }
+  if (task.depth > policy.maximumDepth) {
+    return failure('CANONICAL_INPUT', task.path);
+  }
+  const primitive = normalizePrimitive(task.input, task.path);
+  if (primitive.kind === 'failure') {
+    return primitive.result;
+  }
+  if (primitive.kind === 'scalar') {
+    writeScalar(primitive.value, task.assign);
+    return null;
+  }
+  if (activeObjects.has(primitive.input)) {
+    return failure('CANONICAL_INPUT', task.path);
+  }
+  activeObjects.add(primitive.input);
+  return enqueueContainer(primitive.input, task, policy, tasks);
+};
+
 const traverseWithPolicy = (
   input: unknown,
   path: JsonPointer,
@@ -216,33 +252,10 @@ const traverseWithPolicy = (
       break;
     }
     if (task.kind === 'exit') {
-      activeObjects.delete(task.input);
-      if (task.output !== null && task.assign !== null) {
-        task.assign(Object.freeze(task.output));
-      }
+      processExitTask(task, activeObjects);
       continue;
     }
-
-    visited.count += 1;
-    if (visited.count > policy.maximumVisitedValues) {
-      return failure(policy.boundFailureCode, task.path);
-    }
-    if (task.depth > policy.maximumDepth) {
-      return failure('CANONICAL_INPUT', task.path);
-    }
-    const primitive = normalizePrimitive(task.input, task.path);
-    if (primitive.kind === 'failure') {
-      return primitive.result;
-    }
-    if (primitive.kind === 'scalar') {
-      writeScalar(primitive.value, task.assign);
-      continue;
-    }
-    if (activeObjects.has(primitive.input)) {
-      return failure('CANONICAL_INPUT', task.path);
-    }
-    activeObjects.add(primitive.input);
-    const containerFailure = enqueueContainer(primitive.input, task, policy, tasks);
+    const containerFailure = processVisitTask(task, policy, visited, activeObjects, tasks);
     if (containerFailure !== null) {
       return containerFailure;
     }

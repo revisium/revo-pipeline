@@ -123,18 +123,26 @@ const validateNodeSemantics = (
     validateGateBijection(node, path, collector);
   }
   for (const [selectors, timing] of nodeSelectorGroups(node, path)) {
-    const scoped =
-      timing === 'child-exit' && (node.kind === 'repeat' || node.kind === 'map')
-        ? {
-            ...bodyEnvironment(environment, node, collector, path),
-            regionOutput: node.body.outputSchema,
-          }
-        : node.kind === 'map'
-          ? bodyEnvironment(environment, node, collector, path)
-          : environment;
+    const scoped = selectorEnvironmentFor(node, timing, environment, collector, path);
     validateSelectors(selectors, scoped, collector);
   }
   validateNestedRegions(node, path, environment, collector, registry);
+};
+
+const selectorEnvironmentFor = (
+  node: SourceNode,
+  timing: 'base' | 'child-exit',
+  environment: SelectorEnvironment,
+  collector: DiagnosticCollector,
+  path: JsonPointer,
+): SelectorEnvironment => {
+  if (timing === 'child-exit' && (node.kind === 'map' || node.kind === 'repeat')) {
+    return {
+      ...bodyEnvironment(environment, node, collector, path),
+      regionOutput: node.body.outputSchema,
+    };
+  }
+  return node.kind === 'map' ? bodyEnvironment(environment, node, collector, path) : environment;
 };
 
 const validateRegionSemantics = (
