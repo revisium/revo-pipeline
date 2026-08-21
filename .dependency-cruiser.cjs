@@ -176,6 +176,15 @@ function createDependencyRules(manifest, productionDependencyNames) {
       },
     },
     {
+      name: 'revo-run-public-uses-only-approved-indexes',
+      severity: 'error',
+      from: { path: '^src/revo-run/' },
+      to: {
+        pathNot:
+          '^(?:src/foundation/index\\.ts|src/source/index\\.ts|src/materialization/index\\.ts|src/program/index\\.ts|src/compiler/index\\.ts|src/revo-run/)',
+      },
+    },
+    {
       name: 'private-layers-do-not-import-kernel-public',
       severity: 'error',
       from: { path: `^${allLayers}/`, pathNot: '^src/kernel/public\\.ts$' },

@@ -28,6 +28,10 @@
     "./kernel": {
       "types": "./dist/kernel/public.d.ts",
       "import": "./dist/kernel/public.js"
+    },
+    "./revo-run": {
+      "types": "./dist/revo-run/public.d.ts",
+      "import": "./dist/revo-run/public.js"
     }
   },
   "publishConfig": {

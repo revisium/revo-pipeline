@@ -98,10 +98,20 @@ Independent sibling regions may have concurrent cancellation sets. Once run
 cancellation is selected, no new region cancellation begins. Duplicate or late
 acknowledgements are idempotent, and no terminal state retains detached work.
 
+## Curated revo-run bridge
+
+The optional `@revisium/revo-pipeline/revo-run` entrypoint is the ADR 0013 evaluation
+bridge. It calls the existing compiler once and lowers only its documented choice/end
+slice into a pipeline-owned JSON execution-plan payload. Explicit bridge policies and an
+empty binding set are runtime inputs; neither is serialized as source, profile
+materialization, or assignments. The bridge emits no plan digest and rejects
+unsupported Program forms with provenance-linked diagnostics.
+
 ## Direct-cutover rule
 
 No adapter, converter, dual-read mode, compatibility alias, deprecated bridge, hidden
-interpreter, or preservation layer is allowed. The 103-row ownership matrix preserves
+interpreter, or preservation layer is allowed, except the explicit ADR 0013 curated
+bridge. The 103-row ownership matrix preserves
 semantic intent through 54 pipeline-evidence and 49 host/cross-package evidence
 obligations; it does not preserve data structures or request 103 pipeline
 implementations.

@@ -47,6 +47,7 @@ const runtimeProbe = `
 import { createRequire } from 'node:module';
 import * as root from '@revisium/revo-pipeline';
 import * as kernel from '@revisium/revo-pipeline/kernel';
+import * as revoRun from '@revisium/revo-pipeline/revo-run';
 
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
@@ -78,10 +79,12 @@ const expectedKernel = ${JSON.stringify([
   'advancePipeline',
   'createInitialPipelineState',
 ])};
+const expectedRevoRun = ${JSON.stringify(['compileToExecutionPlan'])};
 assert(JSON.stringify(Object.keys(root).sort()) === JSON.stringify(expectedRoot.sort()), 'Root export drift.');
 assert(JSON.stringify(Object.keys(kernel).sort()) === JSON.stringify(expectedKernel.sort()), 'Kernel export drift.');
+assert(JSON.stringify(Object.keys(revoRun).sort()) === JSON.stringify(expectedRevoRun.sort()), 'revo-run export drift.');
 assert(root.PipelineProgramSchema === kernel.PipelineProgramSchema, 'Program schema identity drift.');
-assert(!Object.hasOwn(root, 'default') && !Object.hasOwn(kernel, 'default'), 'Default export present.');
+assert(!Object.hasOwn(root, 'default') && !Object.hasOwn(kernel, 'default') && !Object.hasOwn(revoRun, 'default'), 'Default export present.');
 
 for (const specifier of [
   '@revisium/revo-pipeline/package.json',
@@ -98,7 +101,7 @@ for (const specifier of [
 }
 
 const require = createRequire(import.meta.url);
-for (const specifier of ['@revisium/revo-pipeline', '@revisium/revo-pipeline/kernel']) {
+for (const specifier of ['@revisium/revo-pipeline', '@revisium/revo-pipeline/kernel', '@revisium/revo-pipeline/revo-run']) {
   try {
     require(specifier);
     throw new Error(\`CommonJS import unexpectedly succeeded: \${specifier}.\`);
@@ -107,6 +110,131 @@ for (const specifier of ['@revisium/revo-pipeline', '@revisium/revo-pipeline/ker
   }
 }
 
+`;
+
+const executionPlanSource = `
+import {
+  computeSourceDigest,
+  definePipelineSource,
+  defineProfileMaterialization,
+} from '@revisium/revo-pipeline';
+import { compileToExecutionPlan } from '@revisium/revo-pipeline/revo-run';
+
+const assert = (condition, message) => {
+  if (!condition) throw new Error(message);
+};
+const emptyObject = {
+  type: 'object',
+  properties: {},
+  required: [],
+  additionalProperties: false,
+};
+const source = definePipelineSource({
+  schemaVersion: 'pipeline-source/v1',
+  key: 'execution-plan-smoke',
+  entryModule: 'main',
+  maximumTotalActivities: 3,
+  modules: [{
+    key: 'main',
+    inputSchema: emptyObject,
+    outputSchema: emptyObject,
+    region: {
+      key: 'root',
+      inputSchema: emptyObject,
+      entry: 'select',
+      outputSchema: emptyObject,
+      exits: [{ outcome: 'ok', outputSchema: emptyObject }],
+      nodes: [
+        {
+          kind: 'choice',
+          key: 'select',
+          selector: { kind: 'literal', value: 'yes' },
+          cases: [{ key: 'yes', when: { kind: 'equals', value: 'yes' }, target: 'accepted' }],
+          otherwise: 'rejected',
+        },
+        { kind: 'end', key: 'accepted', outcome: 'ok', output: {} },
+        { kind: 'end', key: 'rejected', outcome: 'ok', output: {} },
+      ],
+    },
+  }],
+});
+const materialization = defineProfileMaterialization({
+  schemaVersion: 'pipeline-materialization/v1',
+  sourceDigest: computeSourceDigest(source),
+  slots: [],
+});
+const result = compileToExecutionPlan(source, materialization, {
+  bindings: [],
+  policies: {
+    defaultTaskTimeoutMs: 60_000,
+    maximumActiveNodeExecutions: 1,
+    maximumNodeNestingDepth: 4,
+    maximumSubpipelineDepth: 1,
+    maximumTotalNodeExecutions: 4,
+  },
+});
+assert(result.stage === 'execution-plan' && result.ok, 'Execution-plan lowering failed.');
+assert(result.executionPlan.rootPipelineId.startsWith('pipeline_'), 'Execution-plan root identity drift.');
+assert(Object.hasOwn(result.executionPlan.pipelines, result.executionPlan.rootPipelineId), 'Execution-plan root is missing.');
+`;
+
+const executionPlanTypeProbe = `
+import {
+  computeSourceDigest,
+  definePipelineSource,
+  defineProfileMaterialization,
+} from '@revisium/revo-pipeline';
+import {
+  compileToExecutionPlan,
+  type PipelineExecutionPlan,
+  type PipelineExecutionPlanOptions,
+} from '@revisium/revo-pipeline/revo-run';
+
+const emptyObject = {
+  type: 'object',
+  properties: {},
+  required: [],
+  additionalProperties: false,
+} as const;
+const source = definePipelineSource({
+  schemaVersion: 'pipeline-source/v1',
+  key: 'execution-plan-type-smoke',
+  entryModule: 'main',
+  maximumTotalActivities: 1,
+  modules: [{
+    key: 'main',
+    inputSchema: emptyObject,
+    outputSchema: emptyObject,
+    region: {
+      key: 'root',
+      inputSchema: emptyObject,
+      entry: 'done',
+      outputSchema: emptyObject,
+      exits: [{ outcome: 'ok', outputSchema: emptyObject }],
+      nodes: [{ kind: 'end', key: 'done', outcome: 'ok', output: {} }],
+    },
+  }],
+});
+const materialization = defineProfileMaterialization({
+  schemaVersion: 'pipeline-materialization/v1',
+  sourceDigest: computeSourceDigest(source),
+  slots: [],
+});
+const options: PipelineExecutionPlanOptions = {
+  bindings: [],
+  policies: {
+    defaultTaskTimeoutMs: 60_000,
+    maximumActiveNodeExecutions: 1,
+    maximumNodeNestingDepth: 1,
+    maximumSubpipelineDepth: 1,
+    maximumTotalNodeExecutions: 1,
+  },
+};
+const result = compileToExecutionPlan(source, materialization, options);
+if (result.stage === 'execution-plan' && result.ok) {
+  const plan: PipelineExecutionPlan = result.executionPlan;
+  void plan;
+}
 `;
 
 try {
@@ -149,6 +277,7 @@ try {
     '--entrypoints',
     '.',
     './kernel',
+    './revo-run',
     '--no-definitely-typed',
     '--no-summary',
     '--no-emoji',
@@ -171,11 +300,13 @@ try {
         noEmit: true,
         skipLibCheck: false,
       },
-      include: ['quick-start.ts'],
+      files: ['quick-start.ts', 'revo-run.ts'],
     })}\n`,
   );
   cpSync(join(repositoryRoot, 'examples', 'quick-start.ts'), join(consumerRoot, 'quick-start.ts'));
   writeFileSync(join(consumerRoot, 'surface.mjs'), runtimeProbe);
+  writeFileSync(join(consumerRoot, 'revo-run.mjs'), executionPlanSource);
+  writeFileSync(join(consumerRoot, 'revo-run.ts'), executionPlanTypeProbe);
   run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', tarball], consumerRoot);
 
   const installed = join(consumerRoot, 'node_modules', '@revisium', 'revo-pipeline');
@@ -193,6 +324,7 @@ try {
   );
   run(process.execPath, ['quick-start.ts'], consumerRoot);
   run(process.execPath, ['surface.mjs'], consumerRoot);
+  run(process.execPath, ['revo-run.mjs'], consumerRoot);
   process.stdout.write(`Verified ${basename(tarball)} with the tracked quick-start.\n`);
 } finally {
   rmSync(temporaryRoot, { recursive: true, force: true });

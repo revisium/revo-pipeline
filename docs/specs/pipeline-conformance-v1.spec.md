@@ -57,6 +57,11 @@ ProgramRequirement ProgramRequirements LoweringRole NodeProvenance
 RequirementProvenance ProgramProvenance ProgramDigestInput
 ```
 
+The `@revisium/revo-pipeline/revo-run` runtime manifest MUST contain exactly
+`compileToExecutionPlan`. Its type manifest contains only the ADR 0013 pipeline-owned
+bridge result, diagnostic, plan, node, binding, policy, and host-input types. The root
+and `./kernel` runtime and type manifests remain unchanged.
+
 The helper and digest signatures MUST be exactly:
 
 ```ts
@@ -112,18 +117,19 @@ PipelineEvent PipelineCommand InitialPipelineTransition PipelineTransition Machi
 MachineFault
 ```
 
-`package.json` MUST expose only `.` and `./kernel`. No layer barrel, internal lowering
+`package.json` MUST expose only `.`, `./kernel`, and the ADR 0013 `./revo-run` bridge.
+No layer barrel, internal lowering
 seam, validator helper, comparator, graph algorithm, canonicalizer wrapper, policy model,
 XState machine, or runtime plugin API is public.
 
-While these contracts are Draft, the package MUST use version `0.1.0-alpha.1` and
+While these contracts are Draft, the package MUST use version `0.2.0-alpha.1` and
 `publishConfig` exactly `{ "access": "public", "tag": "alpha" }`. It MUST NOT be
 marked private or block publication through a lifecycle hook. An npm `alpha` prerelease
 remains unstable, carries no compatibility guarantee, and makes no `revo-core` or
 `revo-run` readiness claim. Its `files` list MUST be exactly `dist`, `README.md`, and
 `LICENSE`; packed files MUST be only those three root files plus `dist/**/*.js` and
 `dist/**/*.d.ts`. JavaScript, declarations, and package metadata MUST point only at the
-two curated ESM entrypoints. Default, CommonJS, wildcard, and deep subpath exports are
+three curated ESM entrypoints. Default, CommonJS, wildcard, and deep subpath exports are
 forbidden.
 
 ## Exact dependency contract
@@ -131,8 +137,9 @@ forbidden.
 Production dependencies MUST be exactly `typebox@1.3.10` and
 `canonicalize@4.0.0`. SHA-256 MUST use built-in `node:crypto`. `fast-check` MAY be an
 exact-pinned development dependency. Ajv and XState MUST NOT be production dependencies.
-No `revo-run`, DBOS, Prisma, queue, NestJS, GraphQL, MCP, CLI, model/provider SDK,
-persistence, timer, or authorization dependency is allowed.
+No DBOS, Prisma, queue, NestJS, GraphQL, MCP, CLI, model/provider SDK, persistence,
+timer, or authorization dependency is allowed. The ADR 0013 bridge has no host/runtime
+dependency; root and kernel production dependency inventories remain unchanged.
 
 ## Schema and compiler suites
 

@@ -7,7 +7,8 @@ direct-cutover architecture. [ADR 0011](./adr/0011-under-development-package-ent
 allows the exact package facades to be evaluated independently while the six contracts
 remain Draft. [ADR 0012](./adr/0012-alpha-prerelease-publication.md) permits only
 unstable prerelease publication under the npm `alpha` tag; it makes no compatibility or
-consumer-integration readiness claim.
+consumer-integration readiness claim. [ADR 0013](./adr/0013-curated-revo-run-execution-plan-bridge.md)
+adds one separate, intentionally small `revo-run` consumer facade.
 
 ## System shape
 
@@ -60,6 +61,9 @@ program ------------> foundation
 compiler/linker ----> foundation + source + materialization + program
 kernel -------------> foundation + program
 ```
+
+`src/revo-run/` is not a seventh layer. It is the ADR 0013 integration facade and may
+use only curated pipeline indexes.
 
 - **foundation** owns portable JSON, identifiers, diagnostics, bounds, canonicalization,
   hashes, and TypeBox schema helpers.
@@ -143,20 +147,21 @@ own-once validation and hashing path.
 
 `@revisium/revo-pipeline` exposes the exact schema, identity-helper, compiler, and digest
 manifest declared by Conformance v1. `@revisium/revo-pipeline/kernel` exposes the exact
-narrow Program and pure-machine manifest. No other deep import is public. These are
+narrow Program and pure-machine manifest. `@revisium/revo-pipeline/revo-run` is the
+separate ADR 0013 bridge facade. No other deep import is public. These are
 under-development Draft contracts available from npm `alpha` prereleases and local or
 CI-built tarballs, without a compatibility guarantee.
 
 ## Cross-package ownership
 
-| Concern                 | `revo-pipeline`                                | `revo-core`                                                         | `revo-run`                                                                                    |
-| ----------------------- | ---------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Playbook source grammar | Owns schema, validation, and compilation       | Stores/version-selects source through its data boundary             | Does not interpret source                                                                     |
-| Profile materialization | Validates portable slot choices                | Selects profile and supplies portable materialization               | Does not select profiles                                                                      |
-| Program topology        | Owns linked IR and full-bundle `programDigest` | Persists the admitted immutable compiler bundle                     | Recomputes/validates the bundle digest, then executes the trusted pair through the kernel     |
-| Activity requirements   | Emits abstract `ProgramRequirements`           | Resolves exact agent, script, effect, tool, and permission bindings | Executes resolved bindings                                                                    |
-| Execution plan          | Has no plan API                                | Constructs and persists a plan using run's contract                 | Owns schema, admission, root-program validation, and immutable plan contract                  |
-| Run lifecycle           | Emits semantic commands only                   | Creates and enqueues runs                                           | Owns DBOS, attempts, retries, timers, cancellation, reconciliation, events, and subscriptions |
+| Concern                 | `revo-pipeline`                                                       | `revo-core`                                                         | `revo-run`                                                                                    |
+| ----------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Playbook source grammar | Owns schema, validation, and compilation                              | Stores/version-selects source through its data boundary             | Does not interpret source                                                                     |
+| Profile materialization | Validates portable slot choices                                       | Selects profile and supplies portable materialization               | Does not select profiles                                                                      |
+| Program topology        | Owns linked IR and full-bundle `programDigest`                        | Persists the admitted immutable compiler bundle                     | Recomputes/validates the bundle digest, then executes the trusted pair through the kernel     |
+| Activity requirements   | Emits abstract `ProgramRequirements`                                  | Resolves exact agent, script, effect, tool, and permission bindings | Executes resolved bindings                                                                    |
+| Execution plan          | Lowers the ADR 0013 choice/end slice to a pipeline-owned JSON payload | Constructs and persists a plan using its host contract              | Owns runtime admission, root-program validation, and immutable host-plan contract             |
+| Run lifecycle           | Emits semantic commands only                                          | Creates and enqueues runs                                           | Owns DBOS, attempts, retries, timers, cancellation, reconciliation, events, and subscriptions |
 
 An agent source node is a slot, not an executor declaration. Source owns the exact
 allowed `single`/`consensus` strategies, consensus policy, participant range, and
