@@ -55,10 +55,10 @@ milliseconds.
 - Copy cost is explicit, bounded, and measurable at the owning live-frame boundary.
 - The implementation stays simple and restart-safe without a custom data structure.
 - A future delta-state persistence contract would require a separate architecture
-  decision spanning the kernel API and `revo-run`; it is not implied here.
+  decision spanning the kernel API and the host runtime; it is not implied here.
 
 ## Relationship to prior decisions
 
 This decision refines ADR 0006. Live node results and operation receipts are pruned with
-their execution owners, while `revo-run` remains the durable replay and audit authority.
+their execution owners, while the host runtime remains the durable replay and audit authority.
 It does not change ADR 0005's pure-kernel boundary or ADR 0007's initialization identity.

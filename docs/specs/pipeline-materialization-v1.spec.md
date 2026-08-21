@@ -151,5 +151,5 @@ provenance changes `programDigest`.
 
 `revo-core` MAY derive this envelope from a versioned stored profile. It then resolves
 the emitted abstract binding keys to exact immutable assemblies. `revo-pipeline` MUST
-NOT inspect the stored profile or resolved assembly. `revo-run` MUST NOT select a
+NOT inspect the stored profile or resolved assembly. The host runtime MUST NOT select a
 profile.

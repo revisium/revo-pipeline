@@ -9,7 +9,7 @@ correction.
   differs from `{ access: public, tag: alpha }`, a publication-blocking hook or
   `private` flag returns, or release automation can publish from a pull request,
   untrusted fork, non-alpha tag, or version-mismatched tag.
-- Root, `./kernel`, or the ADR 0013 `./revo-run` runtime/type inventories differ from
+- Root, `./kernel`, or the ADR 0013 `./execution-plan` runtime/type inventories differ from
   Pipeline Conformance v1, an unapproved deep/default/CommonJS/wildcard export appears,
   or the shared `PipelineProgramSchema` is not the same runtime value.
 - A compatibility adapter, dual reader, deprecated alias, hidden interpreter, runtime

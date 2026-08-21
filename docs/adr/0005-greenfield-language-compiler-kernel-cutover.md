@@ -8,7 +8,7 @@
 
 The package needs one portable boundary for versioned playbook source, profile-selected
 agent slots, linked modules, typed dataflow, bounded structured coordination, and a pure
-command-producing kernel. `revo-run` is a future consumer, not a prerequisite for package
+command-producing kernel. The host runtime is a future consumer, not a prerequisite for package
 development or alpha publication.
 
 Evolving incompatible contracts in parallel would preserve competing languages and
@@ -20,7 +20,7 @@ ready.
 Adopt one greenfield source-language/compiler/closed-IR/pure-kernel architecture through
 a direct cutover. No converter, adapter, dual reader, deprecated alias, compatibility
 package, hidden second interpreter, or runtime node-kind plugin will be built.
-`revo-pipeline` never imports a host. Any future `revo-run` integration imports the narrow
+`revo-pipeline` never imports a host. Any future host-runtime integration imports the narrow
 kernel only and is a separate compatibility decision.
 
 The first alpha permits an internal compile-time lowering seam only. Starting with the

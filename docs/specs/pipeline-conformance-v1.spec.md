@@ -57,7 +57,7 @@ ProgramRequirement ProgramRequirements LoweringRole NodeProvenance
 RequirementProvenance ProgramProvenance ProgramDigestInput
 ```
 
-The `@revisium/revo-pipeline/revo-run` runtime manifest MUST contain exactly
+The `@revisium/revo-pipeline/execution-plan` runtime manifest MUST contain exactly
 `compileToExecutionPlan`. Its type manifest contains only the ADR 0013 pipeline-owned
 bridge result, diagnostic, plan, node, binding, policy, and host-input types. The root
 and `./kernel` runtime and type manifests remain unchanged.
@@ -117,7 +117,7 @@ PipelineEvent PipelineCommand InitialPipelineTransition PipelineTransition Machi
 MachineFault
 ```
 
-`package.json` MUST expose only `.`, `./kernel`, and the ADR 0013 `./revo-run` bridge.
+`package.json` MUST expose only `.`, `./kernel`, and the ADR 0013 `./execution-plan` bridge.
 No layer barrel, internal lowering
 seam, validator helper, comparator, graph algorithm, canonicalizer wrapper, policy model,
 XState machine, or runtime plugin API is public.
@@ -126,7 +126,7 @@ While these contracts are Draft, the package MUST use version `0.2.0-alpha.1` an
 `publishConfig` exactly `{ "access": "public", "tag": "alpha" }`. It MUST NOT be
 marked private or block publication through a lifecycle hook. An npm `alpha` prerelease
 remains unstable, carries no compatibility guarantee, and makes no `revo-core` or
-`revo-run` readiness claim. Its `files` list MUST be exactly `dist`, `README.md`, and
+host-runtime readiness claim. Its `files` list MUST be exactly `dist`, `README.md`, and
 `LICENSE`; packed files MUST be only those three root files plus `dist/**/*.js` and
 `dist/**/*.d.ts`. JavaScript, declarations, and package metadata MUST point only at the
 three curated ESM entrypoints. Default, CommonJS, wildcard, and deep subpath exports are

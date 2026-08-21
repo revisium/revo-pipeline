@@ -55,12 +55,12 @@ describe('canonical layer manifest', () => {
   it('materializes exactly the six dependency layers plus approved integration facades', () => {
     expect(readdirSync(join(repositoryRoot, 'src')).toSorted()).toEqual([
       'compiler',
+      'execution-plan',
       'foundation',
       'index.ts',
       'kernel',
       'materialization',
       'program',
-      'revo-run',
       'source',
     ]);
     expect(existsSync(join(repositoryRoot, 'src', 'foundation', 'index.ts'))).toBe(true);

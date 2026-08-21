@@ -13,7 +13,7 @@ testing and does not improve the contracts themselves.
 
 The exact root and kernel manifests in Pipeline Conformance v1 are available for local
 and CI consumer evaluation while the contracts remain Draft. Package readiness is
-assessed independently from `revo-core` and `revo-run` integration. The direct-cutover
+assessed independently from `revo-core` and host-runtime integration. The direct-cutover
 and no-compatibility decisions in ADR 0005 remain unchanged.
 
 ## Alternatives Considered

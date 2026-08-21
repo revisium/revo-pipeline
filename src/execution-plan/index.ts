@@ -2,6 +2,7 @@ export {
   compileToExecutionPlan,
   type CompileToExecutionPlanResult,
 } from './compile-to-execution-plan.js';
+
 export {
   type PipelineExecutionBindings,
   type PipelineExecutionChoiceNode,

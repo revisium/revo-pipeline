@@ -11,7 +11,7 @@ import {
   lowerExecutionSelector,
   lowerToExecutionPlan,
   pipelineIdentity,
-} from '../support/revo-run-internal.js';
+} from '../support/execution-plan-internal.js';
 import { sourceNodeBuilders, sourceWithNodes } from '../support/source-builders.js';
 
 const digest = `sha256:${'a'.repeat(64)}`;

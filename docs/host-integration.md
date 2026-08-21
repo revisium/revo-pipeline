@@ -18,8 +18,8 @@ remain outside this package.
    requirements, provenance, and digests.
 4. `revo-core` resolves abstract requirements to exact immutable agent assemblies,
    scripts, effects, tools, permissions, and execution policy. It constructs and
-   persists a plan using the contract owned by `revo-run`.
-5. `revo-run` validates program, requirements, and provenance, recomputes the digest over
+   persists a plan using the contract owned by the host runtime.
+5. The host runtime validates program, requirements, and provenance, recomputes the digest over
    exactly that bundle, persists the trusted `{program,programDigest}` pair and kernel
    state, and drives durable effects around pure transitions.
 
@@ -63,7 +63,7 @@ advancement with unchanged state and no commands.
 
 The kernel may emit `dispatchActivity`, `scheduleWait`, `openHumanGate`,
 `cancelPending`, `complete`, `fail`, or `cancel`. Command references contain no run
-identity and are unique only within one machine state. `revo-run` namespaces them by
+identity and are unique only within one machine state. The host runtime namespaces them by
 `(runId, commandRef)` and maps them to dynamic workflow, execution, and attempt IDs.
 
 - `dispatchActivity` resolves one plan binding and runs one agent, script, or effect.
@@ -80,7 +80,7 @@ worker leases, and provider responses are not kernel events or state.
 
 ## Runtime responsibilities
 
-`revo-run` owns durable delivery, post-prune event deduplication, retries and backoff, attempt and
+The host runtime owns durable delivery, post-prune event deduplication, retries and backoff, attempt and
 effect identities, timers, cooperative cancellation, ambiguous-effect reconciliation,
 DBOS lifecycle, global capacity, projections, event cursors, and subscriptions. The
 kernel owns deterministic semantic progress, early parallel decisions, drain/cancel
@@ -98,9 +98,9 @@ Independent sibling regions may have concurrent cancellation sets. Once run
 cancellation is selected, no new region cancellation begins. Duplicate or late
 acknowledgements are idempotent, and no terminal state retains detached work.
 
-## Curated revo-run bridge
+## Curated execution-plan bridge
 
-The optional `@revisium/revo-pipeline/revo-run` entrypoint is the ADR 0013 evaluation
+The optional `@revisium/revo-pipeline/execution-plan` entrypoint is the ADR 0013 evaluation
 bridge. It calls the existing compiler once and lowers only its documented choice/end
 slice into a pipeline-owned JSON execution-plan payload. Explicit bridge policies and an
 empty binding set are runtime inputs; neither is serialized as source, profile
@@ -117,5 +117,5 @@ obligations; it does not preserve data structures or request 103 pipeline
 implementations.
 
 The package remains under development, Draft, and unstable even when published under
-the npm `alpha` tag. Publication does not claim that `revo-core` or `revo-run` is ready
+the npm `alpha` tag. Publication does not claim that `revo-core` or the host runtime is ready
 and does not change the pipeline package API or its digests.

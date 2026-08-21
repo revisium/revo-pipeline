@@ -7,8 +7,8 @@ direct-cutover architecture. [ADR 0011](./adr/0011-under-development-package-ent
 allows the exact package facades to be evaluated independently while the six contracts
 remain Draft. [ADR 0012](./adr/0012-alpha-prerelease-publication.md) permits only
 unstable prerelease publication under the npm `alpha` tag; it makes no compatibility or
-consumer-integration readiness claim. [ADR 0013](./adr/0013-curated-revo-run-execution-plan-bridge.md)
-adds one separate, intentionally small `revo-run` consumer facade.
+consumer-integration readiness claim. [ADR 0013](./adr/0013-curated-execution-plan-bridge.md)
+adds one separate, intentionally small execution-plan consumer facade.
 
 ## System shape
 
@@ -62,7 +62,7 @@ compiler/linker ----> foundation + source + materialization + program
 kernel -------------> foundation + program
 ```
 
-`src/revo-run/` is not a seventh layer. It is the ADR 0013 integration facade and may
+`src/execution-plan/` is not a seventh layer. It is the ADR 0013 integration facade and may
 use only curated pipeline indexes.
 
 - **foundation** owns portable JSON, identifiers, diagnostics, bounds, canonicalization,
@@ -147,14 +147,14 @@ own-once validation and hashing path.
 
 `@revisium/revo-pipeline` exposes the exact schema, identity-helper, compiler, and digest
 manifest declared by Conformance v1. `@revisium/revo-pipeline/kernel` exposes the exact
-narrow Program and pure-machine manifest. `@revisium/revo-pipeline/revo-run` is the
+narrow Program and pure-machine manifest. `@revisium/revo-pipeline/execution-plan` is the
 separate ADR 0013 bridge facade. No other deep import is public. These are
 under-development Draft contracts available from npm `alpha` prereleases and local or
 CI-built tarballs, without a compatibility guarantee.
 
 ## Cross-package ownership
 
-| Concern                 | `revo-pipeline`                                                       | `revo-core`                                                         | `revo-run`                                                                                    |
+| Concern                 | `revo-pipeline`                                                       | `revo-core`                                                         | Host runtime                                                                                  |
 | ----------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Playbook source grammar | Owns schema, validation, and compilation                              | Stores/version-selects source through its data boundary             | Does not interpret source                                                                     |
 | Profile materialization | Validates portable slot choices                                       | Selects profile and supplies portable materialization               | Does not select profiles                                                                      |
@@ -212,7 +212,7 @@ preflight or building a hidden index. See
 
 Kernel replay receipts are live-state indexes rather than an unbounded audit log. The
 kernel retains an event digest only while its owning frame or cancellation cleanup can
-still reference the command. `revo-run` owns post-prune replay and atomically persists
+still reference the command. The host runtime owns post-prune replay and atomically persists
 the run-scoped receipt, next state, and ordered outbox. See
 [ADR 0006](./adr/0006-live-kernel-receipts-and-durable-host-replay.md).
 

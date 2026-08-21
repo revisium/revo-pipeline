@@ -25,7 +25,7 @@ command is a conflict. The receipt is pruned only after the result has been copi
 owner, cancellation acknowledgement sets no longer reference the command, and the
 owning frame can be removed.
 
-`revo-run` owns replay after pruning. For each accepted semantic event it MUST atomically
+The host runtime owns replay after pruning. For each accepted semantic event it MUST atomically
 persist:
 
 ```text

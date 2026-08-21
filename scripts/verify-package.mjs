@@ -47,7 +47,7 @@ const runtimeProbe = `
 import { createRequire } from 'node:module';
 import * as root from '@revisium/revo-pipeline';
 import * as kernel from '@revisium/revo-pipeline/kernel';
-import * as revoRun from '@revisium/revo-pipeline/revo-run';
+import * as executionPlan from '@revisium/revo-pipeline/execution-plan';
 
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
@@ -79,12 +79,12 @@ const expectedKernel = ${JSON.stringify([
   'advancePipeline',
   'createInitialPipelineState',
 ])};
-const expectedRevoRun = ${JSON.stringify(['compileToExecutionPlan'])};
+const expectedExecutionPlan = ${JSON.stringify(['compileToExecutionPlan'])};
 assert(JSON.stringify(Object.keys(root).sort()) === JSON.stringify(expectedRoot.sort()), 'Root export drift.');
 assert(JSON.stringify(Object.keys(kernel).sort()) === JSON.stringify(expectedKernel.sort()), 'Kernel export drift.');
-assert(JSON.stringify(Object.keys(revoRun).sort()) === JSON.stringify(expectedRevoRun.sort()), 'revo-run export drift.');
+assert(JSON.stringify(Object.keys(executionPlan).sort()) === JSON.stringify(expectedExecutionPlan.sort()), 'execution-plan export drift.');
 assert(root.PipelineProgramSchema === kernel.PipelineProgramSchema, 'Program schema identity drift.');
-assert(!Object.hasOwn(root, 'default') && !Object.hasOwn(kernel, 'default') && !Object.hasOwn(revoRun, 'default'), 'Default export present.');
+assert(!Object.hasOwn(root, 'default') && !Object.hasOwn(kernel, 'default') && !Object.hasOwn(executionPlan, 'default'), 'Default export present.');
 
 for (const specifier of [
   '@revisium/revo-pipeline/package.json',
@@ -101,7 +101,7 @@ for (const specifier of [
 }
 
 const require = createRequire(import.meta.url);
-for (const specifier of ['@revisium/revo-pipeline', '@revisium/revo-pipeline/kernel', '@revisium/revo-pipeline/revo-run']) {
+for (const specifier of ['@revisium/revo-pipeline', '@revisium/revo-pipeline/kernel', '@revisium/revo-pipeline/execution-plan']) {
   try {
     require(specifier);
     throw new Error(\`CommonJS import unexpectedly succeeded: \${specifier}.\`);
@@ -118,7 +118,7 @@ import {
   definePipelineSource,
   defineProfileMaterialization,
 } from '@revisium/revo-pipeline';
-import { compileToExecutionPlan } from '@revisium/revo-pipeline/revo-run';
+import { compileToExecutionPlan } from '@revisium/revo-pipeline/execution-plan';
 
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
@@ -188,7 +188,7 @@ import {
   compileToExecutionPlan,
   type PipelineExecutionPlan,
   type PipelineExecutionPlanOptions,
-} from '@revisium/revo-pipeline/revo-run';
+} from '@revisium/revo-pipeline/execution-plan';
 
 const emptyObject = {
   type: 'object',
@@ -277,7 +277,7 @@ try {
     '--entrypoints',
     '.',
     './kernel',
-    './revo-run',
+    './execution-plan',
     '--no-definitely-typed',
     '--no-summary',
     '--no-emoji',
@@ -300,13 +300,13 @@ try {
         noEmit: true,
         skipLibCheck: false,
       },
-      files: ['quick-start.ts', 'revo-run.ts'],
+      files: ['quick-start.ts', 'execution-plan.ts'],
     })}\n`,
   );
   cpSync(join(repositoryRoot, 'examples', 'quick-start.ts'), join(consumerRoot, 'quick-start.ts'));
   writeFileSync(join(consumerRoot, 'surface.mjs'), runtimeProbe);
-  writeFileSync(join(consumerRoot, 'revo-run.mjs'), executionPlanSource);
-  writeFileSync(join(consumerRoot, 'revo-run.ts'), executionPlanTypeProbe);
+  writeFileSync(join(consumerRoot, 'execution-plan.mjs'), executionPlanSource);
+  writeFileSync(join(consumerRoot, 'execution-plan.ts'), executionPlanTypeProbe);
   run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', tarball], consumerRoot);
 
   const installed = join(consumerRoot, 'node_modules', '@revisium', 'revo-pipeline');
@@ -324,7 +324,7 @@ try {
   );
   run(process.execPath, ['quick-start.ts'], consumerRoot);
   run(process.execPath, ['surface.mjs'], consumerRoot);
-  run(process.execPath, ['revo-run.mjs'], consumerRoot);
+  run(process.execPath, ['execution-plan.mjs'], consumerRoot);
   process.stdout.write(`Verified ${basename(tarball)} with the tracked quick-start.\n`);
 } finally {
   rmSync(temporaryRoot, { recursive: true, force: true });

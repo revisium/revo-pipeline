@@ -14,7 +14,7 @@
 > [!IMPORTANT]
 > This package is under development. Version `0.2.0-alpha.1` is an unstable prerelease,
 > not a 1.0 API, and carries no compatibility guarantee. Alpha publication does not
-> claim that `revo-core` or `revo-run` integration is ready.
+> claim that `revo-core` or host-runtime integration is ready.
 
 ## About
 
@@ -25,7 +25,7 @@ database, queue, clock, provider, authorization, retry, or durable run state.
 
 The source language contains 12 node kinds and compiles to a closed nine-kind IR. The
 package exposes three curated ESM entrypoints: the authoring/compiler API at `.`, the
-machine API at `./kernel`, and the pipeline-owned execution-plan bridge at `./revo-run`.
+machine API at `./kernel`, and the pipeline-owned execution-plan bridge at `./execution-plan`.
 No internal folder is a supported deep import.
 
 ## Usage
@@ -88,7 +88,7 @@ to `advancePipeline`. See [host integration](docs/host-integration.md) for that 
 - [Host integration](docs/host-integration.md)
 - [Draft specifications](docs/specs/)
 - [Architecture decisions](docs/adr/)
-- [Intent ownership](docs/conformance/revo-run-intent-ownership.md)
+- [Intent ownership](docs/conformance/host-intent-ownership.md)
 - [Repository map](REPOSITORY.md)
 - [Verification](VERIFICATION.md)
 

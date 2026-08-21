@@ -12,7 +12,7 @@ const messages = {
   EXECUTION_PLAN_CHOICE_VALUE_UNSUPPORTED:
     'The execution-plan choice value is not a supported run identifier.',
   EXECUTION_PLAN_CONTRACT_INVALID:
-    'The lowered execution plan does not satisfy the revo-run contract.',
+    'The lowered execution plan does not satisfy the execution-plan contract.',
   EXECUTION_PLAN_DEPTH_EXCEEDED:
     'The lowered execution plan exceeds the configured node nesting depth.',
   EXECUTION_PLAN_GRAPH_UNSUPPORTED:

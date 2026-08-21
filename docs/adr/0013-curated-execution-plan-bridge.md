@@ -1,4 +1,4 @@
-# ADR 0013: Curated revo-run execution-plan bridge
+# ADR 0013: Curated execution-plan bridge
 
 - Status: Accepted
 - Amends: ADR 0005, ADR 0011
@@ -12,7 +12,7 @@ runtime package contract.
 
 ## Decision
 
-`@revisium/revo-pipeline/revo-run` is a third curated ESM entrypoint. It exposes
+`@revisium/revo-pipeline/execution-plan` is a third curated ESM entrypoint. It exposes
 `compileToExecutionPlan(source, materialization, { bindings, policies })` and no root
 exports. It calls the existing compiler once, preserves a compiler failure unchanged
 under `stage: 'compile'`, and otherwise lowers the already compiled bundle without

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { compileToExecutionPlan } from '../../src/revo-run/public.js';
+import { compileToExecutionPlan } from '../../src/execution-plan/public.js';
 import { materializationFor, singleSelection } from '../support/compiler-builders.js';
 import { sourceNodeBuilders, sourceWithNodes } from '../support/source-builders.js';
 
@@ -28,7 +28,7 @@ const choiceSource = () =>
     { ...sourceNodeBuilders.end(), key: 'rejected', outcome: 'ok' },
   ]);
 
-describe('revo-run execution-plan bridge', () => {
+describe('execution-plan bridge', () => {
   it('compiles the documented choice/end slice into the pipeline-owned plan contract', () => {
     const source = choiceSource();
 
