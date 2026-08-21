@@ -12,9 +12,9 @@
 </div>
 
 > [!IMPORTANT]
-> This package is under development. Version `0.1.0-alpha.1` is an unstable prerelease,
+> This package is under development. Version `0.2.0-alpha.1` is an unstable prerelease,
 > not a 1.0 API, and carries no compatibility guarantee. Alpha publication does not
-> claim that `revo-core` or `revo-run` integration is ready.
+> claim that `revo-core` or host-runtime integration is ready.
 
 ## About
 
@@ -24,8 +24,9 @@ advances that Program through a pure state machine. It performs no I/O and owns 
 database, queue, clock, provider, authorization, retry, or durable run state.
 
 The source language contains 12 node kinds and compiles to a closed nine-kind IR. The
-package exposes two curated ESM entrypoints: the authoring/compiler API at `.` and the
-machine API at `./kernel`. No internal folder is a supported deep import.
+package exposes three curated ESM entrypoints: the authoring/compiler API at `.`, the
+machine API at `./kernel`, and the pipeline-owned execution-plan bridge at `./execution-plan`.
+No internal folder is a supported deep import.
 
 ## Usage
 
@@ -39,7 +40,7 @@ For development against this checkout, build and install a local tarball:
 
 ```bash
 corepack pnpm pack
-corepack pnpm add --offline ./revisium-revo-pipeline-0.1.0-alpha.1.tgz
+corepack pnpm add --offline ./revisium-revo-pipeline-0.2.0-alpha.1.tgz
 ```
 
 ## API at a glance
@@ -87,7 +88,7 @@ to `advancePipeline`. See [host integration](docs/host-integration.md) for that 
 - [Host integration](docs/host-integration.md)
 - [Draft specifications](docs/specs/)
 - [Architecture decisions](docs/adr/)
-- [Intent ownership](docs/conformance/revo-run-intent-ownership.md)
+- [Intent ownership](docs/conformance/host-intent-ownership.md)
 - [Repository map](REPOSITORY.md)
 - [Verification](VERIFICATION.md)
 

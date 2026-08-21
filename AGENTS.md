@@ -13,17 +13,19 @@ Read `README.md`, accepted ADRs, the six Draft specifications, `docs/architectur
 The package owns source contracts, materialization validation, compilation, graph
 semantics, canonical Program data, digests, and pure machine transitions. It does not
 own persistence, attempts, leases, clocks, DBOS workflows, retries, binding resolution,
-authorization, subscriptions, or host frameworks. Do not add `revo-run`, Prisma, DBOS,
+authorization, subscriptions, or host-runtime, Prisma, DBOS,
 queues, NestJS, GraphQL, MCP, CLI, or provider SDK dependencies.
 
-The only consumer entrypoints are `@revisium/revo-pipeline` and
-`@revisium/revo-pipeline/kernel`, with the exact manifests in Pipeline Conformance v1.
-Do not add deep exports, wildcard barrels, default or CommonJS exports, adapters,
-deprecated aliases, dual readers, hidden interpreters, or runtime node-kind plugins.
+The only consumer entrypoints are `@revisium/revo-pipeline`,
+`@revisium/revo-pipeline/kernel`, and the ADR 0013
+`@revisium/revo-pipeline/execution-plan` bridge, with the exact manifests in Pipeline
+Conformance v1. Do not add other deep exports, wildcard barrels, default or CommonJS
+exports, adapters, deprecated aliases, dual readers, hidden interpreters, or runtime
+node-kind plugins.
 
 Keep production dependencies exactly `typebox@1.3.10` and `canonicalize@4.0.0`. The
 under-development package may be published only as an unstable prerelease under the npm
-`alpha` tag. This does not establish compatibility or `revo-core`/`revo-run` readiness.
+`alpha` tag. This does not establish compatibility or `revo-core`/host-runtime readiness.
 Release automation may validate or prepare future versions. Automated npm publication
 is restricted to an explicit, version-matched alpha tag and never runs for pull requests.
 

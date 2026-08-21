@@ -8,8 +8,8 @@
 
 The package needs one portable boundary for versioned playbook source, profile-selected
 agent slots, linked modules, typed dataflow, bounded structured coordination, and a pure
-command-producing kernel. `revo-run` is a future consumer, not a prerequisite for package
-development or alpha publication.
+command-producing kernel. The host runtime is a future consumer, not a prerequisite for
+package development or alpha publication.
 
 Evolving incompatible contracts in parallel would preserve competing languages and
 force consumers to depend on transition artifacts before the future core/run boundary is
@@ -20,8 +20,11 @@ ready.
 Adopt one greenfield source-language/compiler/closed-IR/pure-kernel architecture through
 a direct cutover. No converter, adapter, dual reader, deprecated alias, compatibility
 package, hidden second interpreter, or runtime node-kind plugin will be built.
-`revo-pipeline` never imports a host. Any future `revo-run` integration imports the narrow
-kernel only and is a separate compatibility decision.
+`revo-pipeline` never imports a host. Any future host-runtime integration imports the
+narrow kernel only and is a separate compatibility decision. ADR 0013 explicitly amends
+this boundary for one pipeline-owned, host-neutral `./execution-plan` facade: it lowers
+the already compiled choice/end slice into a plain payload, adds no host dependency, and
+does not create a compatibility reader, adapter, or runtime plugin.
 
 The first alpha permits an internal compile-time lowering seam only. Starting with the
 foundation work item, production dependencies are exactly `typebox@1.3.10` and

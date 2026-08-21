@@ -1,10 +1,10 @@
-# `revo-run` intent ownership for the greenfield cutover
+# Host-runtime intent ownership for the greenfield cutover
 
 - Status: Draft
 - Baseline date: 2026-08-09
 - Baseline set: `rr-001` through `rr-103`
 
-This matrix preserves the semantic intent of the current `revo-run` acceptance registry;
+This matrix preserves the semantic intent of the current host-runtime acceptance registry;
 it does not preserve its recursive node shapes, compiler template, or `ExecutionPlan`
 schema. “Compiler” includes source, materialization, linker, IR, and static validation.
 “Core” includes exact binding resolution and plan construction. “Run” includes the DBOS

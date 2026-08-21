@@ -168,12 +168,33 @@ function createDependencyRules(manifest, productionDependencyNames) {
       to: { path: `^${escapeRegularExpression(manifest.rootModule)}$` },
     },
     {
+      name: 'layers-do-not-import-execution-plan-facade',
+      severity: 'error',
+      from: { path: `^${allLayers}/` },
+      to: { path: '^src/execution-plan/' },
+    },
+    {
       name: 'kernel-public-uses-only-approved-indexes',
       severity: 'error',
       from: { path: '^src/kernel/public\\.ts$' },
       to: {
         pathNot: '^(?:src/foundation/index\\.ts|src/program/index\\.ts|src/kernel/index\\.ts)$',
       },
+    },
+    {
+      name: 'execution-plan-public-uses-only-approved-indexes',
+      severity: 'error',
+      from: { path: '^src/execution-plan/' },
+      to: {
+        pathNot:
+          '^(?:src/foundation/index\\.ts|src/source/index\\.ts|src/materialization/index\\.ts|src/program/index\\.ts|src/compiler/index\\.ts|src/execution-plan/)',
+      },
+    },
+    {
+      name: 'execution-plan-private-imports-use-public-facade',
+      severity: 'error',
+      from: { pathNot: '^(?:src/execution-plan/|test/support/execution-plan-internal\\.ts$)' },
+      to: { path: '^src/execution-plan/(?!public\\.ts$)' },
     },
     {
       name: 'private-layers-do-not-import-kernel-public',

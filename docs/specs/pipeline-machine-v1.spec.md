@@ -57,7 +57,7 @@ portable inputs. They MUST NOT mutate arguments, perform I/O, observe a clock, g
 an ID, use randomness, persist, call DBOS, resolve a binding, or retain hidden state.
 
 `KernelProgram` is a trusted admission product. Before either function is called,
-`revo-core`/`revo-run` MUST validate all schemas and recompute the full compiler-bundle
+`revo-core`/host-runtime integrations MUST validate all schemas and recompute the full compiler-bundle
 digest over exactly `{program,requirements,provenance}`. The kernel MUST NOT repeat that
 bundle validation or digest computation. During advancement it only compares the
 provided `programDigest` to the state pin. `PipelineState` is likewise trusted state:
@@ -376,7 +376,7 @@ event removes the matching pending operation and inserts its exact
 while its owner or a cancellation acknowledgement set can still reference the command.
 It is pruned only after the result has been copied to its owner, every containing
 cancellation set has acknowledged it, and the owning frame is pruned. Durable replay
-after that point is the `revo-run` responsibility defined in the Host boundary below.
+after that point is the host-runtime responsibility defined in the Host boundary below.
 
 ## Exact event union
 
@@ -601,14 +601,14 @@ prune itself and every completed descendant. An inner branch/item/body/call-regi
 first copies into the owner's exact branch/item/body/call field; it never invents a
 synthetic node ID. The final owner copy and prune are atomic in the returned immutable
 state. While the operation receipt remains live, replay reads `resolved` and cannot
-recreate the child. After receipt pruning, `revo-run`'s durable receipt and event log is
+recreate the child. After receipt pruning, the host runtime's durable receipt and event log is
 the replay and audit authority; machine frames are live execution state, not durable
 audit history. A frame may be
 pruned only after it has no pending descendant and its exact result has been copied to
 its owning or enclosing parent.
 
 Map activates at most `maximumConcurrency` local item frames/dispatches. This is a
-kernel-owned map-local bound. `revo-run` separately owns plan-wide/global capacity and
+kernel-owned map-local bound. The host runtime separately owns plan-wide/global capacity and
 may durably queue valid dispatch commands. Repeat true at the final bound selects
 `exhausted`; no invariant fault is allowed.
 
@@ -709,13 +709,13 @@ value-redacted.
 
 ## Host boundary
 
-`revo-run` owns durable state/outbox, the authenticated event/attempt history, command
+The host runtime owns durable state/outbox, the authenticated event/attempt history, command
 delivery, run-scoped namespaces, dynamic IDs, attempts, retry and timeout policy,
 reconciliation, DBOS workflows, global capacity, timers, authorization, subscriptions,
 and projections. The kernel does not poll or re-emit a pending command because no event
 arrived.
 
-For every accepted semantic event, `revo-run` MUST atomically persist the durable
+For every accepted semantic event, the host runtime MUST atomically persist the durable
 `(runId,commandKey) -> eventDigest` receipt, the next `PipelineState`, and the ordered
 outbox commands. A post-prune event with the same digest is an idempotent retry and MUST
 NOT invoke the kernel again; a different digest for the same key is a protocol conflict.

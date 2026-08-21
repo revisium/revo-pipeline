@@ -1,0 +1,1 @@
+export const lower = 'execution-plan fixture';
