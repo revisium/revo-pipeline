@@ -1,4 +1,9 @@
-import { compareUnicodeCodePoints, isIdentifier, type JsonPointer } from '../foundation/index.js';
+import {
+  PIPELINE_LIMITS,
+  compareUnicodeCodePoints,
+  isIdentifier,
+  type JsonPointer,
+} from '../foundation/index.js';
 import type {
   PipelineProgram,
   ProgramChoiceNode,
@@ -290,7 +295,7 @@ export const lowerToExecutionPlan = (
     nodes,
     paths,
     1,
-    options.policies.maximumNodeNestingDepth,
+    PIPELINE_LIMITS.sourcePackage.nestingDepth,
   );
   if (!lowered.ok) {
     return { ok: false, diagnostics: finalizeExecutionPlanDiagnostics(lowered.diagnostics) };

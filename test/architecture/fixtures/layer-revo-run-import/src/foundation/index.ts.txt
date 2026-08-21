@@ -1,0 +1,3 @@
+import { bridge } from '../revo-run/public.js';
+
+export { bridge };

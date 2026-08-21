@@ -110,4 +110,84 @@ describe('revo-run execution-plan bridge', () => {
       ],
     });
   });
+
+  it('lowers oneOf cases and module-input selectors without widening the plan contract', () => {
+    const base = sourceWithNodes([
+      {
+        ...sourceNodeBuilders.choice('accepted'),
+        key: 'select',
+        selector: { kind: 'moduleInput', pointer: '' },
+        cases: [
+          { key: 'answers', when: { kind: 'oneOf', values: ['yes', 'no'] }, target: 'accepted' },
+        ],
+        otherwise: 'rejected',
+      },
+      { ...sourceNodeBuilders.end(), key: 'accepted', outcome: 'ok' },
+      { ...sourceNodeBuilders.end(), key: 'rejected', outcome: 'ok' },
+    ]);
+    const source = structuredClone(base);
+    const module = source.modules[0];
+    if (module === undefined) {
+      throw new TypeError('Expected one module.');
+    }
+    Object.defineProperty(module, 'inputSchema', { value: { type: 'string' } });
+    Object.defineProperty(module.region, 'inputSchema', { value: { type: 'string' } });
+
+    const result = compileToExecutionPlan(source, materializationFor(source), hostInputs);
+
+    expect(result.stage).toBe('execution-plan');
+    if (result.stage !== 'execution-plan' || !result.ok) {
+      throw new TypeError('Expected a lowered execution plan.');
+    }
+    const root = result.executionPlan.pipelines[result.executionPlan.rootPipelineId]?.root;
+    expect(root).toMatchObject({
+      kind: 'choice',
+      selector: { kind: 'pipelineInput', pointer: '' },
+      cases: { no: { kind: 'end' }, yes: { kind: 'end' } },
+    });
+  });
+
+  it('rejects shared choice targets instead of lowering a graph as a tree', () => {
+    const source = sourceWithNodes([
+      {
+        ...sourceNodeBuilders.choice('done'),
+        key: 'select',
+        selector: { kind: 'literal', value: 'yes' },
+        cases: [{ key: 'yes', when: { kind: 'equals', value: 'yes' }, target: 'done' }],
+        otherwise: 'done',
+      },
+      { ...sourceNodeBuilders.end(), key: 'done', outcome: 'ok' },
+    ]);
+
+    const result = compileToExecutionPlan(source, materializationFor(source), hostInputs);
+
+    expect(result).toMatchObject({
+      stage: 'execution-plan',
+      ok: false,
+      diagnostics: [
+        {
+          family: 'EXECUTION_PLAN',
+          code: 'EXECUTION_PLAN_GRAPH_UNSUPPORTED',
+        },
+      ],
+    });
+  });
+
+  it('rejects nonempty bindings and invalid policy values supplied at the runtime boundary', () => {
+    const source = choiceSource();
+    const invalidInputs = structuredClone(hostInputs);
+    Object.defineProperty(invalidInputs, 'bindings', { value: ['unbound'] });
+    Object.defineProperty(invalidInputs.policies, 'maximumNodeNestingDepth', { value: 0 });
+
+    const result = compileToExecutionPlan(source, materializationFor(source), invalidInputs);
+
+    expect(result).toMatchObject({
+      stage: 'execution-plan',
+      ok: false,
+      diagnostics: [
+        { code: 'EXECUTION_PLAN_BINDINGS_UNSUPPORTED', path: '' },
+        { code: 'EXECUTION_PLAN_CONTRACT_INVALID', path: '' },
+      ],
+    });
+  });
 });

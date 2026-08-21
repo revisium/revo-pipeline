@@ -168,6 +168,12 @@ function createDependencyRules(manifest, productionDependencyNames) {
       to: { path: `^${escapeRegularExpression(manifest.rootModule)}$` },
     },
     {
+      name: 'layers-do-not-import-revo-run-facade',
+      severity: 'error',
+      from: { path: `^${allLayers}/` },
+      to: { path: '^src/revo-run/' },
+    },
+    {
       name: 'kernel-public-uses-only-approved-indexes',
       severity: 'error',
       from: { path: '^src/kernel/public\\.ts$' },
@@ -183,6 +189,12 @@ function createDependencyRules(manifest, productionDependencyNames) {
         pathNot:
           '^(?:src/foundation/index\\.ts|src/source/index\\.ts|src/materialization/index\\.ts|src/program/index\\.ts|src/compiler/index\\.ts|src/revo-run/)',
       },
+    },
+    {
+      name: 'revo-run-private-imports-use-public-facade',
+      severity: 'error',
+      from: { pathNot: '^(?:src/revo-run/|test/support/revo-run-internal\\.ts$)' },
+      to: { path: '^src/revo-run/(?!public\\.ts$)' },
     },
     {
       name: 'private-layers-do-not-import-kernel-public',

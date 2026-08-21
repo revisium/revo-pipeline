@@ -5,13 +5,13 @@ correction.
 
 ## Blocking findings
 
-- Package metadata differs from the approved `0.1.0-alpha.1` prerelease, `publishConfig`
+- Package metadata differs from the approved `0.2.0-alpha.1` prerelease, `publishConfig`
   differs from `{ access: public, tag: alpha }`, a publication-blocking hook or
   `private` flag returns, or release automation can publish from a pull request,
   untrusted fork, non-alpha tag, or version-mismatched tag.
-- Root or `./kernel` runtime/type inventories differ from Pipeline Conformance v1, a
-  deep/default/CommonJS/wildcard export appears, or the shared `PipelineProgramSchema`
-  is not the same runtime value.
+- Root, `./kernel`, or the ADR 0013 `./revo-run` runtime/type inventories differ from
+  Pipeline Conformance v1, an unapproved deep/default/CommonJS/wildcard export appears,
+  or the shared `PipelineProgramSchema` is not the same runtime value.
 - A compatibility adapter, dual reader, deprecated alias, hidden interpreter, runtime
   plugin, or source/IR kind outside the closed 12/9 vocabularies appears.
 - Pipeline behavior depends on run IDs, time, persistence, attempts, leases, retries,

@@ -101,7 +101,9 @@ describe('manifest-derived dependency rules', () => {
     ['root-import', 'layers-do-not-import-root-module'],
     ['root-private-import', 'root-module-uses-only-approved-facade-sources'],
     ['root-kernel-import', 'root-module-uses-only-approved-facade-sources'],
+    ['layer-revo-run-import', 'layers-do-not-import-revo-run-facade'],
     ['kernel-public-deep', 'kernel-public-uses-only-approved-indexes'],
+    ['revo-run-private-import', 'revo-run-private-imports-use-public-facade'],
     ['kernel-internal-public', 'private-layers-do-not-import-kernel-public'],
     ['package-kernel-index', 'publication-boundary-imports-only-kernel-public'],
     ['unresolved-local', 'source-imports-must-resolve'],
@@ -114,12 +116,15 @@ describe('manifest-derived dependency rules', () => {
     expect(readViolationNames(result.stdout)).toContain(rule);
   });
 
-  it.each(['allowed-index', 'allowed-peer', 'allowed-node-crypto', 'allowed-canonicalize'])(
-    'accepts the %s representative fixture',
-    (fixture) => {
-      const result = cruiseFixture(fixture);
-      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-      expect(readViolationNames(result.stdout)).toEqual([]);
-    },
-  );
+  it.each([
+    'allowed-index',
+    'allowed-peer',
+    'allowed-node-crypto',
+    'allowed-canonicalize',
+    'revo-run-internal-support',
+  ])('accepts the %s representative fixture', (fixture) => {
+    const result = cruiseFixture(fixture);
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(readViolationNames(result.stdout)).toEqual([]);
+  });
 });

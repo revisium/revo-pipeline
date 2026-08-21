@@ -16,10 +16,12 @@ own persistence, attempts, leases, clocks, DBOS workflows, retries, binding reso
 authorization, subscriptions, or host frameworks. Do not add `revo-run`, Prisma, DBOS,
 queues, NestJS, GraphQL, MCP, CLI, or provider SDK dependencies.
 
-The only consumer entrypoints are `@revisium/revo-pipeline` and
-`@revisium/revo-pipeline/kernel`, with the exact manifests in Pipeline Conformance v1.
-Do not add deep exports, wildcard barrels, default or CommonJS exports, adapters,
-deprecated aliases, dual readers, hidden interpreters, or runtime node-kind plugins.
+The only consumer entrypoints are `@revisium/revo-pipeline`,
+`@revisium/revo-pipeline/kernel`, and the ADR 0013
+`@revisium/revo-pipeline/revo-run` bridge, with the exact manifests in Pipeline
+Conformance v1. Do not add other deep exports, wildcard barrels, default or CommonJS
+exports, adapters, deprecated aliases, dual readers, hidden interpreters, or runtime
+node-kind plugins.
 
 Keep production dependencies exactly `typebox@1.3.10` and `canonicalize@4.0.0`. The
 under-development package may be published only as an unstable prerelease under the npm

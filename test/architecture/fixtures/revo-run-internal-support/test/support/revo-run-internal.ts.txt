@@ -1,0 +1,3 @@
+import { lower } from '../../src/revo-run/lower-program.js';
+
+export { lower };
