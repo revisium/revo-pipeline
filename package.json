@@ -1,6 +1,6 @@
 {
   "name": "@revisium/revo-pipeline",
-  "version": "0.1.0-alpha.1",
+  "version": "0.2.0-alpha.1",
   "description": "Under-development portable pipeline language, compiler, and pure kernel for Revo.",
   "homepage": "https://github.com/revisium/revo-pipeline#readme",
   "bugs": {
@@ -28,6 +28,10 @@
     "./kernel": {
       "types": "./dist/kernel/public.d.ts",
       "import": "./dist/kernel/public.js"
+    },
+    "./execution-plan": {
+      "types": "./dist/execution-plan/public.d.ts",
+      "import": "./dist/execution-plan/public.js"
     }
   },
   "publishConfig": {

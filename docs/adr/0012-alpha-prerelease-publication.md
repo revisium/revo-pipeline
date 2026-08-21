@@ -12,7 +12,7 @@ must not imply compatibility or downstream readiness.
 
 The under-development package may be published only as a prerelease under the npm
 `alpha` tag. Every such release remains Draft and unstable, carries no compatibility
-guarantee, and does not attest `revo-core` or `revo-run` readiness.
+guarantee, and does not attest `revo-core` or host-runtime readiness.
 
 ## Alternatives Considered
 

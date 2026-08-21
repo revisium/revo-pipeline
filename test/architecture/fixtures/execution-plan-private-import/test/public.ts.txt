@@ -1,0 +1,3 @@
+import { lower } from '../src/execution-plan/lower-program.js';
+
+export { lower };
