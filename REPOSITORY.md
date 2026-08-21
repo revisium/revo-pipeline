@@ -25,10 +25,13 @@ layers never import the root facade. The root facade imports only the foundation
 source, materialization, Program, and compiler indexes. The reserved `src/extensions`
 directory must not exist.
 
-`package.json` exposes only `.`, `./kernel`, and `./execution-plan`. It builds strict NodeNext JavaScript and
-declarations under `dist/`, without source or declaration maps. The package is version
-`0.2.0-alpha.1` and may be published publicly only under the npm `alpha` tag. It remains
-Draft and unstable, with no compatibility or `revo-core`/host-runtime readiness claim.
+`package.json` exposes only `.`, `./kernel`, and `./execution-plan`. It builds strict
+NodeNext JavaScript and declarations under `dist/`, without source or declaration maps.
+The package is version `0.2.0-alpha.1` and may be published publicly only under the npm
+`alpha` tag. It remains Draft and unstable, with no compatibility or `revo-core` or
+host-runtime readiness claim. ADR 0013 narrowly amends the direct-cutover boundary with
+the pipeline-owned execution-plan facade; it does not add a host dependency or a
+compatibility surface.
 Production dependencies are exactly `typebox@1.3.10` and `canonicalize@4.0.0`; no
 workflow publishes from pull requests. Release-train transitions are manual; automated
 npm publication requires an explicit version-matched alpha tag.
