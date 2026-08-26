@@ -1,16 +1,16 @@
 export {
   AbstractParticipantSchema,
-  AgentSlotMaterializationSchema,
-  ProfileMaterializationSchema,
-  SlotSelectionSchema,
+  PipelineSelectionSchema,
+  PipelineSelectionsSchema,
   type AbstractParticipant,
-  type AgentSlotMaterialization,
-  type ProfileMaterialization,
-  type SlotSelection,
+  type InternalAgentSlot,
+  type InternalMaterialization,
+  type InternalSlotSelection,
+  type PipelineSelections,
+  type PipelineSelection,
 } from './contracts.js';
 export {
-  validateProfileMaterialization,
-  type ProfileMaterializationValidationResult,
-  type ValidatedProfileMaterialization,
+  validatePipelineSelections,
+  type PipelineSelectionsValidationResult,
+  type ValidatedPipelineSelections,
 } from './validate.js';
-export { computeMaterializationDigest, defineProfileMaterialization } from './public.js';

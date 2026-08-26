@@ -2,27 +2,52 @@ import { describe, expect, it } from 'vitest';
 
 import { compilePipeline } from '../../../src/compiler/index.js';
 import { EmptyObjectSchema, PipelineFailureValueSchema } from '../../../src/foundation/index.js';
+import { createInitialPipelineState } from '../../../src/kernel/index.js';
 import {
   ConsensusParticipantRegionOutputSchema,
   VoteExitSchema,
   VoteValueSchema,
 } from '../../../src/program/index.js';
-import type { PipelineSourcePackage } from '../../../src/source/index.js';
+import type {
+  PipelineSourcePackage,
+  ValueMapping,
+  ValueSchema,
+} from '../../../src/source/index.js';
+import { AgentActivityInputValueSchema } from '../../../src/source/index.js';
 import { consensusAgentNode, materializationFor } from '../../support/compiler-builders.js';
 import { consensusIdentityRecords } from '../../support/compiler-vectors.js';
 import { sourceForNode, sourceNodeBuilders } from '../../support/source-builders.js';
 
-const participantInputSchema = {
-  type: 'object',
-  properties: { request: { type: 'string', enum: ['review'] } },
-  required: ['request'],
-  additionalProperties: false,
-} as const;
+const participantInputSchema = AgentActivityInputValueSchema;
 const parentParticipantInput = {
-  request: { kind: 'literal', value: 'review' },
+  prompt: { kind: 'scopeInput', pointer: '/prompt' },
 } as const;
 const participantActivityInput = {
-  request: { kind: 'scopeInput', pointer: '/request' },
+  prompt: { kind: 'scopeInput', pointer: '/prompt' },
+} as const;
+const agentParticipantInput = {
+  prompt: { kind: 'scopeInput', pointer: '/prompt' },
+} as const;
+const metadataParticipantInputSchema = {
+  type: 'object',
+  properties: {
+    prompt: { type: 'string' },
+    metadata: {
+      type: 'object',
+      properties: {
+        nested: {
+          type: 'object',
+          properties: { attempt: { type: 'integer', minimum: 2, maximum: 2 } },
+          required: ['attempt'],
+          additionalProperties: false,
+        },
+      },
+      required: ['nested'],
+      additionalProperties: false,
+    },
+  },
+  required: ['prompt', 'metadata'],
+  additionalProperties: false,
 } as const;
 
 const successful = (
@@ -72,11 +97,13 @@ const voteTopology = (program: ReturnType<typeof successful>['program']) => {
 
 const expectParticipantContracts = (
   participants: ReturnType<typeof voteTopology>['participants'],
+  inputSchema: ValueSchema = participantInputSchema,
+  input: ValueMapping = participantActivityInput,
 ) => {
   for (const participant of participants) {
     expect(participant.region).toEqual({
       entry: participant.activity.id,
-      inputSchema: participantInputSchema,
+      inputSchema,
       outputSchema: ConsensusParticipantRegionOutputSchema,
       exits: [
         { outcome: 'cancelled', outputSchema: EmptyObjectSchema },
@@ -90,8 +117,8 @@ const expectParticipantContracts = (
       id: participant.activity.id,
       activityKind: 'agent',
       requirementKey: participant.bindingKey,
-      input: participantActivityInput,
-      inputSchema: participantInputSchema,
+      input,
+      inputSchema,
       outputSchema: VoteValueSchema,
       routes: {
         succeeded: participant.ends.vote?.id,
@@ -149,11 +176,12 @@ const exactChoice = (
 const expectedConsensusProvenance = (materialized: boolean) =>
   consensusIdentityRecords.map(({ programNodeId, loweringRole, ordinal, participantIndex }) => ({
     programNodeId,
+    sourceNodeId: 'activity',
     sourcePath: '/modules/0/region/nodes/0',
     materializationPath: materialized
       ? participantIndex === null
-        ? '/slots/0/selection'
-        : `/slots/0/selection/participants/${participantIndex}`
+        ? '/activity'
+        : `/activity/participants/${participantIndex}`
       : null,
     loweringRole,
     ordinal,
@@ -235,8 +263,13 @@ describe('consensus lowering topology', () => {
   it('emits complete slot-consensus topology and exact materialization paths', () => {
     const source = sourceForNode({
       ...consensusAgentNode(),
-      input: parentParticipantInput,
-      inputSchema: participantInputSchema,
+      input: { prompt: { kind: 'scopeInput', pointer: '/prompt' } },
+      inputSchema: {
+        type: 'object',
+        properties: { prompt: { type: 'string' } },
+        required: ['prompt'],
+        additionalProperties: false,
+      },
     });
     const result = successful(
       source,
@@ -250,10 +283,27 @@ describe('consensus lowering topology', () => {
     );
     const { parallel, choice, participants: topology } = voteTopology(result.program);
 
-    expectParticipantContracts(topology);
+    expectParticipantContracts(
+      topology,
+      {
+        type: 'object',
+        properties: { prompt: { type: 'string' } },
+        required: ['prompt'],
+        additionalProperties: false,
+      },
+      agentParticipantInput,
+    );
     expect(topology.map(({ key, bindingKey, input }) => ({ key, bindingKey, input }))).toEqual([
-      { key: 'alpha', bindingKey: 'alpha-binding', input: parentParticipantInput },
-      { key: 'équipe', bindingKey: 'equipe-binding', input: parentParticipantInput },
+      {
+        key: 'alpha',
+        bindingKey: 'alpha-binding',
+        input: agentParticipantInput,
+      },
+      {
+        key: 'équipe',
+        bindingKey: 'equipe-binding',
+        input: agentParticipantInput,
+      },
     ]);
     expect(parallel).toEqual({
       kind: 'parallel',
@@ -270,14 +320,24 @@ describe('consensus lowering topology', () => {
         kind: 'agent',
         key: 'alpha-binding',
         bindingKey: 'alpha-binding',
-        inputSchema: participantInputSchema,
+        inputSchema: {
+          type: 'object',
+          properties: { prompt: { type: 'string' } },
+          required: ['prompt'],
+          additionalProperties: false,
+        },
         outputSchema: VoteValueSchema,
       },
       {
         kind: 'agent',
         key: 'equipe-binding',
         bindingKey: 'equipe-binding',
-        inputSchema: participantInputSchema,
+        inputSchema: {
+          type: 'object',
+          properties: { prompt: { type: 'string' } },
+          required: ['prompt'],
+          additionalProperties: false,
+        },
         outputSchema: VoteValueSchema,
       },
     ]);
@@ -285,14 +345,81 @@ describe('consensus lowering topology', () => {
       {
         requirementKey: 'alpha-binding',
         sourcePaths: ['/modules/0/region/nodes/0'],
-        materializationPaths: ['/slots/0/selection/participants/0'],
+        materializationPaths: ['/activity/participants/0'],
       },
       {
         requirementKey: 'equipe-binding',
         sourcePaths: ['/modules/0/region/nodes/0'],
-        materializationPaths: ['/slots/0/selection/participants/1'],
+        materializationPaths: ['/activity/participants/1'],
       },
     ]);
     expect(consensusProvenance(result)).toEqual(expectedConsensusProvenance(true));
+  });
+
+  it('uses the fixed agent envelope for explicit-consensus participants', () => {
+    const metadata = { nested: { attempt: 2 } };
+    const consensus = sourceNodeBuilders.consensus();
+    const source = sourceForNode({
+      ...consensus,
+      participants: [
+        {
+          ...consensus.participants[0],
+          input: {
+            prompt: { kind: 'scopeInput' as const, pointer: '/prompt' as const },
+            metadata: { kind: 'literal' as const, value: metadata },
+          },
+          inputSchema: metadataParticipantInputSchema,
+        },
+        {
+          ...consensus.participants[1],
+          input: {
+            prompt: { kind: 'scopeInput' as const, pointer: '/prompt' as const },
+            metadata: { kind: 'literal' as const, value: metadata },
+          },
+          inputSchema: metadataParticipantInputSchema,
+        },
+      ],
+    });
+    const result = successful(source);
+    const initial = createInitialPipelineState(
+      { program: result.program, programDigest: result.programDigest },
+      { prompt: 'Review this consensus.' },
+    );
+
+    expect(initial.commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'dispatchActivity',
+          input: { prompt: 'Review this consensus.', metadata },
+        }),
+      ]),
+    );
+
+    const invalid = sourceForNode({
+      ...consensus,
+      participants: [
+        {
+          ...consensus.participants[0],
+          input: { request: { kind: 'literal' as const, value: 'review' } },
+          inputSchema: {
+            type: 'object' as const,
+            properties: { request: { type: 'string' as const } },
+            required: ['request'],
+            additionalProperties: false,
+          },
+        },
+        {
+          ...consensus.participants[1],
+          input: { request: { kind: 'literal' as const, value: 'review' } },
+          inputSchema: {
+            type: 'object' as const,
+            properties: { request: { type: 'string' as const } },
+            required: ['request'],
+            additionalProperties: false,
+          },
+        },
+      ],
+    });
+    expect(compilePipeline(invalid, materializationFor(invalid)).ok).toBe(false);
   });
 });

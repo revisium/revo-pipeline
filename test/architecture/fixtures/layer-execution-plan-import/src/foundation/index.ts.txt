@@ -1,3 +1,0 @@
-import { bridge } from '../execution-plan/public.js';
-
-export { bridge };

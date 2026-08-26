@@ -1,5 +1,7 @@
 export {
   ActivityRoutesSchema,
+  AgentActivityInputSchema,
+  AgentActivityInputValueSchema,
   AgentSlotStrategySchema,
   ChoiceDomainSchema,
   ConsensusPolicySchema,
@@ -12,11 +14,13 @@ export {
   PipelineSourcePackageSchema,
   RepeatConditionSchema,
   SourceNodeSchema,
+  SourceNodeIdSchema,
   SourceRegionSchema,
   ValueMappingSchema,
   ValueSchemaSchema,
   ValueSelectorSchema,
   type ActivityRoutes,
+  type AgentActivityInput,
   type AgentSlotStrategy,
   type AgentSourceNode,
   type CallSourceNode,
@@ -26,7 +30,6 @@ export {
   type ConsensusPolicy,
   type ConsensusRoutes,
   type ConsensusSourceNode,
-  type EffectSourceNode,
   type EndSourceNode,
   type ExplicitConsensusParticipant,
   type HumanGateSourceNode,
@@ -44,6 +47,7 @@ export {
   type ScriptSourceNode,
   type SingleAgentStrategy,
   type SourceNode,
+  type SourceNodeId,
   type SourceRegion,
   type SourceRegionExit,
   type ValueMapping,
@@ -79,4 +83,11 @@ export {
   type EnvelopeValidator,
   type EnvelopeValidatorOptions,
 } from './validation/envelope.js';
-export { computeSourceDigest, definePipelineSource } from './public.js';
+export {
+  computeSourceDigest,
+  definePipelineSource,
+  inspectPipelineSlots,
+  type PipelineSlotDescriptor,
+  type PipelineSlotInspectionResult,
+  type PipelineSlotStrategyDescriptor,
+} from './public.js';

@@ -93,17 +93,19 @@ describe('kernel structured operations', () => {
       kind: 'gateResolved',
       commandKey: command.key,
       ref: command.ref,
-      resolution: { kind: 'answer', answer: 'yes', actorRef: 'reviewer' },
+      resolution: { kind: 'answer', answer: 'yes', actorRef: 'reviewer', payload: null },
     });
     expect(advanced).toMatchObject({ kind: 'advanced', state: { status: 'succeeded' } });
   });
 
   it.each([
-    ['conflict', { kind: 'gateResolved', resolution: { kind: 'conflict' } }],
     ['deadline', { kind: 'gateResolved', resolution: { kind: 'deadline' } }],
     ['cancelled', { kind: 'gateCancelled' }],
   ] as const)('routes a %s gate terminal through its declared continuation', (_name, event) => {
-    const bundle = compileStructuredNode(sourceNodeBuilders.humanGate());
+    const bundle = compileStructuredNode({
+      ...sourceNodeBuilders.humanGate(),
+      deadline: { afterMs: 1, target: 'done' },
+    });
     const initial = createInitialPipelineState(bundle, {});
     const command = commandOf(initial.commands, 'openHumanGate');
     const advanced = advancePipeline(bundle, initial.state, {
@@ -211,7 +213,7 @@ describe('kernel structured operations', () => {
       kind: 'gateResolved',
       commandKey: command.key,
       ref: command.ref,
-      resolution: { kind: 'answer', answer: 'no', actorRef: 'reviewer' },
+      resolution: { kind: 'answer', answer: 'no', actorRef: 'reviewer', payload: null },
     });
     expect(rejected).toMatchObject({ kind: 'rejected', faults: [{ code: 'EVENT_GATE_ANSWER' }] });
     expect(rejected.state).toBe(initial.state);

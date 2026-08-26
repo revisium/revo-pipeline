@@ -20,8 +20,8 @@ const fixture = () => {
   const secondActivity = {
     kind: 'activity' as const,
     id: programId('2'),
-    activityKind: 'effect' as const,
-    requirementKey: 'effect-2',
+    activityKind: 'script' as const,
+    requirementKey: 'script-2',
     input: {},
     inputSchema: emptySchema(),
     outputSchema: emptySchema(),
@@ -30,8 +30,8 @@ const fixture = () => {
   const firstActivity = {
     kind: 'activity' as const,
     id: programId('1'),
-    activityKind: 'effect' as const,
-    requirementKey: 'effect-1',
+    activityKind: 'script' as const,
+    requirementKey: 'script-1',
     input: {},
     inputSchema: emptySchema(),
     outputSchema: emptySchema(),

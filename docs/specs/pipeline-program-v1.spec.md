@@ -11,7 +11,7 @@ RFC 8174) when, and only when, they appear in all capitals.
 ## Scope
 
 This specification defines the exact compiler result, linked Program IR, abstract
-requirements, and provenance. It defines no exact executor binding or `ExecutionPlan`.
+requirements, and provenance. It defines no exact executor binding or host run record.
 These contracts remain Draft; their unstable APIs are available from npm `alpha`
 prereleases and local or CI-built tarballs without a compatibility guarantee. TypeBox schemas are authoritative
 and MUST reject unknown fields, versions, kinds, and policies.
@@ -39,11 +39,11 @@ type PipelineCompileResult =
 
 declare function compilePipeline(
   source: PipelineSourcePackage,
-  materialization: ProfileMaterialization,
+  selections: PipelineSelections,
 ): PipelineCompileResult;
 ```
 
-Compilation validates source and materialization, links, proves bounds/dataflow, lowers,
+Compilation validates source and selections, materializes internally, links, proves bounds/dataflow, lowers,
 deduplicates requirements, canonicalizes, and hashes in that order. Failure returns no
 partial program, requirements, provenance, or digest. Success MUST own and recursively
 freeze new data without retaining or freezing caller objects. Its outer `sourceDigest`
@@ -185,7 +185,7 @@ type ProgramRepeatCondition =
 Selectors preserve Source v1 scope and compatibility rules. `scopeInput` reads the
 immutable current-region input. `nodeOutput` reads only succeeded results;
 `nodeFailure` reads only failed results on dominated failure routes. The compiler
-replaces source keys with full program node IDs. No selector contains executable code.
+replaces source node IDs with full program node IDs. No selector contains executable code.
 
 The compiler-generated consensus participant schemas are exactly these normative
 values; they are not additional package exports:
@@ -211,7 +211,7 @@ const ConsensusParticipantRegionOutputSchema = {
 type ProgramActivityNode = {
   readonly kind: 'activity';
   readonly id: ProgramNodeId;
-  readonly activityKind: 'agent' | 'script' | 'effect';
+  readonly activityKind: 'agent' | 'script';
   readonly requirementKey: string;
   readonly input: ProgramValueMapping;
   readonly inputSchema: ValueSchema;
@@ -378,13 +378,13 @@ type ProgramHumanGateNode = {
   readonly subject: string;
   readonly answers: readonly [string, ...string[]];
   readonly authorizationRequirements: readonly string[];
+  readonly payloadSchema: ValueSchema | null;
+  readonly deadline: { readonly afterMs: number; readonly target: ProgramNodeId } | null;
   readonly routes: {
     readonly answers: readonly [
       { readonly answer: string; readonly target: ProgramNodeId },
       ...{ readonly answer: string; readonly target: ProgramNodeId }[],
     ];
-    readonly conflict: ProgramNodeId;
-    readonly deadline: ProgramNodeId;
     readonly cancelled: ProgramNodeId;
   };
 };
@@ -408,7 +408,7 @@ type ProgramNode =
   | ProgramEndNode;
 ```
 
-These are exactly nine IR kinds. `agent`, `script`, `effect`, `consensus`, `sequence`,
+These are exactly nine IR kinds. `agent`, `script`, `consensus`, `sequence`,
 `aggregation`, `plugin`, `fork`, `join`, `task`, and `terminal` MUST be rejected.
 
 An activity has exactly three terminal statuses: `succeeded`, `failed`, and `cancelled`.
@@ -475,12 +475,13 @@ from another branch.
 Every generated agent requirement is exactly
 `{kind:'agent',key:bindingKey,bindingKey,inputSchema,outputSchema}`. Slot-consensus
 requirement source provenance is the owning agent node; explicit-consensus requirement
-source provenance is the exact participant record. For slot index `s`, aggregate
-parallel/choice materialization provenance is `/slots/{s}/selection`, single activity
-and requirement provenance is `/slots/{s}/selection/participant`, and each participant
-region/activity/end plus requirement provenance is
-`/slots/{s}/selection/participants/{i}`. Explicit-consensus materialization paths are
-all null.
+source provenance is the exact participant record. Slot materialization provenance is
+canonical and order-independent: for source node ID `id`, aggregate parallel/choice use
+`/{id}`, a single activity and requirement use `/{id}/participant`, and each participant
+region/activity/end plus requirement uses `/{id}/participants/{i}`. Explicit-consensus
+materialization paths are all null. Diagnostics use the same record paths; no caller array
+path exists. Node provenance additionally records the owning source node ID (or null for
+a module root region), without changing the IR-ID preimage.
 
 Participants normalize by Unicode code-point order before lowering; `i` below is their
 zero-based position in that order. Every `ProgramVoteBranch.region` has exactly:
@@ -564,9 +565,10 @@ only `payload:null` and produces `null`; otherwise it produces the exact validat
 signal payload. Runtime missing data or schema mismatch is a machine DATA fault, never
 an exception.
 
-A human gate contains no arbitration policy or caller-defined output schema. The host
-supplies an explicit answer, conflict, or deadline resolution after auth/arbitration;
-the node output is exactly that closed resolution object. `gateCancelled` is distinct
+A human gate contains no arbitration policy. The host supplies one explicit answer with
+validated payload after authorization. It may supply a deadline resolution if and only if
+`node.deadline` is non-null; the node output is exactly that closed resolution object.
+`gateCancelled` is distinct
 and selects the cancelled route. A Program human gate's `answers` and answer-route keys
 MUST be unique, equal keyed sets normalized by Unicode code point. A malformed admitted
 Program with a duplicate, missing, or extra answer route is `PROGRAM_INVALID`; runtime
@@ -588,19 +590,11 @@ type AgentProgramRequirement = {
 type ScriptProgramRequirement = {
   readonly kind: 'script';
   readonly key: string;
-  readonly script: { readonly key: string; readonly revision: number };
+  readonly script: { readonly id: string; readonly version: number };
   readonly inputSchema: ValueSchema;
   readonly outputSchema: ValueSchema;
 };
-type EffectProgramRequirement = {
-  readonly kind: 'effect';
-  readonly key: string;
-  readonly effectKey: string;
-  readonly inputSchema: ValueSchema;
-  readonly outputSchema: ValueSchema;
-};
-type ProgramRequirement =
-  AgentProgramRequirement | ScriptProgramRequirement | EffectProgramRequirement;
+type ProgramRequirement = AgentProgramRequirement | ScriptProgramRequirement;
 type ProgramRequirements = {
   readonly schemaVersion: 'pipeline-requirements/v1';
   readonly entries: readonly ProgramRequirement[];
@@ -627,6 +621,7 @@ type LoweringRole =
   | 'consensusChoice';
 type NodeProvenance = {
   readonly programNodeId: ProgramNodeId;
+  readonly sourceNodeId: SourceNodeId | null;
   readonly sourcePath: JsonPointer;
   readonly materializationPath: JsonPointer | null;
   readonly loweringRole: LoweringRole;
@@ -703,7 +698,7 @@ valid `JsonPointer` `path`. Malformed values become
 `{code:'DATA_SCHEMA_MISMATCH',path:''}` at the owning node; a valid failure is copied
 unchanged through branch, vote, repeat, call, map, and final state propagation.
 `nodeFailure` always reads the retained exact object. If deterministic internal progress
-produces multiple failures in one transition, the lowest canonical branch/item/node key
+produces multiple failures in one transition, the lowest canonical branch/item/node ID
 selects the propagated failure. If failures arrive in different events, the first valid
 event selects it and later events cannot replace it.
 

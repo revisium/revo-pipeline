@@ -29,7 +29,7 @@ export const createTargetIds = (
     region.nodes.map((node, index) => {
       const nodePath = `${path}/nodes/${index}` as JsonPointer;
       return [
-        node.key,
+        node.id,
         createLoweredIdentity(nodePath, targetRole(node, nodePath, context), 0, null).id,
       ];
     }),

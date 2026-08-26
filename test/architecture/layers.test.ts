@@ -52,10 +52,9 @@ describe('canonical layer manifest', () => {
     expect(manifest).toEqual(expectedManifest);
   });
 
-  it('materializes exactly the six dependency layers plus approved integration facades', () => {
+  it('materializes exactly the six dependency layers and two public facades', () => {
     expect(readdirSync(join(repositoryRoot, 'src')).toSorted()).toEqual([
       'compiler',
-      'execution-plan',
       'foundation',
       'index.ts',
       'kernel',

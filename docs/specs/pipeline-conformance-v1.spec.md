@@ -20,17 +20,18 @@ The root `@revisium/revo-pipeline` runtime manifest MUST contain exactly:
 ```text
 ValueSchemaSchema
 PipelineSourcePackageSchema
-ProfileMaterializationSchema
+PipelineSelectionsSchema
+PipelineSelectionSchema
+AgentActivityInputSchema
 PipelineProgramSchema
 ProgramRequirementsSchema
 ProgramProvenanceSchema
 PipelineCompileResultSchema
 ProgramDigestInputSchema
 definePipelineSource
-defineProfileMaterialization
+inspectPipelineSlots
 compilePipeline
 computeSourceDigest
-computeMaterializationDigest
 computeProgramDigest
 ```
 
@@ -41,34 +42,36 @@ JsonScalar JsonValue JsonPointer ValueSchema ValueSelector ValueMapping ChoiceDo
 PipelineFailure RepeatCondition PipelineSourcePackage PipelineSourceModule SourceRegion
 SourceRegionExit ActivityRoutes ConsensusRoutes SingleAgentStrategy
 ConsensusAgentStrategy AgentSlotStrategy ConsensusPolicy AgentSourceNode ScriptSourceNode
-EffectSourceNode ChoiceSourceNode ParallelBranchClassification RegionExitClassification
+ChoiceSourceNode ParallelBranchClassification RegionExitClassification
 ParallelSourceBranch ParallelPolicy ParallelRoutes ParallelSourceNode RepeatSourceNode
 MapSourceNode WaitSourceNode HumanGateSourceNode ExplicitConsensusParticipant
 ConsensusSourceNode CallSourceNode EndSourceNode SourceNode PipelineDiagnosticFamily
-PipelineDiagnostic AbstractParticipant SlotSelection AgentSlotMaterialization
-ProfileMaterialization Digest ProgramNodeId PipelineCompileResult PipelineProgram
+PipelineDiagnostic AbstractParticipant PipelineSelection PipelineSelections
+SourceNodeId PipelineSlotStrategyDescriptor PipelineSlotDescriptor PipelineSlotInspectionResult ScriptPin
+AgentActivityInput Digest ProgramNodeId PipelineCompileResult PipelineProgram
 ProgramModule ProgramRegion ProgramRegionExit ProgramValueSelector ProgramValueMapping
 ProgramRepeatCondition ProgramActivityNode ProgramChoiceNode ProgramCallNode
 GenericParallelBranchResult GenericParallelOutput VoteParallelBranchResult
 VoteParallelOutput ProgramParallelBranch ProgramVoteBranch ProgramParallelNode
 ProgramRepeatNode ProgramMapNode ProgramWaitNode ProgramHumanGateNode ProgramEndNode
-ProgramNode AgentProgramRequirement ScriptProgramRequirement EffectProgramRequirement
+ProgramNode AgentProgramRequirement ScriptProgramRequirement
 ProgramRequirement ProgramRequirements LoweringRole NodeProvenance
 RequirementProvenance ProgramProvenance ProgramDigestInput
 ```
 
-The `@revisium/revo-pipeline/execution-plan` runtime manifest MUST contain exactly
-`compileToExecutionPlan`. Its type manifest contains only the ADR 0013 pipeline-owned
-bridge result, diagnostic, plan, node, binding, policy, and host-input types. The root
-and `./kernel` runtime and type manifests remain unchanged.
+The package exposes only `.` and `./kernel`. Every other package subpath MUST be
+rejected by Node package exports.
 
 The helper and digest signatures MUST be exactly:
 
 ```ts
 declare function definePipelineSource<const T extends PipelineSourcePackage>(value: T): T;
-declare function defineProfileMaterialization<const T extends ProfileMaterialization>(value: T): T;
 declare function computeSourceDigest(source: PipelineSourcePackage): Digest;
-declare function computeMaterializationDigest(value: ProfileMaterialization): Digest;
+declare function inspectPipelineSlots(source: PipelineSourcePackage): PipelineSlotInspectionResult;
+declare function compilePipeline(
+  source: PipelineSourcePackage,
+  selections: PipelineSelections,
+): PipelineCompileResult;
 type ProgramDigestInput = {
   readonly program: PipelineProgram;
   readonly requirements: ProgramRequirements;
@@ -117,7 +120,7 @@ PipelineEvent PipelineCommand InitialPipelineTransition PipelineTransition Machi
 MachineFault
 ```
 
-`package.json` MUST expose only `.`, `./kernel`, and the ADR 0013 `./execution-plan` bridge.
+`package.json` MUST expose only `.` and `./kernel`.
 No layer barrel, internal lowering
 seam, validator helper, comparator, graph algorithm, canonicalizer wrapper, policy model,
 XState machine, or runtime plugin API is public.
@@ -129,7 +132,7 @@ remains unstable, carries no compatibility guarantee, and makes no `revo-core` o
 host-runtime readiness claim. Its `files` list MUST be exactly `dist`, `README.md`, and
 `LICENSE`; packed files MUST be only those three root files plus `dist/**/*.js` and
 `dist/**/*.d.ts`. JavaScript, declarations, and package metadata MUST point only at the
-three curated ESM entrypoints. Default, CommonJS, wildcard, and deep subpath exports are
+two curated ESM entrypoints. Default, CommonJS, wildcard, and deep subpath exports are
 forbidden.
 
 ## Exact dependency contract
@@ -138,8 +141,8 @@ Production dependencies MUST be exactly `typebox@1.3.10` and
 `canonicalize@4.0.0`. SHA-256 MUST use built-in `node:crypto`. `fast-check` MAY be an
 exact-pinned development dependency. Ajv and XState MUST NOT be production dependencies.
 No DBOS, Prisma, queue, NestJS, GraphQL, MCP, CLI, model/provider SDK, persistence,
-timer, or authorization dependency is allowed. The ADR 0013 bridge has no host/runtime
-dependency; root and kernel production dependency inventories remain unchanged.
+timer, or authorization dependency is allowed. Root and kernel production dependency
+inventories remain unchanged.
 
 ## Schema and compiler suites
 
@@ -148,7 +151,7 @@ field, required/optional position, unknown field/version/kind, closed source/IR/
 command union, recursive region, schema-dialect form, identifier/value limit, and
 diagnostic family.
 
-Compiler tests MUST cover all 12 source and nine IR kinds, explicit region exits,
+Compiler tests MUST cover all 11 source and nine IR kinds, explicit region exits,
 author-exit classifications, target resolution, linked calls, missing calls, direct and
 indirect recursion, reachability/dead ends, deterministic diagnostic ordering, and every
 static/dynamic bound with overflow.
@@ -164,11 +167,11 @@ runtime child-input mismatch.
 
 Human-gate source fixtures MUST permute both answer arrays and prove Unicode-keyed-set
 normalization. Duplicate vocabulary, duplicate route, missing route, and extra route
-MUST each produce only `SOURCE_GATE_ANSWER_BIJECTION` at the gate source path. An
+MUST each produce only `SOURCE_GATE_ANSWER_BIJECTION` at the gate diagnostic path. An
 admitted Program with the same malformed cases MUST be `PROGRAM_INVALID`; a valid
 Program receiving an undeclared runtime answer MUST remain `EVENT_GATE_ANSWER`.
 
-Materialization tests MUST prove complete/unique source-path coverage, source-digest
+Materialization tests MUST prove complete/unique source-node-ID coverage, source-digest
 pinning, strategy membership, single cardinality, every consensus count in the source
 minimum/maximum range including one, rejection outside it, source-owned routes/policy,
 exact-count quorum/threshold reachability, independent-threshold mutual exclusion, and
@@ -179,7 +182,7 @@ Requirement tests MUST prove every activity has one requirement, every requireme
 used, identical declarations deduplicate, conflicting same-key declarations fail, and
 requirements contain no resolved assembly or secret/provider data.
 
-Golden lowering fixtures MUST show one activity per single agent/script/effect; one
+Golden lowering fixtures MUST show one activity per single agent/script; one
 vote-parallel activity branch per consensus participant; one post-parallel routing
 choice; fixed internal branch classifications; exact author-outcome mappings; exact
 provenance; and no forbidden IR kind. Slot and explicit consensus fixtures MUST pin each
@@ -241,7 +244,7 @@ can read it. Failed-exit runtime fixtures MUST validate the closed object and se
 JSON Pointer; malformed code/path/unknown fields become
 `DATA_SCHEMA_MISMATCH` with path `''`. Valid failures MUST retain the same code/path
 through generic branch, vote, repeat, call, map, and final failure. Simultaneous failures
-select the lowest canonical branch/item/node key; failures from separate events retain
+select the lowest canonical branch/item/node ID; failures from separate events retain
 the first selected result.
 
 Parallel tests MUST exhaust every qualified/non-qualifying/failed/cancelled/pending
@@ -271,7 +274,7 @@ and fail-fast MUST propagate the full selected failure including path.
 
 Wait tests MUST cover duration null output, signal without payload, signal with
 schema-valid payload, bad payload DATA failure, wait cancellation, and serialized-state
-recovery. Gate tests MUST cover answer/conflict/deadline union, undeclared answer,
+recovery. Gate tests MUST cover declared answer payload, configured deadline, undeclared answer,
 separate gate cancellation, and the absence of kernel auth/arbitration decisions.
 
 Cancellation tests MUST prove nonterminal run cancellation, concurrent per-owner sibling
@@ -302,9 +305,13 @@ most 50 milliseconds. See ADR 0008.
 
 Tests MUST prove deterministic replay, no argument mutation/caller freeze, JSON round
 trip, no I/O/environment/clock/randomness/hidden state, and value-redacted bounded
-diagnostics. Secret values, prompts, provider payloads, rejected data, and local paths
-MUST be absent from compile faults, machine faults, hashes, provenance, state, and
-commands.
+diagnostics. Secret values and raw provider payloads MUST never enter pipeline inputs.
+Rejected values, local paths, and prompt text MUST be absent from diagnostic/fault
+messages, provenance, and other free-form excerpts. An admitted portable prompt is
+present only where required by the declared source/Program mapping, immutable scope
+state, and `dispatchActivity.input`; admitted semantic input/output may likewise be
+present in state and commands. Opaque digests MAY depend on those admitted values but
+MUST NOT reproduce their plaintext.
 
 Property tests SHOULD use exact-pinned `fast-check` with reported seeds. An independent
 finite reference model MUST verify parallel and vote completion without importing

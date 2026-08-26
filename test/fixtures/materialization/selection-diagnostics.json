@@ -1,0 +1,51 @@
+[
+  {
+    "name": "missing",
+    "family": "MATERIALIZATION",
+    "code": "MATERIALIZATION_SLOT_MISSING",
+    "path": "/activity",
+    "message": "A reachable agent slot has no selection."
+  },
+  {
+    "name": "invalid root",
+    "family": "MATERIALIZATION",
+    "code": "MATERIALIZATION_SELECTION_INVALID",
+    "path": "",
+    "message": "The agent-slot selection is invalid."
+  },
+  {
+    "name": "invalid record field",
+    "family": "MATERIALIZATION",
+    "code": "MATERIALIZATION_SELECTION_INVALID",
+    "path": "/activity/unexpected",
+    "message": "The agent-slot selection is invalid."
+  },
+  {
+    "name": "extra",
+    "family": "MATERIALIZATION",
+    "code": "MATERIALIZATION_SLOT_EXTRA",
+    "path": "/unknown",
+    "message": "A selection does not identify a reachable agent slot."
+  },
+  {
+    "name": "unavailable strategy",
+    "family": "MATERIALIZATION",
+    "code": "MATERIALIZATION_STRATEGY_UNAVAILABLE",
+    "path": "/activity/strategy",
+    "message": "The selected strategy is not allowed by the source agent slot."
+  },
+  {
+    "name": "duplicate participant",
+    "family": "MATERIALIZATION",
+    "code": "MATERIALIZATION_PARTICIPANT_DUPLICATE",
+    "path": "/activity/participants/1/key",
+    "message": "A participant key is duplicated within the selection."
+  },
+  {
+    "name": "policy count",
+    "family": "MATERIALIZATION",
+    "code": "MATERIALIZATION_POLICY_COUNT",
+    "path": "/activity/participants",
+    "message": "The materialized participant count does not satisfy the source policy."
+  }
+]

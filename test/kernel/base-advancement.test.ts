@@ -10,7 +10,7 @@ import {
   runningResult,
   terminalResult,
 } from '../support/kernel-builders.js';
-import { programEnd, programId } from '../support/program-builders.js';
+import { literalAgentInputSchema, programEnd, programId } from '../support/program-builders.js';
 import { emptySchema } from '../support/source-builders.js';
 
 const activityProgram = () => {
@@ -22,8 +22,8 @@ const activityProgram = () => {
     id: programId('1'),
     activityKind: 'agent',
     requirementKey: 'agent',
-    input: {},
-    inputSchema: emptySchema(),
+    input: { prompt: { kind: 'literal', value: 'advance' } },
+    inputSchema: literalAgentInputSchema('advance'),
     outputSchema: emptySchema(),
     routes: { succeeded: succeeded.id, failed: failed.id, cancelled: cancelled.id },
   };

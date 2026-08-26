@@ -10,7 +10,7 @@ import {
   runningResult,
   terminalResult,
 } from '../support/kernel-builders.js';
-import { programEnd, programId } from '../support/program-builders.js';
+import { literalAgentInputSchema, programEnd, programId } from '../support/program-builders.js';
 import { emptySchema } from '../support/source-builders.js';
 
 const activityFixture = () => {
@@ -20,8 +20,8 @@ const activityFixture = () => {
     id: programId('1'),
     activityKind: 'agent',
     requirementKey: 'agent',
-    input: {},
-    inputSchema: emptySchema(),
+    input: { prompt: { kind: 'literal', value: 'totality' } },
+    inputSchema: literalAgentInputSchema('totality'),
     outputSchema: emptySchema(),
     routes: { succeeded: end.id, failed: end.id, cancelled: end.id },
   };

@@ -22,6 +22,7 @@ export {
   type PipelineDiagnosticFamily,
 } from './diagnostics.js';
 export { createDiagnosticCollector, type DiagnosticCollector } from './diagnostic-collector.js';
+export { isAgentActivityInputValueSchema } from './agent-activity-input-schema.js';
 export {
   DIGEST_DOMAINS,
   DIGEST_LEXICAL_PATTERN,
@@ -111,3 +112,4 @@ export {
   valueSchemasEqual,
 } from './value-schema/normalization.js';
 export { projectValueSchema } from './value-schema/pointer.js';
+export { ScriptPinSchema, ScriptVersionSchema, type ScriptPin } from './script-identity.js';

@@ -32,7 +32,6 @@ const lowerNode = (
     case 'consensus':
       return lowerExplicitConsensus(node, path, targetIds);
     case 'script':
-    case 'effect':
     case 'choice':
     case 'call':
     case 'wait':

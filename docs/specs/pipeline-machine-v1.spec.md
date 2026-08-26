@@ -57,8 +57,8 @@ portable inputs. They MUST NOT mutate arguments, perform I/O, observe a clock, g
 an ID, use randomness, persist, call DBOS, resolve a binding, or retain hidden state.
 
 `KernelProgram` is a trusted admission product. Before either function is called,
-`revo-core`/host-runtime integrations MUST validate all schemas and recompute the full compiler-bundle
-digest over exactly `{program,requirements,provenance}`. The kernel MUST NOT repeat that
+`revo-run` MUST validate all schemas and recompute the full compiler-bundle digest over
+exactly `{program,requirements,provenance}`. The kernel MUST NOT repeat that
 bundle validation or digest computation. During advancement it only compares the
 provided `programDigest` to the state pin. `PipelineState` is likewise trusted state:
 the host MUST hydrate it only from an authenticated initial transition and event log;
@@ -421,8 +421,12 @@ type PipelineEvent =
       readonly commandKey: CommandKey;
       readonly ref: CommandRef;
       readonly resolution:
-        | { readonly kind: 'answer'; readonly answer: string; readonly actorRef: string }
-        | { readonly kind: 'conflict' }
+        | {
+            readonly kind: 'answer';
+            readonly answer: string;
+            readonly actorRef: string;
+            readonly payload: JsonValue | null;
+          }
         | { readonly kind: 'deadline' };
     }
   | {
@@ -443,8 +447,8 @@ An accepted `activityFailed` event MUST atomically store the exact node result
 activity's failed route. It MUST NOT discard the result, use an executor-supplied path,
 or expose the failure route before `nodeFailure` can read the retained object.
 
-The host authenticates/authorizes/arbitrates before `gateResolved`. Answer carries audit
-attribution; conflict/deadline are explicit host decisions. `gateCancelled` is not a
+The host authenticates/authorizes before `gateResolved`. Answer carries audit
+attribution and payload; deadline is an explicit host decision. `gateCancelled` is not a
 gate resolution.
 
 An event must match pending `commandKey`, ref, and kind. An identical replay, determined
@@ -492,6 +496,8 @@ type PipelineCommand =
       readonly subject: string;
       readonly answers: readonly [string, ...string[]];
       readonly authorizationRequirements: readonly string[];
+      readonly payloadSchema: ValueSchema | null;
+      readonly deadline: { readonly afterMs: number } | null;
     }
   | {
       readonly kind: 'complete';
@@ -533,7 +539,7 @@ particular, a pre-A3 vote branch with no required `input` field is invalid Progr
 and MUST NOT be inferred as an empty or identity mapping. A vote participant region that
 does not have the exact A3 input/output schemas, one activity, three routed ends, fixed
 exits, and identity mapping is also `PROGRAM_INVALID`; the kernel never repairs an older
-lowering shape. Core/run compiler-bundle admission additionally validates the generated
+lowering shape. `revo-run` compiler-bundle admission additionally validates the generated
 IDs and provenance, which are intentionally absent from `KernelProgram`.
 A Program human gate whose answer vocabulary and answer routes are not unique equal
 Unicode-keyed sets is likewise `PROGRAM_INVALID` during initialization.
@@ -608,7 +614,7 @@ pruned only after it has no pending descendant and its exact result has been cop
 its owning or enclosing parent.
 
 Map activates at most `maximumConcurrency` local item frames/dispatches. This is a
-kernel-owned map-local bound. The host runtime separately owns plan-wide/global capacity and
+kernel-owned map-local bound. The host runtime separately owns run-wide/global capacity and
 may durably queue valid dispatch commands. Repeat true at the final bound selects
 `exhausted`; no invariant fault is allowed.
 

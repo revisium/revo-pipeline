@@ -64,6 +64,7 @@ export const inspectObject = (
   path: JsonPointer,
   maximumObjectProperties: number,
   boundFailureCode: PipelineFailure['code'] = 'BOUND_EXCEEDED',
+  allowNonNfcKeys = false,
 ): { readonly entries: readonly (readonly [string, unknown])[] } | InspectionFailure => {
   const prototype = reflectPrototype(input);
   const ownKeys = reflectOwnKeys(input);
@@ -75,7 +76,7 @@ export const inspectObject = (
   }
   const keys: string[] = [];
   for (const key of ownKeys) {
-    if (typeof key !== 'string' || !isNfcString(key)) {
+    if (typeof key !== 'string' || (!allowNonNfcKeys && !isNfcString(key))) {
       return failure('CANONICAL_INPUT', path);
     }
     keys.push(key);

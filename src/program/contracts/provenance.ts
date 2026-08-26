@@ -29,6 +29,7 @@ const LoweringRoleSchema = Type.Unsafe<LoweringRole>(
 
 export const NodeProvenanceSchema = closedObject({
   programNodeId: readonlySchema(ProgramNodeIdSchema),
+  sourceNodeId: readonlySchema(Type.Union([IdentifierSchema, Type.Null()])),
   sourcePath: readonlySchema(JsonPointerSchema),
   materializationPath: readonlySchema(Type.Union([JsonPointerSchema, Type.Null()])),
   loweringRole: readonlySchema(LoweringRoleSchema),

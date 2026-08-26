@@ -10,7 +10,7 @@ RFC 8174) when, and only when, they appear in all capitals.
 
 ## Scope
 
-This specification defines the complete portable profile contribution accepted by the
+This specification defines the complete portable selection contribution accepted by the
 compiler. It selects agent-slot structure only. It does not define stored profiles,
 concrete agents, or executor bindings. The contract remains Draft; its under-development
 API is available from npm `alpha` prereleases and local or CI-built tarballs without a
@@ -25,27 +25,14 @@ type AbstractParticipant = {
   readonly bindingKey: string;
 };
 
-type SlotSelection =
-  | {
-      readonly strategy: 'single';
-      readonly participant: AbstractParticipant;
-    }
+type PipelineSelection =
+  | { readonly strategy: 'single'; readonly participant: AbstractParticipant }
   | {
       readonly strategy: 'consensus';
       readonly participants: readonly [AbstractParticipant, ...AbstractParticipant[]];
     };
 
-type AgentSlotMaterialization = {
-  readonly sourcePath: JsonPointer;
-  readonly slotKey: string;
-  readonly selection: SlotSelection;
-};
-
-type ProfileMaterialization = {
-  readonly schemaVersion: 'pipeline-materialization/v1';
-  readonly sourceDigest: Digest;
-  readonly slots: readonly AgentSlotMaterialization[];
-};
+type PipelineSelections = Readonly<Record<SourceNodeId, PipelineSelection>>;
 ```
 
 This is the complete field set. Materialization MUST NOT select or repeat a consensus
@@ -54,23 +41,20 @@ only to the source agent slot. It MUST NOT contain profile ID/name, role, skill,
 tool, permission, model, provider, runner, runtime, workspace, retry, timeout, secret,
 or host policy.
 
-`sourcePath` MUST be the canonical RFC 6901 path to one reachable source `agent` node.
-Every reachable agent node MUST appear exactly once, in path order, and no other source
-node may appear. The path's `slotKey` MUST equal the materialization `slotKey`.
+Every reachable source `agent` node MUST appear exactly once under its globally unique
+`SourceNodeId`; no other source node may appear. A selection is addressed by that ID,
+not by an array index, alias, or source path. Object insertion order is nonsemantic.
 
 Participant `key` and `bindingKey` are abstract NFC identifiers. Keys MUST be unique in a
-selection. `bindingKey` is the only value later used by core to resolve an exact
-`AgentAssembly`; it MUST NOT embed assembly attributes.
+selection. `bindingKey` is the only value later used by `revo-run` composition to resolve
+an exact agent definition; it MUST NOT embed definition or executor attributes.
 
 ## Source-envelope validation
 
-`computeMaterializationDigest` performs intrinsic validation only: it validates, owns,
-normalizes, and hashes the closed materialization envelope without requiring a source
-package. Contextual admission belongs to `compilePipeline`; only there can `sourceDigest`,
-slot coverage, source paths, strategies, participant counts, and source-owned policy be
-checked against the exact source.
+`compilePipeline` validates the caller selections against its supplied source, owns,
+normalizes, and hashes the internal materialization. There is no public materialization
+document or materialization digest helper.
 
-The materialization `sourceDigest` MUST equal the digest of the supplied source package.
 The selected strategy MUST be present in the source slot's exact `strategies` set.
 
 `single` has exactly one participant by shape. `consensus` has 1–32 participants and its
@@ -85,8 +69,8 @@ minimum participation MUST be reachable. Each independent threshold MUST be reac
 `approveThreshold + rejectThreshold` MUST exceed the exact participant count. A failure
 is `MATERIALIZATION_POLICY_COUNT`, not a tie-break opportunity.
 
-Explicit source `consensus`, `script`, and `effect` nodes MUST NOT have materialization
-entries. The profile cannot add, remove, reorder, or replace explicit-consensus
+Explicit source `consensus` and `script` nodes MUST NOT have materialization
+entries. Caller selections cannot add, remove, reorder, or replace explicit-consensus
 participants.
 
 ## Exact lowering
@@ -127,11 +111,11 @@ Participants lower in Unicode key order. Each branch region and its three exits 
 exact schemas, IDs, end mappings, outcome conversion, and provenance ordinals from
 Program v1. Explicit participants have null materialization provenance; slot participants
 use their own selected-participant path for the region, activity, and all three ends.
-For canonical slot index `s`, the aggregate parallel and choice use
-`/slots/{s}/selection`, a single activity and requirement use
-`/slots/{s}/selection/participant`, and consensus participant region/activity/ends plus
-requirement use `/slots/{s}/selection/participants/{i}`. No generated element may use a
-sibling participant path.
+Materialization provenance is canonical and independent of caller order. For source node
+ID `id`, the aggregate parallel and choice use `/{id}`, a single activity and requirement
+use `/{id}/participant`, and consensus participant region/activity/ends plus requirement
+use `/{id}/participants/{i}`. No generated element may use a sibling participant path.
+Selection diagnostics use these same record paths.
 
 A successful participant must explicitly output one vote. Activity failure is
 `participantFailed`. Participant cancellation before consensus-region cancellation is
@@ -149,7 +133,7 @@ SHA-256 rule and MUST preserve source/materialization provenance.
 binding key changes `materializationDigest`; changed emitted requirements, topology, or
 provenance changes `programDigest`.
 
-`revo-core` MAY derive this envelope from a versioned stored profile. It then resolves
-the emitted abstract binding keys to exact immutable assemblies. `revo-pipeline` MUST
-NOT inspect the stored profile or resolved assembly. The host runtime MUST NOT select a
-profile.
+`revo-core` MAY pass a versioned stored source/profile to `revo-run`, which derives this
+envelope and resolves emitted abstract binding keys through its composition. `revo-pipeline`
+MUST NOT inspect stored profiles or resolved assemblies. The host runtime MUST NOT select
+a profile.

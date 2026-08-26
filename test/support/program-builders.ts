@@ -6,6 +6,13 @@ import type {
 } from '../../src/program/index.js';
 import { emptySchema } from './source-builders.js';
 
+export const literalAgentInputSchema = <const Prompt extends string>(prompt: Prompt) => ({
+  type: 'object' as const,
+  properties: { prompt: { type: 'string' as const, enum: [prompt] } },
+  required: ['prompt'] as const,
+  additionalProperties: false as const,
+});
+
 export const programId = (digit = '1'): ProgramNodeId => `sha256:${digit.repeat(64)}`;
 
 export const programEnd = (
@@ -41,8 +48,8 @@ export const programNodeExamples = (): readonly ProgramNode[] => [
     id: programId('1'),
     activityKind: 'agent',
     requirementKey: 'agent-binding',
-    input: {},
-    inputSchema: emptySchema(),
+    input: { prompt: { kind: 'literal', value: 'example' } },
+    inputSchema: literalAgentInputSchema('example'),
     outputSchema: emptySchema(),
     routes,
   },
@@ -134,10 +141,10 @@ export const programNodeExamples = (): readonly ProgramNode[] => [
     subject: 'Approve?',
     answers: ['yes'],
     authorizationRequirements: [],
+    payloadSchema: null,
+    deadline: null,
     routes: {
       answers: [{ answer: 'yes', target: programId('9') }],
-      conflict: programId('9'),
-      deadline: programId('9'),
       cancelled: programId('9'),
     },
   },

@@ -48,7 +48,7 @@ const strategyReachabilitySource = (): PipelineSourcePackage => {
   };
   const invalid: ScriptSourceNode = {
     ...sourceNodeBuilders.script('branch-end'),
-    key: 'invalid',
+    id: 'invalid',
     input: { value: { kind: 'literal', value: true } },
     inputSchema: fieldSchema({ type: 'string' }),
   };

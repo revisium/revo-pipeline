@@ -18,14 +18,14 @@
 
 ## About
 
-`@revisium/revo-pipeline` validates a closed pipeline source language, materializes
-abstract agent selections, compiles the result into a deterministic Program, and
+`@revisium/revo-pipeline` validates a closed pipeline source language, accepts explicit
+agent-slot selections, compiles the result into a deterministic Program, and
 advances that Program through a pure state machine. It performs no I/O and owns no
 database, queue, clock, provider, authorization, retry, or durable run state.
 
-The source language contains 12 node kinds and compiles to a closed nine-kind IR. The
-package exposes three curated ESM entrypoints: the authoring/compiler API at `.`, the
-machine API at `./kernel`, and the pipeline-owned execution-plan bridge at `./execution-plan`.
+The source language contains 11 node kinds and compiles to a closed nine-kind IR. The
+package exposes two curated ESM entrypoints: the authoring/compiler API at `.` and the
+machine API at `./kernel`.
 No internal folder is a supported deep import.
 
 ## Usage
@@ -45,15 +45,15 @@ corepack pnpm add --offline ./revisium-revo-pipeline-0.2.0-alpha.1.tgz
 
 ## API at a glance
 
-The root entrypoint validates source and materialization documents, computes their
-digests, compiles them, and verifies a complete Program bundle digest. The `./kernel`
+The root entrypoint validates source and selections, materializes internally, compiles
+them, and verifies a complete Program bundle digest. The `./kernel`
 entrypoint creates and advances the pure machine state:
 
 ```ts
 import { compilePipeline, computeProgramDigest } from '@revisium/revo-pipeline';
 import { advancePipeline, createInitialPipelineState } from '@revisium/revo-pipeline/kernel';
 
-const compiled = compilePipeline(source, materialization);
+const compiled = compilePipeline(source, selections);
 if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
 
 const programDigest = computeProgramDigest({
@@ -66,10 +66,9 @@ const initial = createInitialPipelineState(bundle, input);
 const next = advancePipeline(bundle, initial.state, event);
 ```
 
-Use `definePipelineSource`, `defineProfileMaterialization`, `computeSourceDigest`, and
-`computeMaterializationDigest` when constructing those inputs. The complete executable
-example is [examples/quick-start.ts](examples/quick-start.ts). It compiles an agent
-activity followed by a script activity, checks all three public digests, advances both
+Use `definePipelineSource` and `computeSourceDigest` when constructing source. The complete
+executable example is [examples/quick-start.ts](examples/quick-start.ts). It compiles an agent
+activity followed by a script activity, checks the source and Program digests, advances both
 activities, and verifies idempotent event replay:
 
 ```bash

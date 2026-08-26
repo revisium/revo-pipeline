@@ -1,142 +1,55 @@
 import {
   canonicalizeOwnedValue,
+  appendJsonPointer,
   compareUnicodeCodePoints,
   createDiagnosticCollector,
   digestCanonicalBytes,
-  isDigest,
   isIdentifier,
-  isJsonPointer,
+  PIPELINE_LIMITS,
   type Digest,
-  type DiagnosticCollector,
   type JsonPointer,
   type PipelineDiagnostic,
 } from '../foundation/index.js';
 import {
   createEnvelopeValidator,
   type ConsensusAgentStrategy,
-  type EnvelopeValidatorOptions,
   type ReachableAgentSlot,
   type ValidatedPipelineSource,
 } from '../source/index.js';
 import {
-  ProfileMaterializationSchema,
+  PipelineSelectionsEnvelopeSchema,
   type AbstractParticipant,
-  type AgentSlotMaterialization,
-  type ProfileMaterialization,
-  type SlotSelection,
+  type InternalAgentSlot,
+  type InternalMaterialization,
+  type InternalSlotSelection,
+  type PipelineSelections,
 } from './contracts.js';
 
-export type ValidatedProfileMaterialization = {
-  readonly materialization: ProfileMaterialization;
+export type ValidatedPipelineSelections = {
+  readonly materialization: InternalMaterialization;
   readonly materializationDigest: Digest;
   readonly canonicalText: string;
 };
 
-export type ProfileMaterializationValidationResult =
-  | { readonly ok: true; readonly value: ValidatedProfileMaterialization }
+export type PipelineSelectionsValidationResult =
+  | { readonly ok: true; readonly value: ValidatedPipelineSelections }
   | { readonly ok: false; readonly diagnostics: readonly PipelineDiagnostic[] };
 
-const materializationFailureMapper: NonNullable<
-  EnvelopeValidatorOptions<ProfileMaterialization>['mapFailure']
-> = (keyword, path) =>
-  (keyword === 'minItems' || keyword === 'maxItems') && path.endsWith('/participants')
-    ? { code: 'MATERIALIZATION_POLICY_COUNT', path }
-    : null;
+type SelectionEntry = {
+  readonly sourceNodeId: string;
+  readonly selection:
+    | { readonly strategy: 'single'; readonly participant: AbstractParticipant }
+    | { readonly strategy: 'consensus'; readonly participants: readonly AbstractParticipant[] };
+};
 
-const validateEnvelope = createEnvelopeValidator<ProfileMaterialization>({
-  schema: ProfileMaterializationSchema,
-  mapFailure: materializationFailureMapper,
-  knownDiscriminators: ['pipeline-materialization/v1', 'single', 'consensus'],
+const validateEnvelope = createEnvelopeValidator<PipelineSelections>({
+  schema: PipelineSelectionsEnvelopeSchema,
+  mapFailure: (_keyword, path) => ({ code: 'MATERIALIZATION_SELECTION_INVALID', path }),
+  knownDiscriminators: ['single', 'consensus'],
+  objectLimit: (path) =>
+    path === '' ? PIPELINE_LIMITS.sourcePackage.nodes : PIPELINE_LIMITS.portableValue.objectKeys,
+  allowNonNfcObjectKeys: true,
 });
-
-const normalizeParticipant = (
-  participant: AbstractParticipant,
-  path: JsonPointer,
-  diagnostics: DiagnosticCollector,
-): AbstractParticipant => {
-  if (!isIdentifier(participant.key)) {
-    diagnostics.add('CANONICAL_INPUT', `${path}/key`);
-  }
-  if (!isIdentifier(participant.bindingKey)) {
-    diagnostics.add('CANONICAL_INPUT', `${path}/bindingKey`);
-  }
-  return Object.freeze({ ...participant });
-};
-
-const normalizeParticipants = (
-  participants: readonly AbstractParticipant[],
-  path: JsonPointer,
-  diagnostics: DiagnosticCollector,
-): readonly [AbstractParticipant, ...AbstractParticipant[]] => {
-  const ordered = [...participants].sort((left, right) =>
-    compareUnicodeCodePoints(left.key, right.key),
-  );
-  const seen = new Set<string>();
-  const normalized = ordered.map((participant, index) => {
-    if (seen.has(participant.key)) {
-      diagnostics.add('CANONICAL_INPUT', path);
-    }
-    seen.add(participant.key);
-    return normalizeParticipant(participant, `${path}/${index}`, diagnostics);
-  });
-  const [first, ...rest] = normalized;
-  if (first === undefined) {
-    throw new TypeError('Expected a schema-validated non-empty participant array.');
-  }
-  return Object.freeze([first, ...rest]);
-};
-
-const normalizeSelection = (
-  selection: SlotSelection,
-  path: JsonPointer,
-  diagnostics: DiagnosticCollector,
-): SlotSelection => {
-  if (selection.strategy === 'single') {
-    const participant = normalizeParticipant(
-      selection.participant,
-      `${path}/participant`,
-      diagnostics,
-    );
-    return Object.freeze({ strategy: 'single', participant });
-  }
-  return Object.freeze({
-    strategy: 'consensus',
-    participants: normalizeParticipants(
-      selection.participants,
-      `${path}/participants`,
-      diagnostics,
-    ),
-  });
-};
-
-const normalizeSlots = (
-  slots: readonly AgentSlotMaterialization[],
-  diagnostics: DiagnosticCollector,
-): readonly AgentSlotMaterialization[] => {
-  const ordered = [...slots].sort((left, right) =>
-    compareUnicodeCodePoints(left.sourcePath, right.sourcePath),
-  );
-  const seen = new Set<string>();
-  return Object.freeze(
-    ordered.map((slot, index) => {
-      const path = `/slots/${index}` as JsonPointer;
-      if (seen.has(slot.sourcePath)) {
-        diagnostics.add('CANONICAL_INPUT', `${path}/sourcePath`);
-      }
-      seen.add(slot.sourcePath);
-      if (!isJsonPointer(slot.sourcePath)) {
-        diagnostics.add('CANONICAL_INPUT', `${path}/sourcePath`);
-      }
-      if (!isIdentifier(slot.slotKey)) {
-        diagnostics.add('CANONICAL_INPUT', `${path}/slotKey`);
-      }
-      return Object.freeze({
-        ...slot,
-        selection: normalizeSelection(slot.selection, `${path}/selection`, diagnostics),
-      });
-    }),
-  );
-};
 
 const policySupportsCount = (strategy: ConsensusAgentStrategy, count: number): boolean => {
   if (count < strategy.minimumParticipants || count > strategy.maximumParticipants) {
@@ -145,82 +58,188 @@ const policySupportsCount = (strategy: ConsensusAgentStrategy, count: number): b
   if (strategy.policy.kind === 'quorum') {
     return strategy.policy.minimumParticipation <= count;
   }
-  if (strategy.policy.kind === 'independentThreshold') {
-    return (
-      strategy.policy.approveThreshold <= count &&
+  return (
+    strategy.policy.kind !== 'independentThreshold' ||
+    (strategy.policy.approveThreshold <= count &&
       strategy.policy.rejectThreshold <= count &&
-      strategy.policy.approveThreshold + strategy.policy.rejectThreshold > count
-    );
-  }
-  return true;
+      strategy.policy.approveThreshold + strategy.policy.rejectThreshold > count)
+  );
 };
 
-const validateSlot = (
-  slot: AgentSlotMaterialization,
-  index: number,
-  agent: ReachableAgentSlot,
-  diagnostics: DiagnosticCollector,
-): void => {
-  const path = `/slots/${index}` as JsonPointer;
-  if (slot.slotKey !== agent.slotKey) {
-    diagnostics.add('CANONICAL_INPUT', `${path}/slotKey`);
+const validateParticipant = (
+  participant: AbstractParticipant,
+  path: JsonPointer,
+  diagnostics: ReturnType<typeof createDiagnosticCollector>,
+): AbstractParticipant => {
+  if (!isIdentifier(participant.key)) {
+    diagnostics.add('MATERIALIZATION_SELECTION_INVALID', `${path}/key`);
   }
-  const strategy = agent.strategies.find(({ kind }) => kind === slot.selection.strategy);
+  if (!isIdentifier(participant.bindingKey)) {
+    diagnostics.add('MATERIALIZATION_SELECTION_INVALID', `${path}/bindingKey`);
+  }
+  return Object.freeze({ ...participant });
+};
+
+const nonEmptyParticipants = <Participant>(
+  first: Participant,
+  ...rest: readonly Participant[]
+): [Participant, ...Participant[]] => [first, ...rest];
+
+const compareParticipants = (left: AbstractParticipant, right: AbstractParticipant): number => {
+  const byKey = compareUnicodeCodePoints(left.key, right.key);
+  return byKey === 0 ? compareUnicodeCodePoints(left.bindingKey, right.bindingKey) : byKey;
+};
+
+const sortedParticipants = (
+  participants: readonly AbstractParticipant[],
+): readonly AbstractParticipant[] => participants.toSorted(compareParticipants);
+
+const validateSelectionParticipants = (
+  entry: SelectionEntry,
+  diagnostics: ReturnType<typeof createDiagnosticCollector>,
+): void => {
+  const { sourceNodeId, selection } = entry;
+  const rootPath = `/${sourceNodeId}` as JsonPointer;
+  if (selection.strategy === 'single') {
+    validateParticipant(selection.participant, `${rootPath}/participant`, diagnostics);
+    return;
+  }
+
+  const participantKeys = new Set<string>();
+  for (const [participantIndex, participant] of sortedParticipants(
+    selection.participants,
+  ).entries()) {
+    validateParticipant(participant, `${rootPath}/participants/${participantIndex}`, diagnostics);
+    if (participantKeys.has(participant.key)) {
+      diagnostics.add(
+        'MATERIALIZATION_PARTICIPANT_DUPLICATE',
+        `${rootPath}/participants/${participantIndex}/key`,
+      );
+    }
+    participantKeys.add(participant.key);
+  }
+};
+
+const normalizeSelection = (entry: SelectionEntry): InternalSlotSelection => {
+  const { selection } = entry;
+  if (selection.strategy === 'single') {
+    return Object.freeze({
+      strategy: 'single',
+      participant: Object.freeze({ ...selection.participant }),
+    });
+  }
+  const participants = sortedParticipants(selection.participants).map((participant) =>
+    Object.freeze({ ...participant }),
+  );
+  const [first, ...rest] = participants;
+  if (first === undefined) {
+    throw new TypeError('Expected a schema-validated non-empty participant selection.');
+  }
+  return Object.freeze({
+    strategy: 'consensus',
+    participants: Object.freeze(nonEmptyParticipants(first, ...rest)),
+  });
+};
+
+const validateSelectionAgainstAgent = (
+  entry: SelectionEntry,
+  agent: ReachableAgentSlot,
+  diagnostics: ReturnType<typeof createDiagnosticCollector>,
+): void => {
+  const { sourceNodeId, selection } = entry;
+  const rootPath = `/${sourceNodeId}` as JsonPointer;
+  const strategy = agent.strategies.find(({ kind }) => kind === selection.strategy);
   if (strategy === undefined) {
-    diagnostics.add('CANONICAL_INPUT', `${path}/selection/strategy`);
+    diagnostics.add('MATERIALIZATION_STRATEGY_UNAVAILABLE', `${rootPath}/strategy`);
     return;
   }
   if (
-    slot.selection.strategy === 'consensus' &&
-    (strategy.kind !== 'consensus' ||
-      !policySupportsCount(strategy, slot.selection.participants.length))
+    selection.strategy === 'consensus' &&
+    (strategy.kind !== 'consensus' || !policySupportsCount(strategy, selection.participants.length))
   ) {
-    diagnostics.add('MATERIALIZATION_POLICY_COUNT', `${path}/selection/participants`);
+    diagnostics.add('MATERIALIZATION_POLICY_COUNT', `${rootPath}/participants`);
   }
 };
 
 const validateCoverage = (
-  slots: readonly AgentSlotMaterialization[],
+  selections: readonly SelectionEntry[],
   agents: readonly ReachableAgentSlot[],
-  diagnostics: DiagnosticCollector,
+  diagnostics: ReturnType<typeof createDiagnosticCollector>,
 ): void => {
-  const agentsByPath = new Map(agents.map((agent) => [agent.sourcePath, agent]));
-  for (const [index, slot] of slots.entries()) {
-    const agent = agentsByPath.get(slot.sourcePath);
+  const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+  const selectedIds = new Set<string>();
+  for (const entry of selections) {
+    const agent = agentsById.get(entry.sourceNodeId);
+    const rootPath = `/${entry.sourceNodeId}` as JsonPointer;
     if (agent === undefined) {
-      diagnostics.add('CANONICAL_INPUT', `/slots/${index}/sourcePath`);
-    } else {
-      validateSlot(slot, index, agent, diagnostics);
+      diagnostics.add('MATERIALIZATION_SLOT_EXTRA', rootPath);
+      continue;
     }
+    selectedIds.add(agent.id);
+    validateSelectionAgainstAgent(entry, agent, diagnostics);
   }
-  const coveredPaths = new Set(slots.map(({ sourcePath }) => sourcePath));
-  if (
-    slots.length !== agents.length ||
-    agents.some(({ sourcePath }) => !coveredPaths.has(sourcePath))
-  ) {
-    diagnostics.add('CANONICAL_INPUT', '/slots');
+  for (const agent of agents) {
+    if (!selectedIds.has(agent.id)) {
+      diagnostics.add('MATERIALIZATION_SLOT_MISSING', `/${agent.id}`);
+    }
   }
 };
 
-export const normalizeProfileMaterialization = (
+const materialize = (
+  source: ValidatedPipelineSource,
+  selections: readonly SelectionEntry[],
+  agents: readonly ReachableAgentSlot[],
+): InternalMaterialization => {
+  const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+  const slots: InternalAgentSlot[] = selections
+    .map((entry) =>
+      Object.freeze({
+        sourceNodeId: entry.sourceNodeId,
+        sourcePath: agentsById.get(entry.sourceNodeId)?.sourcePath ?? '',
+        selection: normalizeSelection(entry),
+      }),
+    )
+    .toSorted((left, right) => compareUnicodeCodePoints(left.sourceNodeId, right.sourceNodeId));
+  return Object.freeze({
+    schemaVersion: 'pipeline-materialization/v1',
+    sourceDigest: source.sourceDigest,
+    slots: Object.freeze(slots),
+  });
+};
+
+export const validatePipelineSelections = (
+  source: ValidatedPipelineSource,
   input: unknown,
-): ProfileMaterializationValidationResult => {
+): PipelineSelectionsValidationResult => {
   const envelope = validateEnvelope(input);
   if (!envelope.ok) {
     return envelope;
   }
   const diagnostics = createDiagnosticCollector();
-  if (!isDigest(envelope.value.sourceDigest)) {
-    diagnostics.add('CANONICAL_INPUT', '/sourceDigest');
+  let hasInvalidSourceNodeId = false;
+  const selections = Object.entries(envelope.value)
+    .filter(([sourceNodeId]) => {
+      if (isIdentifier(sourceNodeId)) {
+        return true;
+      }
+      diagnostics.add('MATERIALIZATION_SELECTION_INVALID', appendJsonPointer('', sourceNodeId));
+      hasInvalidSourceNodeId = true;
+      return false;
+    })
+    .map(([sourceNodeId, selection]) => Object.freeze({ sourceNodeId, selection }))
+    .toSorted((left, right) => compareUnicodeCodePoints(left.sourceNodeId, right.sourceNodeId));
+  if (hasInvalidSourceNodeId) {
+    return { ok: false, diagnostics: diagnostics.finalize() };
   }
-  const materialization = Object.freeze({
-    ...envelope.value,
-    slots: normalizeSlots(envelope.value.slots, diagnostics),
-  });
+  validateCoverage(selections, source.reachableAgents, diagnostics);
+  for (const entry of selections) {
+    validateSelectionParticipants(entry, diagnostics);
+  }
   const finalized = diagnostics.finalize();
   if (finalized.length > 0) {
     return { ok: false, diagnostics: finalized };
   }
+  const materialization = materialize(source, selections, source.reachableAgents);
   const canonical = canonicalizeOwnedValue(materialization);
   return {
     ok: true,
@@ -230,21 +249,4 @@ export const normalizeProfileMaterialization = (
       canonicalText: canonical.text,
     }),
   };
-};
-
-export const validateProfileMaterialization = (
-  source: ValidatedPipelineSource,
-  input: unknown,
-): ProfileMaterializationValidationResult => {
-  const normalized = normalizeProfileMaterialization(input);
-  if (!normalized.ok) {
-    return normalized;
-  }
-  const diagnostics = createDiagnosticCollector();
-  if (normalized.value.materialization.sourceDigest !== source.sourceDigest) {
-    diagnostics.add('CANONICAL_INPUT', '/sourceDigest');
-  }
-  validateCoverage(normalized.value.materialization.slots, source.reachableAgents, diagnostics);
-  const finalized = diagnostics.finalize();
-  return finalized.length > 0 ? { ok: false, diagnostics: finalized } : normalized;
 };

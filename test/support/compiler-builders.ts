@@ -1,4 +1,4 @@
-import type { ProfileMaterialization } from '../../src/materialization/index.js';
+import type { PipelineSelections } from '../../src/materialization/index.js';
 import {
   validatePipelineSource,
   type AgentSourceNode,
@@ -8,27 +8,28 @@ import { sourceNodeBuilders } from './source-builders.js';
 
 export const materializationFor = (
   source: PipelineSourcePackage,
-  selection?: ProfileMaterialization['slots'][number]['selection'],
-): ProfileMaterialization => {
+  selection?:
+    | {
+        readonly strategy: 'single';
+        readonly participant: { readonly key: string; readonly bindingKey: string };
+      }
+    | {
+        readonly strategy: 'consensus';
+        readonly participants: readonly [
+          { readonly key: string; readonly bindingKey: string },
+          ...{ readonly key: string; readonly bindingKey: string }[],
+        ];
+      },
+): PipelineSelections => {
   const validated = validatePipelineSource(source);
   if (!validated.ok) {
     throw new Error(`Expected valid compiler source: ${JSON.stringify(validated.diagnostics)}`);
   }
-  const slots =
-    selection === undefined
-      ? []
-      : [
-          {
-            sourcePath: validated.value.reachableAgents[0]?.sourcePath ?? '',
-            slotKey: validated.value.reachableAgents[0]?.slotKey ?? '',
-            selection,
-          },
-        ];
-  return {
-    schemaVersion: 'pipeline-materialization/v1',
-    sourceDigest: validated.value.sourceDigest,
-    slots,
-  };
+  const sourceNodeId = validated.value.reachableAgents[0]?.id;
+  if (selection === undefined || sourceNodeId === undefined) {
+    return {};
+  }
+  return { [sourceNodeId]: selection };
 };
 
 export const singleSelection = () => ({

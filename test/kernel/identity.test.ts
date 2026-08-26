@@ -121,7 +121,7 @@ describe('kernel structural identities', () => {
     );
   });
 
-  it('pins all eleven normalized event digest vectors across terminal contexts', () => {
+  it('pins all ten normalized event digest vectors across terminal contexts', () => {
     const expected = [
       'sha256:58273761eaa78661bcf00a3533f7b05d9fa46b53f1a5ef11ae1b24283f0de98d',
       'sha256:7301f7ddf279f92086ce31d132e6c68b02ff0a6acce30b02267da1ca6260f44e',
@@ -129,8 +129,7 @@ describe('kernel structural identities', () => {
       'sha256:73d65e9344c83ebb6d4c3d6413bcba78bed52ba668ded3d4b35cc6949a3b9aa4',
       'sha256:b3a0ded2a6cea87b29483f25d5662ac77fc279fdc6e53320be5fe0401d9a67d7',
       'sha256:3873a0b122cac2c5ae0d0ffcd6d0973a0e75992518439424a5c9a90e80f06a5f',
-      'sha256:7113c4015d356a291e46dc977e1ee10cab5957cb27177c9b6cdd0d90c06303b6',
-      'sha256:0e9c28adfc0ac6e59e8d622aef5969b0f707ae52e77463615098be18a168defd',
+      'sha256:d7f08747bfc6b14fb6a1726a4cfc8d0426ef2bf665064fe053cf0a8779abe4ef',
       'sha256:bd8afa3a400d6c39e0a9814744ef68b7d5b24ca1aee379707eee5c83b50a1d0f',
       'sha256:63b63e9adfed698f52c2d99b756b5897b65caa8a0a25ec0c643a156468ecf2fb',
       'sha256:7880df513052a4fb0f7d74eaa366ed33884938748410492ed9c08c3be2e93c59',
