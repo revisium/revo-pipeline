@@ -1,4 +1,4 @@
-import { validateProfileMaterialization } from '../materialization/index.js';
+import { validatePipelineSelections } from '../materialization/index.js';
 import { validatePipelineSource } from '../source/index.js';
 import { admitLoweredProgram } from './admission/index.js';
 import { proveActivityBound } from './bounds/index.js';
@@ -10,14 +10,14 @@ import { lowerProgram } from './lowering/index.js';
 
 export const compilePipeline = (
   sourceInput: unknown,
-  materializationInput: unknown,
+  selectionsInput: unknown,
 ): PipelineCompileResult => {
   const source = validatePipelineSource(sourceInput);
   if (!source.ok) {
     return source;
   }
 
-  const materialization = validateProfileMaterialization(source.value, materializationInput);
+  const materialization = validatePipelineSelections(source.value, selectionsInput);
   if (!materialization.ok) {
     return materialization;
   }

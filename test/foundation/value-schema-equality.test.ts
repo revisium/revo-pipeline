@@ -86,6 +86,18 @@ describe('ValueSchema equality equivalence', () => {
     expect(valueSchemaIsCompatible(union, integer)).toBe(false);
   });
 
+  it('requires exact string schemas instead of inferring string subtyping', () => {
+    expect(valueSchemaIsCompatible({ type: 'string', enum: ['prompt'] }, { type: 'string' })).toBe(
+      false,
+    );
+    expect(
+      valueSchemaIsCompatible(
+        { type: 'string', enum: ['brief'] },
+        { type: 'string', enum: ['brief'] },
+      ),
+    ).toBe(true);
+  });
+
   it('matches canonical equality for the exhaustive generated variant matrix', () => {
     const schemas = schemaPopulation();
 

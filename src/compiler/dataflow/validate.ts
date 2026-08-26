@@ -5,7 +5,7 @@ import {
   type JsonPointer,
   type PipelineDiagnostic,
 } from '../../foundation/index.js';
-import type { ValidatedProfileMaterialization } from '../../materialization/index.js';
+import type { ValidatedPipelineSelections } from '../../materialization/index.js';
 import type { PipelineSourcePackage, SourceRegion } from '../../source/index.js';
 import type { LinkedSource } from '../linking/index.js';
 import { indexAgentSelections } from './agent-selections.js';
@@ -19,7 +19,7 @@ export type DataflowResult =
 
 export const validateDataflow = (
   source: PipelineSourcePackage,
-  materialization: ValidatedProfileMaterialization,
+  materialization: ValidatedPipelineSelections,
   linked: LinkedSource,
 ): DataflowResult => {
   const collector = createDiagnosticCollector();
@@ -32,7 +32,7 @@ export const validateDataflow = (
   ): void => {
     const nodePaths = new Map<string, JsonPointer>(
       region.nodes.map((node, index) => [
-        node.key,
+        node.id,
         appendJsonPointer(appendJsonPointer(path, 'nodes'), String(index)),
       ]),
     );
@@ -40,7 +40,7 @@ export const validateDataflow = (
       if (node.kind !== 'agent') {
         return undefined;
       }
-      const selection = agentSelections.get(nodePaths.get(node.key) ?? '')?.slot.selection;
+      const selection = agentSelections.get(nodePaths.get(node.id) ?? '')?.slot.selection;
       return node.strategies.find(({ kind }) => kind === selection?.strategy);
     };
     const facts = analyzeRouteFacts(region, selectedStrategy);
@@ -52,10 +52,10 @@ export const validateDataflow = (
       collector,
     });
     for (const node of region.nodes) {
-      if (!facts.isReachable(node.key)) {
+      if (!facts.isReachable(node.id)) {
         continue;
       }
-      const nodePath = nodePaths.get(node.key) ?? path;
+      const nodePath = nodePaths.get(node.id) ?? path;
       validateNodeDataflow(node, region, {
         path: nodePath,
         environment,

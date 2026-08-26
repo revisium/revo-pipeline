@@ -50,37 +50,41 @@ const nestedRepeat = (depth: number): SourceNode => {
   let body: SourceRegion = {
     key: `body-${depth}`,
     inputSchema: emptySchema(),
-    entry: 'done',
+    entry: `body-${depth}-done`,
     outputSchema: emptySchema(),
     exits: [{ outcome: 'value', outputSchema: emptySchema() }],
-    nodes: [endNode('done', 'value')],
+    nodes: [endNode(`body-${depth}-done`, 'value')],
   };
   for (let index = 0; index < depth; index += 1) {
     const nested: SourceNode = {
       ...example,
-      key: `repeat-${String(index).padStart(2, '0')}`,
+      id: `repeat-${String(index).padStart(2, '0')}`,
       body,
       routes: {
-        completed: 'done',
-        exhausted: 'done',
-        failed: 'done',
-        cancelled: 'done',
+        completed: `body-${index}-done`,
+        exhausted: `body-${index}-done`,
+        failed: `body-${index}-done`,
+        cancelled: `body-${index}-done`,
       },
     };
     body = {
       key: `body-${String(index).padStart(2, '0')}`,
       inputSchema: emptySchema(),
-      entry: nested.key,
+      entry: nested.id,
       outputSchema: emptySchema(),
       exits: [{ outcome: 'value', outputSchema: emptySchema() }],
-      nodes: [nested, endNode('done', 'value')],
+      nodes: [nested, endNode(`body-${index}-done`, 'value')],
     };
   }
   const root = body.nodes[0];
-  if (root === undefined) {
+  if (root?.kind !== 'repeat') {
     throw new TypeError('Expected nested repeat root.');
   }
-  return { ...root, key: 'activity' };
+  return {
+    ...root,
+    id: 'activity',
+    routes: { completed: 'done', exhausted: 'done', failed: 'done', cancelled: 'done' },
+  };
 };
 
 describe('source materialization boundaries', () => {
@@ -90,7 +94,7 @@ describe('source materialization boundaries', () => {
       const target = index === 1_023 ? 'zdone' : `n${String(index + 1).padStart(4, '0')}`;
       return {
         kind: 'wait',
-        key,
+        id: key,
         wait: { kind: 'duration', durationMs: 0 },
         routes: { completed: target, cancelled: target },
       };

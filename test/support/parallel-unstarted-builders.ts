@@ -1,4 +1,8 @@
-import { EmptyObjectSchema, PipelineFailureValueSchema } from '../../src/foundation/index.js';
+import {
+  EmptyObjectSchema,
+  PipelineFailureValueSchema,
+  type ValueSchema,
+} from '../../src/foundation/index.js';
 import {
   ConsensusParticipantRegionOutputSchema,
   VoteExitSchema,
@@ -11,6 +15,13 @@ import {
 } from '../../src/program/index.js';
 import { kernelModule, kernelProgram } from './kernel-builders.js';
 import { structuredId } from './structured-kernel-builders.js';
+
+const voteInputSchema = {
+  type: 'object',
+  properties: { prompt: { type: 'string', enum: ['unstarted-vote'] } },
+  required: ['prompt'],
+  additionalProperties: false,
+} as const satisfies ValueSchema;
 
 const end = (
   ordinal: number,
@@ -65,14 +76,14 @@ const voteRegion = (base: number, bindingKey: string): ProgramRegion => {
     id: activityId,
     activityKind: 'agent',
     requirementKey: bindingKey,
-    input: {},
-    inputSchema: EmptyObjectSchema,
+    input: { prompt: { kind: 'scopeInput', pointer: '/prompt' } },
+    inputSchema: voteInputSchema,
     outputSchema: VoteValueSchema,
     routes: { succeeded: voted.id, failed: failed.id, cancelled: cancelled.id },
   };
   return {
     id: structuredId(base),
-    inputSchema: EmptyObjectSchema,
+    inputSchema: voteInputSchema,
     entry: activity.id,
     outputSchema: ConsensusParticipantRegionOutputSchema,
     exits: [
@@ -120,19 +131,19 @@ export const unstartedParallelProgram = (mode: 'generic' | 'votes') => {
             {
               key: keys[0],
               bindingKey: keys[0],
-              input: {},
+              input: { prompt: { kind: 'literal', value: 'unstarted-vote' } },
               region: regions[0]!,
             },
             {
               key: keys[1],
               bindingKey: keys[1],
-              input: {},
+              input: { prompt: { kind: 'literal', value: 'unstarted-vote' } },
               region: regions[1]!,
             },
             {
               key: keys[2],
               bindingKey: keys[2],
-              input: {},
+              input: { prompt: { kind: 'literal', value: 'unstarted-vote' } },
               region: regions[2]!,
             },
           ],

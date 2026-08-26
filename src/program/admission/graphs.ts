@@ -50,8 +50,7 @@ export const localTargets = (node: ProgramNode): readonly ProgramNodeId[] => {
     case 'humanGate':
       return [
         ...node.routes.answers.map(({ target }) => target),
-        node.routes.conflict,
-        node.routes.deadline,
+        ...(node.deadline === null ? [] : [node.deadline.target]),
         node.routes.cancelled,
       ];
     case 'end':

@@ -1,6 +1,6 @@
 # Repository Structure
 
-`@revisium/revo-pipeline` is an under-development prerelease ESM package with three
+`@revisium/revo-pipeline` is an under-development prerelease ESM package with two
 curated consumer facades and six dependency layers.
 
 ```text
@@ -13,7 +13,6 @@ src/program/               Program contracts, analysis, admission, bundle digest
 src/compiler/              linking, dataflow, bounds, lowering, emission
 src/kernel/public.ts       exact pure-machine facade
 src/kernel/                machine contracts and execution
-src/execution-plan/        ADR 0013 execution-plan integration facade
 test/                      behavior, architecture, package, and contract suites
 docs/specs/                six Draft normative contracts
 docs/adr/                  accepted architecture decisions
@@ -25,13 +24,11 @@ layers never import the root facade. The root facade imports only the foundation
 source, materialization, Program, and compiler indexes. The reserved `src/extensions`
 directory must not exist.
 
-`package.json` exposes only `.`, `./kernel`, and `./execution-plan`. It builds strict
+`package.json` exposes only `.` and `./kernel`. It builds strict
 NodeNext JavaScript and declarations under `dist/`, without source or declaration maps.
 The package is version `0.2.0-alpha.1` and may be published publicly only under the npm
 `alpha` tag. It remains Draft and unstable, with no compatibility or `revo-core` or
-host-runtime readiness claim. ADR 0013 narrowly amends the direct-cutover boundary with
-the pipeline-owned execution-plan facade; it does not add a host dependency or a
-compatibility surface.
+host-runtime readiness claim. ADR 0014 records the direct compiler/kernel boundary.
 Production dependencies are exactly `typebox@1.3.10` and `canonicalize@4.0.0`; no
 workflow publishes from pull requests. Release-train transitions are manual; automated
 npm publication requires an explicit version-matched alpha tag.

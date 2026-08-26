@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { SourceNode } from '../../../src/source/index.js';
 import {
+  childRegion,
   endNode,
   nonEmptyNodes,
   sourceForNode,
@@ -14,7 +15,7 @@ describe('source selectors and contexts', () => {
   it('accepts every base-context selector and rejects context-only selectors', () => {
     const validEnd: SourceNode = {
       kind: 'end',
-      key: 'done',
+      id: 'done',
       outcome: 'ok',
       output: {
         literal: { kind: 'literal', value: { ok: true } },
@@ -33,7 +34,7 @@ describe('source selectors and contexts', () => {
     ] as const) {
       const invalidEnd: SourceNode = {
         kind: 'end',
-        key: 'done',
+        id: 'done',
         outcome: 'ok',
         output: { value: selector },
       };
@@ -93,7 +94,7 @@ describe('source selectors and contexts', () => {
   it('reports missing producers and impossible static pointers precisely', () => {
     const missingProducer: SourceNode = {
       kind: 'end',
-      key: 'done',
+      id: 'done',
       outcome: 'ok',
       output: { value: { kind: 'nodeOutput', node: 'missing', pointer: '' } },
     };
@@ -117,7 +118,8 @@ describe('source selectors and contexts', () => {
     const mapKey = (index: number): string => `map-${String(index).padStart(4, '0')}`;
     const maps = Array.from({ length: 1800 }, (_, index) => ({
       ...sourceNodeBuilders.map(),
-      key: mapKey(index),
+      id: mapKey(index),
+      body: childRegion(`${mapKey(index)}-body`, 'completed'),
       items:
         index === 1799
           ? { kind: 'literal' as const, value: [{ itemKey: 'seed' }] }

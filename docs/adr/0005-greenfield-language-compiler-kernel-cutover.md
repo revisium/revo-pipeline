@@ -20,11 +20,10 @@ ready.
 Adopt one greenfield source-language/compiler/closed-IR/pure-kernel architecture through
 a direct cutover. No converter, adapter, dual reader, deprecated alias, compatibility
 package, hidden second interpreter, or runtime node-kind plugin will be built.
-`revo-pipeline` never imports a host. Any future host-runtime integration imports the
-narrow kernel only and is a separate compatibility decision. ADR 0013 explicitly amends
-this boundary for one pipeline-owned, host-neutral `./execution-plan` facade: it lowers
-the already compiled choice/end slice into a plain payload, adds no host dependency, and
-does not create a compatibility reader, adapter, or runtime plugin.
+`revo-pipeline` never imports a host. The host runtime imports the root compiler and the
+narrow kernel in that dependency direction; core does not compile or drive the machine.
+ADR 0014 records this direct compiler/kernel boundary and removes the superseded third
+package facade.
 
 The first alpha permits an internal compile-time lowering seam only. Starting with the
 foundation work item, production dependencies are exactly `typebox@1.3.10` and
@@ -58,13 +57,13 @@ publish.
 - Pre-release consumers migrate once, after final readiness.
 - A closed IR keeps runtime replay and validation bounded; new authoring forms lower at
   compile time or require a versioned language decision.
-- Profile structure may change `programDigest`; exact executor binding remains core/run
-  owned and affects only plan lineage.
-- Core/run admission validates and hashes the complete compiler bundle. The kernel trusts
+- Profile structure may change `programDigest`; exact executor binding is `revo-run`
+  composition state outside the Program digest.
+- `revo-run` admission validates and hashes the complete compiler bundle. The kernel trusts
   the admitted program/digest pair, keeps structural identity free of run IDs, and owns
   only live semantic state; run remains the durable audit authority.
 - Semantic preservation is measured by 103 unique ownership rows: compiler 22, kernel
-  32, core 7, run 42. This yields 54 pipeline-evidence and 49 host/cross-package evidence
+  32, core 0, run 49. This yields 54 pipeline-evidence and 49 host/cross-package evidence
   obligations, not 103 pipeline implementations.
 
 ## Alternatives considered

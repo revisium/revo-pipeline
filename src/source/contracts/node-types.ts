@@ -1,4 +1,5 @@
 import type { JsonPointer } from '../../foundation/index.js';
+import type { ScriptPin } from '../../foundation/index.js';
 import type {
   ActivityRoutes,
   AgentSlotStrategy,
@@ -33,8 +34,7 @@ export type ExactSourceRegion = {
 
 type ExactAgentSourceNode = {
   readonly kind: 'agent';
-  readonly key: string;
-  readonly slotKey: string;
+  readonly id: string;
   readonly strategies: readonly [AgentSlotStrategy, ...AgentSlotStrategy[]];
   readonly input: ValueMapping;
   readonly inputSchema: ValueSchema;
@@ -43,20 +43,9 @@ type ExactAgentSourceNode = {
 
 type ExactScriptSourceNode = {
   readonly kind: 'script';
-  readonly key: string;
+  readonly id: string;
   readonly requirementKey: string;
-  readonly script: { readonly key: string; readonly revision: number };
-  readonly input: ValueMapping;
-  readonly inputSchema: ValueSchema;
-  readonly outputSchema: ValueSchema;
-  readonly routes: ActivityRoutes;
-};
-
-type ExactEffectSourceNode = {
-  readonly kind: 'effect';
-  readonly key: string;
-  readonly requirementKey: string;
-  readonly effectKey: string;
+  readonly script: ScriptPin;
   readonly input: ValueMapping;
   readonly inputSchema: ValueSchema;
   readonly outputSchema: ValueSchema;
@@ -65,7 +54,7 @@ type ExactEffectSourceNode = {
 
 type ExactChoiceSourceNode = {
   readonly kind: 'choice';
-  readonly key: string;
+  readonly id: string;
   readonly selector: ValueSelector;
   readonly cases: readonly [
     { readonly key: string; readonly when: ChoiceDomain; readonly target: string },
@@ -76,7 +65,7 @@ type ExactChoiceSourceNode = {
 
 type ExactParallelSourceNode = {
   readonly kind: 'parallel';
-  readonly key: string;
+  readonly id: string;
   readonly branches: readonly [
     ExactParallelSourceBranch,
     ExactParallelSourceBranch,
@@ -99,7 +88,7 @@ export type ExactParallelSourceBranch = {
 
 type ExactRepeatSourceNode = {
   readonly kind: 'repeat';
-  readonly key: string;
+  readonly id: string;
   readonly maximumIterations: number;
   readonly initialInput: ValueMapping;
   readonly nextInput: ValueMapping;
@@ -121,7 +110,7 @@ type ExactRepeatSourceNode = {
 
 type ExactMapSourceNode = {
   readonly kind: 'map';
-  readonly key: string;
+  readonly id: string;
   readonly items: ValueSelector;
   readonly itemKeyPointer: JsonPointer;
   readonly maximumItems: number;
@@ -144,7 +133,7 @@ type ExactMapSourceNode = {
 
 type ExactWaitSourceNode = {
   readonly kind: 'wait';
-  readonly key: string;
+  readonly id: string;
   readonly wait:
     | { readonly kind: 'duration'; readonly durationMs: number }
     | {
@@ -157,24 +146,24 @@ type ExactWaitSourceNode = {
 
 type ExactHumanGateSourceNode = {
   readonly kind: 'humanGate';
-  readonly key: string;
+  readonly id: string;
   readonly subject: string;
   readonly answers: readonly [string, ...string[]];
   readonly authorizationRequirements: readonly string[];
+  readonly payloadSchema: ValueSchema | null;
+  readonly deadline: { readonly afterMs: number; readonly target: string } | null;
   readonly routes: {
     readonly answers: readonly [
       { readonly answer: string; readonly target: string },
       ...{ readonly answer: string; readonly target: string }[],
     ];
-    readonly conflict: string;
-    readonly deadline: string;
     readonly cancelled: string;
   };
 };
 
 type ExactConsensusSourceNode = {
   readonly kind: 'consensus';
-  readonly key: string;
+  readonly id: string;
   readonly participants: readonly [
     ExactExplicitConsensusParticipant,
     ExactExplicitConsensusParticipant,
@@ -194,7 +183,7 @@ export type ExactExplicitConsensusParticipant = {
 
 type ExactCallSourceNode = {
   readonly kind: 'call';
-  readonly key: string;
+  readonly id: string;
   readonly module: string;
   readonly input: ValueMapping;
   readonly outputSchema: ValueSchema;
@@ -210,7 +199,7 @@ type ExactCallSourceNode = {
 
 type ExactEndSourceNode = {
   readonly kind: 'end';
-  readonly key: string;
+  readonly id: string;
   readonly outcome: string;
   readonly output: ValueMapping;
 };
@@ -218,7 +207,6 @@ type ExactEndSourceNode = {
 export type ExactSourceNode =
   | ExactAgentSourceNode
   | ExactScriptSourceNode
-  | ExactEffectSourceNode
   | ExactChoiceSourceNode
   | ExactParallelSourceNode
   | ExactRepeatSourceNode

@@ -45,10 +45,40 @@ export const PIPELINE_DIAGNOSTIC_CATALOG = Object.freeze({
     'SOURCE_GATE_ANSWER_BIJECTION',
     'The human-gate answers and routes do not form an exact bijection.',
   ),
+  SOURCE_NODE_ID_DUPLICATE: definition(
+    'SOURCE',
+    'SOURCE_NODE_ID_DUPLICATE',
+    'A source node identifier is duplicated.',
+  ),
   MATERIALIZATION_POLICY_COUNT: definition(
     'MATERIALIZATION',
     'MATERIALIZATION_POLICY_COUNT',
     'The materialized participant count does not satisfy the source policy.',
+  ),
+  MATERIALIZATION_SELECTION_INVALID: definition(
+    'MATERIALIZATION',
+    'MATERIALIZATION_SELECTION_INVALID',
+    'The agent-slot selection is invalid.',
+  ),
+  MATERIALIZATION_SLOT_MISSING: definition(
+    'MATERIALIZATION',
+    'MATERIALIZATION_SLOT_MISSING',
+    'A reachable agent slot has no selection.',
+  ),
+  MATERIALIZATION_SLOT_EXTRA: definition(
+    'MATERIALIZATION',
+    'MATERIALIZATION_SLOT_EXTRA',
+    'A selection does not identify a reachable agent slot.',
+  ),
+  MATERIALIZATION_STRATEGY_UNAVAILABLE: definition(
+    'MATERIALIZATION',
+    'MATERIALIZATION_STRATEGY_UNAVAILABLE',
+    'The selected strategy is not allowed by the source agent slot.',
+  ),
+  MATERIALIZATION_PARTICIPANT_DUPLICATE: definition(
+    'MATERIALIZATION',
+    'MATERIALIZATION_PARTICIPANT_DUPLICATE',
+    'A participant key is duplicated within the selection.',
   ),
   LINK_MODULE_MISSING: definition('LINK', 'LINK_MODULE_MISSING', 'A called module is missing.'),
   LINK_MODULE_OUTCOME_MISMATCH: definition(
@@ -139,6 +169,17 @@ const invalidDiagnostic = (): never => {
   throw new TypeError('Invalid pipeline diagnostic input.');
 };
 
+const isDiagnosticPath = (value: unknown): value is JsonPointer => {
+  if (isJsonPointer(value)) {
+    return true;
+  }
+  return (
+    typeof value === 'string' &&
+    (value === '' || value.startsWith('/')) &&
+    !/~(?![01])/u.test(value)
+  );
+};
+
 const isDiagnosticCode = (value: unknown): value is PipelineDiagnosticCode =>
   typeof value === 'string' && Object.hasOwn(PIPELINE_DIAGNOSTIC_CATALOG, value);
 
@@ -173,7 +214,7 @@ const capturePipelineDiagnostic = (value: unknown): PipelineDiagnostic | null =>
   }
   const code: unknown = codeDescriptor.value;
   const path: unknown = pathDescriptor.value;
-  if (!isDiagnosticCode(code) || !isJsonPointer(path)) {
+  if (!isDiagnosticCode(code) || !isDiagnosticPath(path)) {
     return null;
   }
   const catalogEntry = PIPELINE_DIAGNOSTIC_CATALOG[code];
@@ -195,7 +236,7 @@ export const createPipelineDiagnostic = (
   code: PipelineDiagnosticCode,
   path: JsonPointer,
 ): PipelineDiagnostic => {
-  if (!isDiagnosticCode(code) || !isJsonPointer(path)) {
+  if (!isDiagnosticCode(code) || !isDiagnosticPath(path)) {
     return invalidDiagnostic();
   }
   const catalogEntry = PIPELINE_DIAGNOSTIC_CATALOG[code];

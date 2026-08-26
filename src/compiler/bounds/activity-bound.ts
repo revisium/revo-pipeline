@@ -6,7 +6,7 @@ import {
   type JsonPointer,
   type PipelineDiagnostic,
 } from '../../foundation/index.js';
-import type { ValidatedProfileMaterialization } from '../../materialization/index.js';
+import type { ValidatedPipelineSelections } from '../../materialization/index.js';
 import type {
   AgentSlotStrategy,
   PipelineSourceModule,
@@ -143,7 +143,7 @@ const regionBound = (
     return sourceRoutes(node, selectedAgentStrategy(node, nodePath, context));
   });
   const graph = createIndexedDag(
-    region.nodes.map(({ key }) => key),
+    region.nodes.map(({ id }) => id),
     routes.map((outgoing) => outgoing.map(({ target }) => target)),
   );
   const entryIndex = graph.indexByKey.get(region.entry);
@@ -177,7 +177,6 @@ const nodeBound = (node: SourceNode, path: JsonPointer, context: BoundContext): 
     case 'agent':
       return context.selectedParticipants.get(path) ?? 1;
     case 'script':
-    case 'effect':
       return 1;
     case 'call':
       return callBound(path, context);
@@ -210,7 +209,7 @@ const nodeBound = (node: SourceNode, path: JsonPointer, context: BoundContext): 
 
 export const proveActivityBound = (
   source: PipelineSourcePackage,
-  materialization: ValidatedProfileMaterialization,
+  materialization: ValidatedPipelineSelections,
   linked: LinkedSource,
 ): ActivityBoundResult => {
   const collector = createDiagnosticCollector();

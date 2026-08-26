@@ -7,14 +7,18 @@ export {
   type JsonValue,
   type PipelineDiagnostic,
   type PipelineDiagnosticFamily,
+  type ScriptPin,
   type PipelineFailure,
   type ValueSchema,
 } from './foundation/index.js';
 export {
   PipelineSourcePackageSchema,
+  AgentActivityInputSchema,
   computeSourceDigest,
   definePipelineSource,
+  inspectPipelineSlots,
   type ActivityRoutes,
+  type AgentActivityInput,
   type AgentSlotStrategy,
   type AgentSourceNode,
   type CallSourceNode,
@@ -23,7 +27,6 @@ export {
   type ConsensusPolicy,
   type ConsensusRoutes,
   type ConsensusSourceNode,
-  type EffectSourceNode,
   type EndSourceNode,
   type ExplicitConsensusParticipant,
   type HumanGateSourceNode,
@@ -35,12 +38,16 @@ export {
   type ParallelSourceNode,
   type PipelineSourceModule,
   type PipelineSourcePackage,
+  type PipelineSlotDescriptor,
+  type PipelineSlotInspectionResult,
+  type PipelineSlotStrategyDescriptor,
   type RegionExitClassification,
   type RepeatCondition,
   type RepeatSourceNode,
   type ScriptSourceNode,
   type SingleAgentStrategy,
   type SourceNode,
+  type SourceNodeId,
   type SourceRegion,
   type SourceRegionExit,
   type ValueMapping,
@@ -48,13 +55,11 @@ export {
   type WaitSourceNode,
 } from './source/index.js';
 export {
-  ProfileMaterializationSchema,
-  computeMaterializationDigest,
-  defineProfileMaterialization,
+  PipelineSelectionSchema,
+  PipelineSelectionsSchema,
   type AbstractParticipant,
-  type AgentSlotMaterialization,
-  type ProfileMaterialization,
-  type SlotSelection,
+  type PipelineSelections,
+  type PipelineSelection,
 } from './materialization/index.js';
 export {
   PipelineProgramSchema,
@@ -63,7 +68,6 @@ export {
   ProgramRequirementsSchema,
   computeProgramDigest,
   type AgentProgramRequirement,
-  type EffectProgramRequirement,
   type GenericParallelBranchResult,
   type GenericParallelOutput,
   type LoweringRole,
@@ -102,10 +106,10 @@ import {
   compilePipeline as compilePipelineInternal,
   type PipelineCompileResult,
 } from './compiler/index.js';
-import type { ProfileMaterialization } from './materialization/index.js';
+import type { PipelineSelections } from './materialization/index.js';
 import type { PipelineSourcePackage } from './source/index.js';
 
 export const compilePipeline = (
   source: PipelineSourcePackage,
-  materialization: ProfileMaterialization,
-): PipelineCompileResult => compilePipelineInternal(source, materialization);
+  selections: PipelineSelections,
+): PipelineCompileResult => compilePipelineInternal(source, selections);

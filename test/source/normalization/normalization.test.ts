@@ -21,8 +21,7 @@ describe('source normalization', () => {
       const target = index === 10 ? 'done' : `a${String(index + 1).padStart(2, '0')}`;
       return {
         ...example,
-        key: `a${String(index).padStart(2, '0')}`,
-        slotKey: `slot-${String(index).padStart(2, '0')}`,
+        id: `a${String(index).padStart(2, '0')}`,
         strategies: [
           {
             kind: 'single',
@@ -68,7 +67,7 @@ describe('source normalization', () => {
     expect(validated.canonicalText).toBe(expectedText);
     expect(validated.sourceDigest).toBe(expectedDigest);
     expect(validated.sourceDigest).toBe(
-      'sha256:ad3e4b93cf9ff93fafa2787dc3973569de625cbda5a8d4d90632ffd558ad5551',
+      'sha256:d0eaa23f13c5f5d31cf17d5f31e64ada55717e7728879cc53a5f7e8e8bad45e2',
     );
     expect(validated.reachableAgents.map(({ sourcePath }) => sourcePath)).toEqual([
       '/modules/0/region/nodes/0',
@@ -120,7 +119,7 @@ describe('source normalization', () => {
     };
     const validated = expectValidSource(normalizedInput);
 
-    expect(validated.source.modules[0]?.region.nodes.map(({ key }) => key)).toEqual(['a', 'done']);
+    expect(validated.source.modules[0]?.region.nodes.map(({ id }) => id)).toEqual(['a', 'done']);
     const normalizedAgent = validated.source.modules[0]?.region.nodes[0];
     expect(normalizedAgent?.kind).toBe('agent');
     const strategyKinds =

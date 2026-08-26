@@ -19,6 +19,7 @@ import {
   VoteValueSchema,
 } from '../../src/program/index.js';
 import { kernelModule, kernelProgram } from './kernel-builders.js';
+import { literalAgentInputSchema } from './program-builders.js';
 import { structuredId } from './structured-kernel-builders.js';
 
 const objectSchema = (properties: Readonly<Record<string, ValueSchema>>): ValueSchema => ({
@@ -61,7 +62,7 @@ const activityRegion = (
   };
 };
 
-const voteActivityRegion = (base: number, bindingKey: string): ProgramRegion => {
+const voteActivityRegion = (base: number, bindingKey: string, prompt: string): ProgramRegion => {
   const activityId = structuredId(base + 1);
   const cancelled = end(base + 2, 'cancelled');
   const failed = end(base + 3, 'failed', {
@@ -71,19 +72,20 @@ const voteActivityRegion = (base: number, bindingKey: string): ProgramRegion => 
   const vote = end(base + 4, 'vote', {
     vote: { kind: 'nodeOutput', nodeId: activityId, pointer: '' },
   });
+  const inputSchema = literalAgentInputSchema(prompt);
   const activity: ProgramActivityNode = {
     kind: 'activity',
     id: activityId,
     activityKind: 'agent',
     requirementKey: bindingKey,
-    input: {},
-    inputSchema: EmptyObjectSchema,
+    input: { prompt: { kind: 'scopeInput', pointer: '/prompt' } },
+    inputSchema,
     outputSchema: VoteValueSchema,
     routes: { succeeded: vote.id, failed: failed.id, cancelled: cancelled.id },
   };
   return {
     id: structuredId(base),
-    inputSchema: EmptyObjectSchema,
+    inputSchema,
     entry: activity.id,
     outputSchema: ConsensusParticipantRegionOutputSchema,
     exits: [
@@ -224,10 +226,10 @@ const selectedParallelRegion = (mode: 'generic' | 'votes'): ProgramRegion => {
   const branch = (key: string, index: number) => ({
     key,
     bindingKey: `binding-${key}`,
-    input: {},
+    input: mode === 'votes' ? { prompt: { kind: 'literal' as const, value: `vote-${key}` } } : {},
     region:
       mode === 'votes'
-        ? voteActivityRegion(23_000 + index * 100, `binding-${key}`)
+        ? voteActivityRegion(23_000 + index * 100, `binding-${key}`, `vote-${key}`)
         : activityRegion(23_000 + index * 100, `nested-parallel-${key}`),
   });
   const branches = [branch('a', 0), branch('b', 1), branch('c', 2)] as const;

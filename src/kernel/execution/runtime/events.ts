@@ -1,4 +1,4 @@
-import { isDigest, type Digest } from '../../../foundation/index.js';
+import { isDigest, type Digest, type JsonPointer } from '../../../foundation/index.js';
 import type { MachineFaultCode } from '../../contracts/faults.js';
 import type { PendingOperation } from '../../contracts/operations.js';
 import type { RegionMachineFrame } from '../../contracts/region-frames.js';
@@ -12,7 +12,9 @@ import { findRuntimeNode, resolveRuntimeRegion } from './program-index.js';
 import { completeFailedRegion } from './region-completion.js';
 import { cleanupRegionResult, failedNode, failure } from './results.js';
 
-type Applied = { readonly ok: true } | { readonly ok: false; readonly code: MachineFaultCode };
+type Applied =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly code: MachineFaultCode; readonly path?: JsonPointer };
 
 const applied: Applied = Object.freeze({ ok: true });
 
@@ -23,7 +25,9 @@ type RoutedResult =
     }
   | { readonly failure: ReturnType<typeof failure> };
 
-type RoutedEventResult = RoutedResult | MachineFaultCode | null;
+type RejectedEvent = { readonly code: MachineFaultCode; readonly path: JsonPointer };
+
+type RoutedEventResult = RoutedResult | RejectedEvent | MachineFaultCode | null;
 
 const isCancellationEvent = (event: NormalizedEvent['event']): boolean =>
   event.kind === 'activityCancelled' ||
@@ -143,17 +147,29 @@ const gateResult = (
   const resolution = event.resolution;
   if (resolution.kind === 'answer') {
     const route = node.routes.answers.find(({ answer }) => answer === resolution.answer);
-    return route === undefined
-      ? 'EVENT_GATE_ANSWER'
-      : Object.freeze({
-          result: Object.freeze({ status: 'succeeded', output: resolution }),
-          target: route.target,
-        });
+    if (route === undefined) {
+      return 'EVENT_GATE_ANSWER';
+    }
+    if (
+      (node.payloadSchema === null && resolution.payload !== null) ||
+      (node.payloadSchema !== null && !valueMatchesSchema(node.payloadSchema, resolution.payload))
+    ) {
+      return Object.freeze({
+        code: 'DATA_SCHEMA_MISMATCH',
+        path: '/payload',
+      });
+    }
+    return Object.freeze({
+      result: Object.freeze({ status: 'succeeded', output: resolution }),
+      target: route.target,
+    });
   }
-  return Object.freeze({
-    result: Object.freeze({ status: 'succeeded', output: resolution }),
-    target: resolution.kind === 'conflict' ? node.routes.conflict : node.routes.deadline,
-  });
+  return node.deadline === null
+    ? 'EVENT_GATE_ANSWER'
+    : Object.freeze({
+        result: Object.freeze({ status: 'succeeded', output: resolution }),
+        target: node.deadline.target,
+      });
 };
 
 const routedResult = (
@@ -239,6 +255,9 @@ export const applyOperationEvent = (
   const routed = routedResult(context, pending, normalized);
   if (typeof routed === 'string') {
     return Object.freeze({ ok: false, code: routed });
+  }
+  if (routed !== null && 'code' in routed) {
+    return Object.freeze({ ok: false, code: routed.code, path: routed.path });
   }
   const frame = context.draft.frames.get(pending.ref.frameKey);
   if (routed === null || frame === undefined || !('ready' in frame)) {

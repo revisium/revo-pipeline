@@ -74,8 +74,8 @@ export const analyzeRouteFacts = (
   region: SourceRegion,
   selectedAgentStrategy: (node: SourceNode) => AgentSlotStrategy | undefined,
 ): RegionRouteFacts => {
-  const keys = region.nodes.map(({ key }) => key);
-  const nodesByKey = new Map(region.nodes.map((node) => [node.key, node]));
+  const keys = region.nodes.map(({ id }) => id);
+  const nodesByKey = new Map(region.nodes.map((node) => [node.id, node]));
   const edges: readonly (readonly RouteEdge[])[] = region.nodes.map((node) =>
     sourceRoutes(node, selectedAgentStrategy(node)),
   );

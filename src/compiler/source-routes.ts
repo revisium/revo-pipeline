@@ -35,7 +35,7 @@ export const sourceRoutes = (
   if (node.kind === 'agent') {
     return selectedAgentStrategy === undefined ? [] : agentRoutes(selectedAgentStrategy);
   }
-  if (node.kind === 'script' || node.kind === 'effect') {
+  if (node.kind === 'script') {
     return entries(node.routes, activityStatus);
   }
   if (node.kind === 'choice') {
@@ -60,8 +60,9 @@ export const sourceRoutes = (
   if (node.kind === 'humanGate') {
     return [
       ...node.routes.answers.map(({ target }) => ({ target, status: 'succeeded' as const })),
-      { target: node.routes.conflict, status: 'succeeded' },
-      { target: node.routes.deadline, status: 'succeeded' },
+      ...(node.deadline === null
+        ? []
+        : [{ target: node.deadline.target, status: 'succeeded' as const }]),
       { target: node.routes.cancelled, status: 'cancelled' },
     ];
   }

@@ -9,7 +9,7 @@ import {
   runningResult,
   terminalResult,
 } from '../support/kernel-builders.js';
-import { programEnd, programId } from '../support/program-builders.js';
+import { literalAgentInputSchema, programEnd, programId } from '../support/program-builders.js';
 import { emptySchema } from '../support/source-builders.js';
 
 describe('kernel linked calls and run cancellation', () => {
@@ -50,8 +50,8 @@ describe('kernel linked calls and run cancellation', () => {
       id: programId('1'),
       activityKind: 'agent',
       requirementKey: 'agent',
-      input: {},
-      inputSchema: emptySchema(),
+      input: { prompt: { kind: 'literal', value: 'cancel' } },
+      inputSchema: literalAgentInputSchema('cancel'),
       outputSchema: emptySchema(),
       routes: { succeeded: end.id, failed: end.id, cancelled: end.id },
     };

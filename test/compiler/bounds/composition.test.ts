@@ -19,17 +19,17 @@ import {
 const activityRegion = (key: string, outcome: string): SourceRegion => ({
   key,
   inputSchema: emptySchema(),
-  entry: 'activity',
+  entry: `${key}-activity`,
   outputSchema: emptySchema(),
   exits: [{ outcome, outputSchema: emptySchema() }],
   nodes: [
     {
-      ...sourceNodeBuilders.script('done'),
-      key: 'activity',
+      ...sourceNodeBuilders.script(`${key}-done`),
+      id: `${key}-activity`,
       requirementKey: `${key}-requirement`,
-      script: { key: `${key}-script`, revision: 0 },
+      script: { id: `script:${key}-script`, version: 1 },
     },
-    endNode('done', outcome),
+    endNode(`${key}-done`, outcome),
   ],
 });
 
@@ -46,13 +46,13 @@ const nestedRepeatRegion = (depth: number): SourceRegion => {
   return {
     key: `repeat-region-${depth}`,
     inputSchema: emptySchema(),
-    entry: 'repeat',
+    entry: `repeat-${depth}`,
     outputSchema: emptySchema(),
     exits: [{ outcome: 'value', outputSchema: emptySchema() }],
     nodes: [
       {
         kind: 'repeat',
-        key: 'repeat',
+        id: `repeat-${depth}`,
         maximumIterations: 100,
         initialInput: {},
         nextInput: {},
@@ -62,13 +62,13 @@ const nestedRepeatRegion = (depth: number): SourceRegion => {
         output: {},
         outputSchema: emptySchema(),
         routes: {
-          completed: 'done',
-          exhausted: 'done',
-          failed: 'done',
-          cancelled: 'done',
+          completed: `repeat-${depth}-done`,
+          exhausted: `repeat-${depth}-done`,
+          failed: `repeat-${depth}-done`,
+          cancelled: `repeat-${depth}-done`,
         },
       },
-      endNode('done', 'value'),
+      endNode(`repeat-${depth}-done`, 'value'),
     ],
   };
 };
@@ -132,11 +132,11 @@ const strategyBranchSource = (branch: SourceNode): PipelineSourcePackage => {
               policy: { kind: 'unanimous' },
               remaining: 'drain',
               routes: {
-                approved: branch.key,
-                rejected: branch.key,
-                inconclusive: branch.key,
-                participantFailed: branch.key,
-                cancelled: branch.key,
+                approved: branch.id,
+                rejected: branch.id,
+                inconclusive: branch.id,
+                participantFailed: branch.id,
+                cancelled: branch.id,
               },
             },
           ],
@@ -145,7 +145,7 @@ const strategyBranchSource = (branch: SourceNode): PipelineSourcePackage => {
         endNode(),
         endNode('branch-end'),
       ],
-      agent.key,
+      agent.id,
     ),
     maximumTotalActivities: 1_000_000,
   };
@@ -153,7 +153,7 @@ const strategyBranchSource = (branch: SourceNode): PipelineSourcePackage => {
 
 const overflowingStrategyBranch = (): SourceNode => ({
   ...sourceNodeBuilders.repeat('branch-end'),
-  key: 'branch',
+  id: 'branch',
   maximumIterations: 100,
   body: nestedRepeatRegion(8),
 });
@@ -217,7 +217,7 @@ describe('composed activity bounds', () => {
 
   it('does not count an ordinary activity unreachable under the selected strategy', () => {
     const source = {
-      ...strategyBranchSource({ ...sourceNodeBuilders.script('branch-end'), key: 'branch' }),
+      ...strategyBranchSource({ ...sourceNodeBuilders.script('branch-end'), id: 'branch' }),
       maximumTotalActivities: 1,
     };
 
@@ -248,9 +248,9 @@ describe('composed activity bounds', () => {
           call,
           {
             ...sourceNodeBuilders.script(),
-            key: 'continue',
+            id: 'continue',
             requirementKey: 'continuation',
-            script: { key: 'continuation', revision: 0 },
+            script: { id: 'script:continuation', version: 1 },
           },
           endNode(),
         ])
@@ -331,10 +331,10 @@ describe('composed activity bounds', () => {
         [
           {
             ...sourceNodeBuilders.choice('tail'),
-            key: 'choose',
+            id: 'choose',
             otherwise: 'tail',
           },
-          { ...sourceNodeBuilders.script(), key: 'tail' },
+          { ...sourceNodeBuilders.script(), id: 'tail' },
           endNode(),
         ],
         'choose',
@@ -348,7 +348,7 @@ describe('composed activity bounds', () => {
   it('returns a closed result for an exact 4096-node linear control-flow graph', () => {
     const waits = Array.from({ length: 4095 }, (_, index) => ({
       ...sourceNodeBuilders.wait(`n${index + 1}`),
-      key: `n${index}`,
+      id: `n${index}`,
     })) satisfies SourceNode[];
     const source = sourceWithNodes(nonEmptyNodes([...waits, endNode('n4095')]), 'n0');
 

@@ -33,7 +33,7 @@ export type ProgramRegion = {
 export type ProgramActivityNode = {
   readonly kind: 'activity';
   readonly id: ProgramNodeId;
-  readonly activityKind: 'agent' | 'script' | 'effect';
+  readonly activityKind: 'agent' | 'script';
   readonly requirementKey: string;
   readonly input: ProgramValueMapping;
   readonly inputSchema: ValueSchema;
@@ -202,13 +202,13 @@ export type ProgramHumanGateNode = {
   readonly subject: string;
   readonly answers: readonly [string, ...string[]];
   readonly authorizationRequirements: readonly string[];
+  readonly payloadSchema: ValueSchema | null;
+  readonly deadline: { readonly afterMs: number; readonly target: ProgramNodeId } | null;
   readonly routes: {
     readonly answers: readonly [
       { readonly answer: string; readonly target: ProgramNodeId },
       ...{ readonly answer: string; readonly target: ProgramNodeId }[],
     ];
-    readonly conflict: ProgramNodeId;
-    readonly deadline: ProgramNodeId;
     readonly cancelled: ProgramNodeId;
   };
 };

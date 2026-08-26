@@ -19,9 +19,9 @@ const fieldSchema = (value: ValueSchema): ValueSchema => ({
 
 const producer = (outputSchema: ValueSchema): ScriptSourceNode => ({
   kind: 'script',
-  key: 'a-producer',
+  id: 'a-producer',
   requirementKey: 'producer',
-  script: { key: 'producer', revision: 0 },
+  script: { id: 'script:producer', version: 1 },
   input: {},
   inputSchema: emptySchema(),
   outputSchema,
@@ -30,9 +30,9 @@ const producer = (outputSchema: ValueSchema): ScriptSourceNode => ({
 
 const consumer = (selector: ValueSelector, inputSchema: ValueSchema): ScriptSourceNode => ({
   kind: 'script',
-  key: 'b-consumer',
+  id: 'b-consumer',
   requirementKey: 'consumer',
-  script: { key: 'consumer', revision: 0 },
+  script: { id: 'script:consumer', version: 1 },
   input: { value: selector },
   inputSchema: fieldSchema(inputSchema),
   outputSchema: emptySchema(),

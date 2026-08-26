@@ -5,6 +5,7 @@ import {
   canonicalizeOwnedValue,
   computeRedactedDigest,
   digestCanonicalBytes,
+  isAgentActivityInputValueSchema,
   normalizeOwnedEnvelope,
   valueSchemasEqual,
   type Digest,
@@ -47,7 +48,9 @@ const hasValidCrossReferences = (
         if (
           requirement?.kind !== node.activityKind ||
           !valueSchemasEqual(node.inputSchema, requirement.inputSchema) ||
-          !valueSchemasEqual(node.outputSchema, requirement.outputSchema)
+          !valueSchemasEqual(node.outputSchema, requirement.outputSchema) ||
+          (requirement.kind === 'agent' &&
+            !isAgentActivityInputValueSchema(requirement.inputSchema))
         ) {
           return false;
         }

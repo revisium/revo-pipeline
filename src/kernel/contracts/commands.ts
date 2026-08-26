@@ -57,6 +57,13 @@ export const PipelineCommandSchema = Type.Union([
     subject: readonlySchema(Type.String()),
     answers: readonlySchema(nonEmptyArraySchema(Type.String())),
     authorizationRequirements: readonlySchema(immutableArraySchema(Type.String())),
+    payloadSchema: readonlySchema(Type.Union([ValueSchemaSchema, Type.Null()])),
+    deadline: readonlySchema(
+      Type.Union([
+        closedObject({ afterMs: readonlySchema(Type.Integer({ minimum: 0 })) }),
+        Type.Null(),
+      ]),
+    ),
   }),
   closedObject({
     kind: readonlySchema(Type.Literal('complete')),

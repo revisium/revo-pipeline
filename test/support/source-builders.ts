@@ -4,6 +4,7 @@ import type {
   SourceRegion,
   ValueSchema,
 } from '../../src/source/index.js';
+import { AgentActivityInputValueSchema } from '../../src/source/index.js';
 
 type NodeKind = SourceNode['kind'];
 type NodeOf<Kind extends NodeKind> = Extract<SourceNode, { readonly kind: Kind }>;
@@ -20,7 +21,7 @@ export const emptySchema = (): ValueSchema => ({
 
 export const endNode = (key = 'done', outcome = 'ok'): NodeOf<'end'> => ({
   kind: 'end',
-  key,
+  id: key,
   outcome,
   output: {},
 });
@@ -32,10 +33,10 @@ export const childRegion = (
 ): SourceRegion => ({
   key,
   inputSchema: emptySchema(),
-  entry: 'done',
+  entry: `${key}-done`,
   outputSchema,
   exits: [{ outcome, outputSchema }],
-  nodes: [endNode('done', outcome)],
+  nodes: [endNode(`${key}-done`, outcome)],
 });
 
 const activityRoutes = (target: string) => ({
@@ -55,28 +56,17 @@ const consensusRoutes = (target: string) => ({
 export const sourceNodeBuilders = {
   agent: (target = 'done') => ({
     kind: 'agent',
-    key: 'activity',
-    slotKey: 'review',
+    id: 'activity',
     strategies: [{ kind: 'single', routes: activityRoutes(target) }],
-    input: {},
-    inputSchema: emptySchema(),
+    input: { prompt: { kind: 'scopeInput', pointer: '/prompt' } },
+    inputSchema: AgentActivityInputValueSchema,
     outputSchema: emptySchema(),
   }),
   script: (target = 'done') => ({
     kind: 'script',
-    key: 'activity',
+    id: 'activity',
     requirementKey: 'prepare',
-    script: { key: 'prepare-script', revision: 0 },
-    input: {},
-    inputSchema: emptySchema(),
-    outputSchema: emptySchema(),
-    routes: activityRoutes(target),
-  }),
-  effect: (target = 'done') => ({
-    kind: 'effect',
-    key: 'activity',
-    requirementKey: 'publish',
-    effectKey: 'publish-effect',
+    script: { id: 'script:prepare-script', version: 1 },
     input: {},
     inputSchema: emptySchema(),
     outputSchema: emptySchema(),
@@ -84,14 +74,14 @@ export const sourceNodeBuilders = {
   }),
   choice: (target = 'done') => ({
     kind: 'choice',
-    key: 'activity',
+    id: 'activity',
     selector: { kind: 'literal', value: true },
     cases: [{ key: 'yes', when: { kind: 'equals', value: true }, target }],
     otherwise: target,
   }),
   parallel: (target = 'done') => ({
     kind: 'parallel',
-    key: 'activity',
+    id: 'activity',
     branches: [
       {
         key: 'left',
@@ -117,7 +107,7 @@ export const sourceNodeBuilders = {
   }),
   repeat: (target = 'done') => ({
     kind: 'repeat',
-    key: 'activity',
+    id: 'activity',
     maximumIterations: 2,
     initialInput: {},
     nextInput: {},
@@ -135,7 +125,7 @@ export const sourceNodeBuilders = {
   }),
   map: (target = 'done') => ({
     kind: 'map',
-    key: 'activity',
+    id: 'activity',
     items: { kind: 'literal', value: [] },
     itemKeyPointer: '',
     maximumItems: 2,
@@ -148,29 +138,39 @@ export const sourceNodeBuilders = {
   }),
   wait: (target = 'done') => ({
     kind: 'wait',
-    key: 'activity',
+    id: 'activity',
     wait: { kind: 'duration', durationMs: 1 },
     routes: { completed: target, cancelled: target },
   }),
   humanGate: (target = 'done') => ({
     kind: 'humanGate',
-    key: 'activity',
+    id: 'activity',
     subject: 'Approve?',
     answers: ['yes'],
     authorizationRequirements: [],
+    payloadSchema: null,
+    deadline: null,
     routes: {
       answers: [{ answer: 'yes', target }],
-      conflict: target,
-      deadline: target,
       cancelled: target,
     },
   }),
   consensus: (target = 'done') => ({
     kind: 'consensus',
-    key: 'activity',
+    id: 'activity',
     participants: [
-      { key: 'left', bindingKey: 'left-binding', input: {}, inputSchema: emptySchema() },
-      { key: 'right', bindingKey: 'right-binding', input: {}, inputSchema: emptySchema() },
+      {
+        key: 'left',
+        bindingKey: 'left-binding',
+        input: { prompt: { kind: 'scopeInput', pointer: '/prompt' } },
+        inputSchema: AgentActivityInputValueSchema,
+      },
+      {
+        key: 'right',
+        bindingKey: 'right-binding',
+        input: { prompt: { kind: 'scopeInput', pointer: '/prompt' } },
+        inputSchema: AgentActivityInputValueSchema,
+      },
     ],
     policy: { kind: 'unanimous' },
     remaining: 'drain',
@@ -178,7 +178,7 @@ export const sourceNodeBuilders = {
   }),
   call: (target = 'done') => ({
     kind: 'call',
-    key: 'activity',
+    id: 'activity',
     module: 'child-module',
     input: {},
     outputSchema: emptySchema(),
@@ -194,7 +194,6 @@ export const sourceNodeBuilders = {
 export const allSourceNodeExamples = (target = 'done'): readonly SourceNode[] => [
   sourceNodeBuilders.agent(target),
   sourceNodeBuilders.script(target),
-  sourceNodeBuilders.effect(target),
   sourceNodeBuilders.choice(target),
   sourceNodeBuilders.parallel(target),
   sourceNodeBuilders.repeat(target),
@@ -208,28 +207,40 @@ export const allSourceNodeExamples = (target = 'done'): readonly SourceNode[] =>
 
 export const sourceWithNodes = (
   nodes: readonly [SourceNode, ...SourceNode[]],
-  entry = nodes[0].key,
-): PipelineSourcePackage => ({
-  schemaVersion: 'pipeline-source/v1',
-  key: 'p',
-  entryModule: 'm',
-  maximumTotalActivities: 32,
-  modules: [
-    {
-      key: 'm',
-      inputSchema: emptySchema(),
-      outputSchema: emptySchema(),
-      region: {
-        key: 'r',
-        inputSchema: emptySchema(),
-        entry,
+  entry = nodes[0].id,
+): PipelineSourcePackage => {
+  const inputSchema: ValueSchema = nodes.some(
+    (node) => node.kind === 'agent' || node.kind === 'consensus',
+  )
+    ? {
+        type: 'object',
+        properties: { prompt: { type: 'string' } },
+        required: ['prompt'],
+        additionalProperties: false,
+      }
+    : emptySchema();
+  return {
+    schemaVersion: 'pipeline-source/v1',
+    key: 'p',
+    entryModule: 'm',
+    maximumTotalActivities: 32,
+    modules: [
+      {
+        key: 'm',
+        inputSchema,
         outputSchema: emptySchema(),
-        exits: [{ outcome: 'ok', outputSchema: emptySchema() }],
-        nodes,
+        region: {
+          key: 'r',
+          inputSchema,
+          entry,
+          outputSchema: emptySchema(),
+          exits: [{ outcome: 'ok', outputSchema: emptySchema() }],
+          nodes,
+        },
       },
-    },
-  ],
-});
+    ],
+  };
+};
 
 export const nonEmptyNodes = (nodes: readonly SourceNode[]): [SourceNode, ...SourceNode[]] => {
   const [first, ...rest] = nodes;
@@ -239,11 +250,35 @@ export const nonEmptyNodes = (nodes: readonly SourceNode[]): [SourceNode, ...Sou
   return [first, ...rest];
 };
 
-export const sourceForNode = (node: SourceNode): PipelineSourcePackage =>
-  node.kind === 'end' ? sourceWithNodes([node]) : sourceWithNodes([node, endNode()]);
+export const sourceForNode = (node: SourceNode): PipelineSourcePackage => {
+  const source = node.kind === 'end' ? sourceWithNodes([node]) : sourceWithNodes([node, endNode()]);
+  if (node.kind !== 'agent') {
+    return source;
+  }
+  const module = source.modules[0];
+  if (module === undefined) {
+    throw new TypeError('Expected a source module.');
+  }
+  const inputSchema: ValueSchema = {
+    type: 'object',
+    properties: { prompt: { type: 'string' } },
+    required: ['prompt'],
+    additionalProperties: false,
+  };
+  return {
+    ...source,
+    modules: [
+      {
+        ...module,
+        inputSchema,
+        region: { ...module.region, inputSchema },
+      },
+    ],
+  };
+};
 
 export const agentSource = (): PipelineSourcePackage => ({
-  ...sourceForNode({ ...sourceNodeBuilders.agent(), key: 'a' }),
+  ...sourceForNode({ ...sourceNodeBuilders.agent(), id: 'a' }),
   maximumTotalActivities: 1,
 });
 

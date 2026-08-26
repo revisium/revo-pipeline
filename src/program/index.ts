@@ -11,7 +11,6 @@ export {
   type GenericParallelBranchResult,
   type GenericParallelOutput,
   type AgentProgramRequirement,
-  type EffectProgramRequirement,
   type LoweringRole,
   type NodeProvenance,
   type PipelineProgram,

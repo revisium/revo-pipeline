@@ -28,14 +28,7 @@ const requirements = [
   {
     kind: 'script',
     key: 'script-binding',
-    script: { key: 'script', revision: 0 },
-    inputSchema: EmptyObjectSchema,
-    outputSchema: EmptyObjectSchema,
-  },
-  {
-    kind: 'effect',
-    key: 'effect-binding',
-    effectKey: 'effect',
+    script: { id: 'script:script', version: 1 },
     inputSchema: EmptyObjectSchema,
     outputSchema: EmptyObjectSchema,
   },
@@ -46,8 +39,9 @@ const provenance = {
   nodes: [
     {
       programNodeId: programId(),
+      sourceNodeId: 'activity',
       sourcePath: '/modules/0/region/nodes/0',
-      materializationPath: '/slots/0/selection/participant',
+      materializationPath: '/activity/participant',
       loweringRole: 'direct',
       ordinal: 0,
     },
@@ -56,7 +50,7 @@ const provenance = {
     {
       requirementKey: 'agent-binding',
       sourcePaths: ['/modules/0/region/nodes/0'],
-      materializationPaths: ['/slots/0/selection/participant'],
+      materializationPaths: ['/activity/participant'],
     },
   ],
 } as const satisfies ProgramProvenance;
@@ -83,14 +77,14 @@ describe('Program requirements and provenance contracts', () => {
   );
 
   it.each([
-    ['script descriptor missing key', { ...requirements[1], script: { revision: 0 } }],
+    ['script descriptor missing id', { ...requirements[1], script: { version: 1 } }],
     [
       'script descriptor has unknown field',
       { ...requirements[1], script: { ...requirements[1].script, provider: 'host' } },
     ],
     [
-      'script descriptor has wrong revision',
-      { ...requirements[1], script: { key: 'script', revision: -1 } },
+      'script descriptor has wrong version',
+      { ...requirements[1], script: { id: 'script:script', version: 0 } },
     ],
   ])('rejects nested requirement case: %s', (_name, invalid) => {
     expect(requirementValidator.Check(invalid)).toBe(false);

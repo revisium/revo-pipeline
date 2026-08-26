@@ -103,7 +103,7 @@ describe('source node semantics', () => {
   it('caps deterministic diagnostics and appends the limit marker', () => {
     const nodes: SourceNode[] = Array.from({ length: 60 }, (_, index) => ({
       kind: 'wait',
-      key: `n${String(index).padStart(3, '0')}`,
+      id: `n${String(index).padStart(3, '0')}`,
       wait: { kind: 'duration', durationMs: 1 },
       routes: { completed: 'missing', cancelled: 'missing' },
     }));

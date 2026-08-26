@@ -9,7 +9,6 @@ import type {
   CallSourceNode,
   ChoiceSourceNode,
   ConsensusSourceNode,
-  EffectSourceNode,
   EndSourceNode,
   HumanGateSourceNode,
   MapSourceNode,
@@ -45,7 +44,6 @@ const normalizeAgent = (
   path: JsonPointer,
   context: NormalizationContext,
 ): AgentSourceNode => {
-  validateIdentifier(node.slotKey, appendJsonPointer(path, 'slotKey'), context.collector);
   const strategiesPath = appendJsonPointer(path, 'strategies');
   const strategies = nonEmptyTuple(
     normalizeKeyed(node.strategies, ({ kind }) => kind, strategiesPath, context.collector).map(
@@ -84,38 +82,9 @@ const normalizeScript = (
     appendJsonPointer(path, 'requirementKey'),
     context.collector,
   );
-  validateIdentifier(node.script.key, nestedPath(path, 'script', 'key'), context.collector);
   return Object.freeze({
     ...node,
     script: Object.freeze({ ...node.script }),
-    input: normalizeMapping(node.input, appendJsonPointer(path, 'input'), context),
-    inputSchema: normalizeValueSchema(
-      node.inputSchema,
-      appendJsonPointer(path, 'inputSchema'),
-      context.collector,
-    ),
-    outputSchema: normalizeValueSchema(
-      node.outputSchema,
-      appendJsonPointer(path, 'outputSchema'),
-      context.collector,
-    ),
-    routes: Object.freeze({ ...node.routes }),
-  });
-};
-
-const normalizeEffect = (
-  node: EffectSourceNode,
-  path: JsonPointer,
-  context: NormalizationContext,
-): EffectSourceNode => {
-  validateIdentifier(
-    node.requirementKey,
-    appendJsonPointer(path, 'requirementKey'),
-    context.collector,
-  );
-  validateIdentifier(node.effectKey, appendJsonPointer(path, 'effectKey'), context.collector);
-  return Object.freeze({
-    ...node,
     input: normalizeMapping(node.input, appendJsonPointer(path, 'input'), context),
     inputSchema: normalizeValueSchema(
       node.inputSchema,
@@ -354,6 +323,14 @@ const normalizeHumanGate = (
   );
   return Object.freeze({
     ...node,
+    payloadSchema:
+      node.payloadSchema === null
+        ? null
+        : normalizeValueSchema(
+            node.payloadSchema,
+            appendJsonPointer(path, 'payloadSchema'),
+            context.collector,
+          ),
     answers: nonEmptyTuple(answers),
     authorizationRequirements: Object.freeze([...node.authorizationRequirements]),
     routes: Object.freeze({ ...node.routes, answers: Object.freeze(routeAnswers) }),
@@ -463,14 +440,12 @@ export const normalizeSourceNode = (
   regionDepth: number,
   normalizeRegion: RegionNormalizer,
 ): SourceNode => {
-  validateIdentifier(node.key, appendJsonPointer(path, 'key'), context.collector);
+  validateIdentifier(node.id, appendJsonPointer(path, 'id'), context.collector);
   switch (node.kind) {
     case 'agent':
       return normalizeAgent(node, path, context);
     case 'script':
       return normalizeScript(node, path, context);
-    case 'effect':
-      return normalizeEffect(node, path, context);
     case 'choice':
       return normalizeChoice(node, path, context);
     case 'parallel':
