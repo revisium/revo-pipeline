@@ -1,5 +1,4 @@
-import type { JsonPointer } from '../../foundation/index.js';
-import type { ScriptPin } from '../../foundation/index.js';
+import type { JsonPointer, ScriptPin } from '../../foundation/index.js';
 import type {
   ActivityRoutes,
   AgentSlotStrategy,

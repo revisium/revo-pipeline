@@ -2,10 +2,9 @@ import { Type, type Static } from 'typebox';
 
 import { readonlySchema } from './typebox.js';
 
-type ScriptId = string;
-const ScriptIdSchema = Type.Unsafe<ScriptId>(
-  Type.String({ pattern: '^script:(?![\\s\\S]*[\\r\\n])[\\s\\S]+$' }),
-);
+const ScriptIdSchema = Type.String({
+  pattern: String.raw`^script:(?![\s\S]*[\r\n])[\s\S]+$`,
+});
 
 export const ScriptVersionSchema = Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
 

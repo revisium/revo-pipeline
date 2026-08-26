@@ -247,20 +247,84 @@ const applyOrdinaryResult = (
   }
 };
 
+const rejectedApplication = (routed: RoutedEventResult): Applied | null => {
+  if (typeof routed === 'string') {
+    return Object.freeze({ ok: false, code: routed });
+  }
+  return routed !== null && 'code' in routed
+    ? Object.freeze({ ok: false, code: routed.code, path: routed.path })
+    : null;
+};
+
+const isRoutedResult = (routed: RoutedEventResult): routed is RoutedResult =>
+  routed !== null && typeof routed !== 'string' && !('code' in routed);
+
+type CleanupPreparation = {
+  readonly requested: ReturnType<RuntimeContext['draft']['acknowledge']>;
+  readonly cleanup: RequestedCleanup;
+};
+
+const prepareCleanup = (
+  context: RuntimeContext,
+  frame: RegionMachineFrame,
+  pending: PendingOperation,
+): CleanupPreparation | null => {
+  const requested = context.draft.acknowledge(pending.commandKey);
+  const ownerKeys =
+    requested === null
+      ? Object.freeze([])
+      : orderedCancellationOwners(context.draft, frame.key, requested.regionOwnerKeys);
+  if (ownerKeys === null) {
+    return null;
+  }
+  return Object.freeze({
+    requested,
+    cleanup: Object.freeze({
+      kind: 'requested' as const,
+      ownerKeys,
+      run: requested?.run ?? false,
+    }),
+  });
+};
+
+const applyCancellationResult = (
+  context: RuntimeContext,
+  frame: RegionMachineFrame,
+  pending: PendingOperation,
+  preparation: CleanupPreparation,
+  normalized: NormalizedEvent,
+): boolean => {
+  if (!isCancellationEvent(normalized.event)) {
+    return false;
+  }
+  if (preparation.requested === null) {
+    context.markCancellation(frame.key, 'isolated');
+    return false;
+  }
+  if (preparation.cleanup.ownerKeys.length > 0) {
+    storeCleanupResult(
+      context,
+      frame,
+      pending.ref.nodeId,
+      Object.freeze({ status: 'cancelled' }),
+      preparation.cleanup,
+    );
+  }
+  return true;
+};
+
 export const applyOperationEvent = (
   context: RuntimeContext,
   pending: PendingOperation,
   normalized: NormalizedEvent,
 ): Applied => {
   const routed = routedResult(context, pending, normalized);
-  if (typeof routed === 'string') {
-    return Object.freeze({ ok: false, code: routed });
-  }
-  if (routed !== null && 'code' in routed) {
-    return Object.freeze({ ok: false, code: routed.code, path: routed.path });
+  const rejected = rejectedApplication(routed);
+  if (rejected !== null) {
+    return rejected;
   }
   const frame = context.draft.frames.get(pending.ref.frameKey);
-  if (routed === null || frame === undefined || !('ready' in frame)) {
+  if (!isRoutedResult(routed) || frame === undefined || !('ready' in frame)) {
     context.invalidate();
     return applied;
   }
@@ -273,41 +337,19 @@ export const applyOperationEvent = (
     context.invalidate();
     return applied;
   }
-  const requested = context.draft.acknowledge(pending.commandKey);
-  const ownerKeys =
-    requested === null
-      ? Object.freeze([])
-      : orderedCancellationOwners(context.draft, frame.key, requested.regionOwnerKeys);
-  if (ownerKeys === null) {
+  const preparation = prepareCleanup(context, frame, pending);
+  if (preparation === null) {
     context.invalidate();
     return applied;
   }
-  const structured = ownerKeys.length > 0;
-  const cleanup = Object.freeze({
-    kind: 'requested' as const,
-    ownerKeys,
-    run: requested?.run ?? false,
-  });
-  if (isCancellationEvent(normalized.event)) {
-    if (requested !== null) {
-      if (structured) {
-        storeCleanupResult(
-          context,
-          frame,
-          pending.ref.nodeId,
-          Object.freeze({ status: 'cancelled' }),
-          cleanup,
-        );
-      }
-      return applied;
-    }
-    context.markCancellation(frame.key, 'isolated');
-  }
-  if (structured) {
-    const exactResult = 'failure' in routed ? failedNode(routed.failure) : routed.result;
-    storeCleanupResult(context, frame, pending.ref.nodeId, exactResult, cleanup);
+  if (applyCancellationResult(context, frame, pending, preparation, normalized)) {
     return applied;
   }
-  applyOrdinaryResult(context, frame, pending, routed, requested?.run === true);
+  if (preparation.cleanup.ownerKeys.length > 0) {
+    const exactResult = 'failure' in routed ? failedNode(routed.failure) : routed.result;
+    storeCleanupResult(context, frame, pending.ref.nodeId, exactResult, preparation.cleanup);
+    return applied;
+  }
+  applyOrdinaryResult(context, frame, pending, routed, preparation.cleanup.run);
   return applied;
 };

@@ -2,8 +2,8 @@ import {
   compareUnicodeCodePoints,
   computeRedactedDigest,
   type Digest,
+  type PipelineDiagnostic,
 } from '../foundation/index.js';
-import type { PipelineDiagnostic } from '../foundation/index.js';
 import type { PipelineSourcePackage, SourceNodeId } from './contracts/index.js';
 import { validatePipelineSource } from './validate.js';
 
