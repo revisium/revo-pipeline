@@ -2,6 +2,7 @@ import { Compile } from 'typebox/compile';
 
 import {
   PIPELINE_LIMITS,
+  isAgentActivityInputValueSchema,
   normalizeOwnedEnvelope,
   valueSchemaIsCompatible,
   valueSchemasEqual,
@@ -108,6 +109,9 @@ const indexNode = (
     index.nodeIds.has(node.id) ||
     index.regions.has(node.id) ||
     !hasValidStructuredSemantics(node, counters) ||
+    (node.kind === 'activity' &&
+      node.activityKind === 'agent' &&
+      !isAgentActivityInputValueSchema(node.inputSchema)) ||
     (node.kind === 'end' && !task.region.exits.some(({ outcome }) => outcome === node.outcome)) ||
     (node.kind === 'call' && !callMatchesModule(node, index.modules))
   ) {

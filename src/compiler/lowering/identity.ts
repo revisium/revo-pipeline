@@ -22,6 +22,7 @@ export const createLoweredIdentity = (
     id,
     provenance: Object.freeze({
       programNodeId: id,
+      sourceNodeId: null,
       sourcePath,
       materializationPath,
       loweringRole,

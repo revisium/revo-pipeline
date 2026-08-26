@@ -28,10 +28,6 @@
     "./kernel": {
       "types": "./dist/kernel/public.d.ts",
       "import": "./dist/kernel/public.js"
-    },
-    "./execution-plan": {
-      "types": "./dist/execution-plan/public.d.ts",
-      "import": "./dist/execution-plan/public.js"
     }
   },
   "publishConfig": {

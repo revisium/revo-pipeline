@@ -1,7 +1,9 @@
-# ADR 0013: Curated execution-plan bridge
+# ADR 0013: Curated execution-plan bridge (historical)
 
-- Status: Accepted
+- Status: Superseded by ADR 0014
 - Amends: ADR 0005, ADR 0011
+
+> Historical record only. This facade was removed and is not active package guidance.
 
 ## Context
 

@@ -1,36 +1,67 @@
-import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-
 import { describe, expect, it } from 'vitest';
 
-import {
-  expectValidMaterialization,
-  singleMaterialization,
-  validatedSource,
-} from '../support/materialization-builders.js';
+import { compilePipeline } from '../../src/index.js';
+import { validatePipelineSelections } from '../../src/materialization/index.js';
+import { validatedSource } from '../support/materialization-builders.js';
+import { endNode, sourceNodeBuilders, sourceWithNodes } from '../support/source-builders.js';
 
-describe('materialization determinism', () => {
-  it('pins exact canonical bytes and the normative digest preimage', async () => {
+describe('selection materialization determinism', () => {
+  it('matches the executable normalized materialization golden', () => {
     const source = validatedSource();
-    const materialization = expectValidMaterialization(
-      singleMaterialization(source.sourceDigest),
-      source,
+    const result = validatePipelineSelections(source, {
+      a: { strategy: 'single', participant: { key: 'p1', bindingKey: 'b1' } },
+    });
+    if (!result.ok) {
+      throw new TypeError('Expected valid materialization.');
+    }
+    const golden: unknown = JSON.parse(
+      readFileSync(new URL('../fixtures/materialization/normalized.json', import.meta.url), 'utf8'),
     );
-    const fixtureUrl = new URL('../fixtures/materialization/normalized.json', import.meta.url);
-    const expectedText = (await readFile(fixtureUrl, 'utf8')).trim();
-    const payload = Buffer.from(expectedText, 'utf8');
-    const expectedDigest = `sha256:${createHash('sha256')
-      .update(
-        `revo-pipeline-digest-v1\npipeline-materialization/v1\n${payload.byteLength}\n`,
-        'utf8',
-      )
-      .update(payload)
-      .digest('hex')}`;
 
-    expect(materialization.canonicalText).toBe(expectedText);
-    expect(materialization.materializationDigest).toBe(expectedDigest);
-    expect(materialization.materializationDigest).toBe(
-      'sha256:f8524fd041185ecf7d41bc5170a1913a441fc30cc0ab88cf4fe3c5bfb729ed8b',
+    expect(JSON.parse(result.value.canonicalText)).toEqual(golden);
+    expect(
+      compilePipeline(source.source, {
+        a: { strategy: 'single', participant: { key: 'p1', bindingKey: 'b1' } },
+      }),
+    ).toMatchObject({
+      ok: true,
+      sourceDigest: source.sourceDigest,
+      materializationDigest: result.value.materializationDigest,
+    });
+  });
+
+  it('normalizes record keys before calculating the internal digest', () => {
+    const first = {
+      ...sourceNodeBuilders.agent('second'),
+      id: 'first',
+      strategies: [
+        {
+          kind: 'single' as const,
+          routes: { succeeded: 'second', failed: 'second', cancelled: 'second' },
+        },
+      ] as const,
+    };
+    const second = { ...sourceNodeBuilders.agent(), id: 'second' };
+    const source = validatedSource(sourceWithNodes([first, second, endNode()], 'first'));
+    const ordered = {
+      first: { strategy: 'single' as const, participant: { key: 'first', bindingKey: 'shared' } },
+      second: { strategy: 'single' as const, participant: { key: 'second', bindingKey: 'shared' } },
+    };
+    const reversed = {
+      second: ordered.second,
+      first: ordered.first,
+    };
+    const firstResult = validatePipelineSelections(source, ordered);
+    const secondResult = validatePipelineSelections(source, reversed);
+    if (!firstResult.ok || !secondResult.ok) {
+      throw new TypeError('Expected valid selections.');
+    }
+
+    expect(secondResult.value.materializationDigest).toBe(firstResult.value.materializationDigest);
+    expect(secondResult.value.canonicalText).toBe(firstResult.value.canonicalText);
+    expect(compilePipeline(source.source, reversed)).toEqual(
+      compilePipeline(source.source, ordered),
     );
   });
 });
+import { readFileSync } from 'node:fs';

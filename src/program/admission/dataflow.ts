@@ -115,8 +115,9 @@ const programRoutes = (node: ProgramNode): readonly RouteEdge[] => {
     case 'humanGate':
       return [
         ...node.routes.answers.map(({ target }) => ({ target, status: 'succeeded' as const })),
-        { target: node.routes.conflict, status: 'succeeded' },
-        { target: node.routes.deadline, status: 'succeeded' },
+        ...(node.deadline === null
+          ? []
+          : [{ target: node.deadline.target, status: 'succeeded' as const }]),
         { target: node.routes.cancelled, status: 'cancelled' },
       ];
     case 'end':
@@ -397,7 +398,7 @@ const nodeOutputSchema = (node: ProgramNode, context: RegionContext): ValueSchem
           : Object.freeze({ type: 'null' });
       break;
     case 'humanGate':
-      output = humanGateOutputSchema(node.answers);
+      output = humanGateOutputSchema(node.answers, node.payloadSchema, node.deadline !== null);
       break;
     case 'choice':
     case 'end':

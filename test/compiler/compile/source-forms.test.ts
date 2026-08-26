@@ -35,7 +35,6 @@ const validMap = (): SourceNode => ({
 const cases = [
   ['agent', sourceNodeBuilders.agent(), ['activity', 'end'], 'activity'],
   ['script', sourceNodeBuilders.script(), ['activity', 'end'], 'activity'],
-  ['effect', sourceNodeBuilders.effect(), ['activity', 'end'], 'activity'],
   ['choice', sourceNodeBuilders.choice(), ['choice', 'end'], 'choice'],
   ['parallel', sourceNodeBuilders.parallel(), ['choice', 'end', 'parallel'], 'parallel'],
   ['repeat', sourceNodeBuilders.repeat(), ['end', 'repeat'], 'repeat'],

@@ -9,11 +9,11 @@ correction.
   differs from `{ access: public, tag: alpha }`, a publication-blocking hook or
   `private` flag returns, or release automation can publish from a pull request,
   untrusted fork, non-alpha tag, or version-mismatched tag.
-- Root, `./kernel`, or the ADR 0013 `./execution-plan` runtime/type inventories differ from
+- Root or `./kernel` runtime/type inventories differ from
   Pipeline Conformance v1, an unapproved deep/default/CommonJS/wildcard export appears,
   or the shared `PipelineProgramSchema` is not the same runtime value.
 - A compatibility adapter, dual reader, deprecated alias, hidden interpreter, runtime
-  plugin, or source/IR kind outside the closed 12/9 vocabularies appears.
+  plugin, or source/IR kind outside the closed 11/9 vocabularies appears.
 - Pipeline behavior depends on run IDs, time, persistence, attempts, leases, retries,
   resolved bindings, authorization, or other host state.
 - The six-layer DAG, curated indexes, exact root allowlist, no-layer-to-root rule, or

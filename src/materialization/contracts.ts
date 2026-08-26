@@ -2,7 +2,7 @@ import { Type, type Static } from 'typebox';
 
 import {
   DigestSchema,
-  JsonPointerSchema,
+  IdentifierSchema,
   PIPELINE_LIMITS,
   closedObject,
   nonEmptyArraySchema,
@@ -15,39 +15,77 @@ export const AbstractParticipantSchema = closedObject({
 });
 export type AbstractParticipant = Static<typeof AbstractParticipantSchema>;
 
-export const SlotSelectionSchema = Type.Union([
-  closedObject({
-    strategy: readonlySchema(Type.Literal('single')),
-    participant: readonlySchema(AbstractParticipantSchema),
-  }),
-  closedObject({
-    strategy: readonlySchema(Type.Literal('consensus')),
-    participants: readonlySchema(
-      nonEmptyArraySchema(AbstractParticipantSchema, PIPELINE_LIMITS.structured.participants),
-    ),
-  }),
-]);
-export type SlotSelection = Static<typeof SlotSelectionSchema>;
-
-export const AgentSlotMaterializationSchema = closedObject({
-  sourcePath: readonlySchema(JsonPointerSchema),
-  slotKey: readonlySchema(Type.String()),
-  selection: readonlySchema(SlotSelectionSchema),
+const singleSelectionSchema = closedObject({
+  strategy: readonlySchema(Type.Literal('single')),
+  participant: readonlySchema(AbstractParticipantSchema),
 });
-export type AgentSlotMaterialization = Static<typeof AgentSlotMaterializationSchema>;
 
-const profileMaterializationSchema = closedObject({
-  schemaVersion: readonlySchema(Type.Literal('pipeline-materialization/v1')),
-  sourceDigest: readonlySchema(DigestSchema),
-  slots: readonlySchema(
-    Type.Immutable(
-      Type.Array(AgentSlotMaterializationSchema, {
-        maxItems: PIPELINE_LIMITS.sourcePackage.nodes,
-      }),
-    ),
+const consensusSelectionSchema = closedObject({
+  strategy: readonlySchema(Type.Literal('consensus')),
+  participants: readonlySchema(
+    nonEmptyArraySchema(AbstractParticipantSchema, PIPELINE_LIMITS.structured.participants),
   ),
 });
-export const ProfileMaterializationSchema = Type.Unsafe<
-  Static<typeof profileMaterializationSchema>
->(profileMaterializationSchema);
-export type ProfileMaterialization = Static<typeof ProfileMaterializationSchema>;
+
+// The public schema describes a usable selection. The envelope schema below is
+// deliberately wider: validation turns malformed participant counts into the
+// domain-specific MATERIALIZATION_POLICY_COUNT diagnostic.
+const consensusSelectionEnvelopeSchema = closedObject({
+  strategy: readonlySchema(Type.Literal('consensus')),
+  participants: readonlySchema(
+    Type.Array(AbstractParticipantSchema, {
+      maxItems: PIPELINE_LIMITS.sourcePackage.nodes,
+    }),
+  ),
+});
+
+export const PipelineSelectionSchema = Type.Union([
+  singleSelectionSchema,
+  consensusSelectionSchema,
+]);
+export type PipelineSelection = Static<typeof PipelineSelectionSchema>;
+
+type PipelineSelectionEnvelope =
+  | Static<typeof singleSelectionSchema>
+  | Static<typeof consensusSelectionEnvelopeSchema>;
+
+export type PipelineSelections = Readonly<
+  Record<import('../source/index.js').SourceNodeId, PipelineSelection>
+>;
+
+export const PipelineSelectionsSchema = Type.Unsafe<PipelineSelections>(
+  Type.Record(IdentifierSchema, PipelineSelectionSchema, {
+    maxProperties: PIPELINE_LIMITS.sourcePackage.nodes,
+  }),
+);
+
+export const PipelineSelectionsEnvelopeSchema = Type.Unsafe<PipelineSelections>(
+  Type.Record(
+    Type.String(),
+    Type.Unsafe<PipelineSelectionEnvelope>(
+      Type.Union([singleSelectionSchema, consensusSelectionEnvelopeSchema]),
+    ),
+    {
+      maxProperties: PIPELINE_LIMITS.sourcePackage.nodes,
+    },
+  ),
+);
+
+export type InternalSlotSelection =
+  | { readonly strategy: 'single'; readonly participant: AbstractParticipant }
+  | {
+      readonly strategy: 'consensus';
+      readonly participants: readonly [AbstractParticipant, ...AbstractParticipant[]];
+    };
+
+export type InternalAgentSlot = {
+  readonly sourceNodeId: import('../source/index.js').SourceNodeId;
+  readonly sourcePath: import('../foundation/index.js').JsonPointer;
+  readonly selection: InternalSlotSelection;
+};
+
+export type InternalMaterialization = {
+  readonly schemaVersion: 'pipeline-materialization/v1';
+  readonly sourceDigest: Static<typeof DigestSchema>;
+  readonly slots: readonly InternalAgentSlot[];
+};

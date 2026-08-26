@@ -223,8 +223,8 @@ const invalidNodes = [
     },
   },
   {
-    name: 'gate routes missing deadline',
-    value: { ...humanGate, routes: without(humanGate.routes, 'deadline') },
+    name: 'gate missing deadline',
+    value: without(humanGate, 'deadline'),
   },
   {
     name: 'gate routes have unknown field',

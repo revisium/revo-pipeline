@@ -131,10 +131,10 @@ describe('direct and structured node lowering contracts', () => {
       subject: 'Approve?',
       answers: ['yes'],
       authorizationRequirements: [],
+      payloadSchema: null,
+      deadline: null,
       routes: {
         answers: [{ answer: 'yes', target }],
-        conflict: target,
-        deadline: target,
         cancelled: target,
       },
     });

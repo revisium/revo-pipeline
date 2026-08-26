@@ -4,6 +4,7 @@ import { advancePipeline, createInitialPipelineState } from '../../src/kernel/in
 import * as program from '../../src/program/index.js';
 import type { ProgramNode } from '../../src/program/index.js';
 import { kernelModule, kernelProgram, kernelRegion } from '../support/kernel-builders.js';
+import { literalAgentInputSchema } from '../support/program-builders.js';
 import { emptySchema } from '../support/source-builders.js';
 
 const id = (ordinal: number) => `sha256:${ordinal.toString(16).padStart(64, '0')}` as const;
@@ -19,8 +20,8 @@ const maximumRunningProgram = () => {
         id: nodeId,
         activityKind: 'agent',
         requirementKey: 'pending',
-        input: {},
-        inputSchema: emptySchema(),
+        input: { prompt: { kind: 'literal', value: 'maximum probe' } },
+        inputSchema: literalAgentInputSchema('maximum probe'),
         outputSchema: emptySchema(),
         routes: { succeeded: next, failed: next, cancelled: next },
       });

@@ -24,6 +24,7 @@ import { sourceForNode, sourceNodeBuilders } from '../../support/source-builders
 
 const provenance = (programNodeId: ProgramNodeId, sourcePath: JsonPointer): NodeProvenance => ({
   programNodeId,
+  sourceNodeId: null,
   sourcePath,
   materializationPath: null,
   loweringRole: 'direct',
@@ -106,7 +107,7 @@ describe('compiler emission invariants', () => {
           requirement: {
             kind: 'script',
             key: 'unused',
-            script: { key: 'unused', revision: 0 },
+            script: { id: 'script:unused', version: 1 },
             inputSchema: region.inputSchema,
             outputSchema: region.outputSchema,
           },
@@ -179,6 +180,7 @@ describe('compiler emission invariants', () => {
       'materializationPath',
       'ordinal',
       'programNodeId',
+      'sourceNodeId',
       'sourcePath',
     ]);
     expect(

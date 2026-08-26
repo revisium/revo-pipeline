@@ -5,6 +5,7 @@ import {
   canonicalizeOwnedValue,
   computeRedactedDigest,
   digestCanonicalBytes,
+  isAgentActivityInputValueSchema,
   normalizeOwnedEnvelope,
   valueSchemasEqual,
   type Digest,
@@ -28,6 +29,78 @@ export type AdmittedProgramDigestInput = {
   readonly receipt: ProgramAdmissionReceipt;
 };
 
+const isCompatibleActivityRequirement = (
+  node: ProgramDigestInput['program']['modules'][number]['region']['nodes'][number],
+  requirements: ReadonlyMap<string, ProgramDigestInput['requirements']['entries'][number]>,
+): boolean => {
+  if (node.kind !== 'activity') {
+    return true;
+  }
+  const requirement = requirements.get(node.requirementKey);
+  return (
+    requirement?.kind === node.activityKind &&
+    valueSchemasEqual(node.inputSchema, requirement.inputSchema) &&
+    valueSchemasEqual(node.outputSchema, requirement.outputSchema) &&
+    (requirement.kind !== 'agent' || isAgentActivityInputValueSchema(requirement.inputSchema))
+  );
+};
+
+const collectReferencedIds = (
+  regions: ReadonlyMap<string, ProgramDigestInput['program']['modules'][number]['region']>,
+  requirements: ReadonlyMap<string, ProgramDigestInput['requirements']['entries'][number]>,
+): {
+  readonly structuralIds: ReadonlySet<ProgramNodeId>;
+  readonly usedRequirements: ReadonlySet<string>;
+} | null => {
+  const usedRequirements = new Set<string>();
+  const structuralIds = new Set<ProgramNodeId>();
+  for (const region of regions.values()) {
+    structuralIds.add(region.id);
+    for (const node of region.nodes) {
+      structuralIds.add(node.id);
+      if (!isCompatibleActivityRequirement(node, requirements)) {
+        return null;
+      }
+      if (node.kind === 'activity') {
+        usedRequirements.add(node.requirementKey);
+      }
+    }
+  }
+  return { structuralIds, usedRequirements };
+};
+
+const hasCompleteNodeProvenance = (
+  input: ProgramDigestInput,
+  structuralIds: ReadonlySet<ProgramNodeId>,
+): boolean => {
+  if (!isStrictlySorted(input.provenance.nodes, ({ programNodeId }) => programNodeId)) {
+    return false;
+  }
+  const provenanceIds = new Set(input.provenance.nodes.map(({ programNodeId }) => programNodeId));
+  return (
+    provenanceIds.size === structuralIds.size &&
+    [...structuralIds].every((id) => provenanceIds.has(id))
+  );
+};
+
+const hasCompleteRequirementProvenance = (
+  input: ProgramDigestInput,
+  requirements: ReadonlyMap<string, ProgramDigestInput['requirements']['entries'][number]>,
+): boolean => {
+  if (!isStrictlySorted(input.provenance.requirements, ({ requirementKey }) => requirementKey)) {
+    return false;
+  }
+  if (input.provenance.requirements.length !== requirements.size) {
+    return false;
+  }
+  return input.provenance.requirements.every(
+    (record) =>
+      requirements.has(record.requirementKey) &&
+      isStrictlySorted(record.sourcePaths, (path) => path) &&
+      isStrictlySorted(record.materializationPaths, (path) => path),
+  );
+};
+
 const hasValidCrossReferences = (
   input: ProgramDigestInput,
   regions: ReadonlyMap<string, ProgramDigestInput['program']['modules'][number]['region']>,
@@ -36,49 +109,12 @@ const hasValidCrossReferences = (
     return false;
   }
   const requirements = new Map(input.requirements.entries.map((entry) => [entry.key, entry]));
-  const usedRequirements = new Set<string>();
-  const structuralIds = new Set<ProgramNodeId>();
-  for (const region of regions.values()) {
-    structuralIds.add(region.id);
-    for (const node of region.nodes) {
-      structuralIds.add(node.id);
-      if (node.kind === 'activity') {
-        const requirement = requirements.get(node.requirementKey);
-        if (
-          requirement?.kind !== node.activityKind ||
-          !valueSchemasEqual(node.inputSchema, requirement.inputSchema) ||
-          !valueSchemasEqual(node.outputSchema, requirement.outputSchema)
-        ) {
-          return false;
-        }
-        usedRequirements.add(node.requirementKey);
-      }
-    }
-  }
-  if (usedRequirements.size !== requirements.size) {
-    return false;
-  }
-  if (!isStrictlySorted(input.provenance.nodes, ({ programNodeId }) => programNodeId)) {
-    return false;
-  }
-  const provenanceIds = new Set(input.provenance.nodes.map(({ programNodeId }) => programNodeId));
-  if (
-    provenanceIds.size !== structuralIds.size ||
-    [...structuralIds].some((id) => !provenanceIds.has(id))
-  ) {
-    return false;
-  }
-  if (
-    !isStrictlySorted(input.provenance.requirements, ({ requirementKey }) => requirementKey) ||
-    input.provenance.requirements.length !== requirements.size
-  ) {
-    return false;
-  }
-  return input.provenance.requirements.every(
-    (record) =>
-      requirements.has(record.requirementKey) &&
-      isStrictlySorted(record.sourcePaths, (path) => path) &&
-      isStrictlySorted(record.materializationPaths, (path) => path),
+  const references = collectReferencedIds(regions, requirements);
+  return (
+    references !== null &&
+    references.usedRequirements.size === requirements.size &&
+    hasCompleteNodeProvenance(input, references.structuralIds) &&
+    hasCompleteRequirementProvenance(input, requirements)
   );
 };
 

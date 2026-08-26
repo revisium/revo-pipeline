@@ -46,7 +46,7 @@ const routeSource = (
 ): PipelineSourcePackage => {
   const producer = {
     ...sourceNodeBuilders.script(),
-    key: 'a-producer',
+    id: 'a-producer',
     outputSchema: stringField(),
     routes: {
       succeeded: route === 'succeeded' ? 'b-consumer' : 'succeeded-end',
@@ -56,13 +56,13 @@ const routeSource = (
   } satisfies SourceNode;
   const selector =
     selectorKind === 'nodeOutput'
-      ? { kind: 'nodeOutput' as const, node: producer.key, pointer: '/value' as const }
-      : { kind: 'nodeFailure' as const, node: producer.key, pointer: '/code' as const };
+      ? { kind: 'nodeOutput' as const, node: producer.id, pointer: '/value' as const }
+      : { kind: 'nodeFailure' as const, node: producer.id, pointer: '/code' as const };
   const consumer = {
     ...sourceNodeBuilders.script(),
-    key: 'b-consumer',
+    id: 'b-consumer',
     requirementKey: 'consumer',
-    script: { key: 'consumer', revision: 0 },
+    script: { id: 'script:consumer', version: 1 },
     input: { value: selector },
     inputSchema: stringField(),
   } satisfies SourceNode;
@@ -82,7 +82,7 @@ const routeSource = (
 const reverseOrderedDominanceSource = (): PipelineSourcePackage => {
   const producer = {
     ...sourceNodeBuilders.script(),
-    key: 'n0',
+    id: 'n0',
     outputSchema: stringField(),
     routes: { succeeded: 'n1', failed: 'n510', cancelled: 'n511' },
   } satisfies SourceNode;
@@ -91,11 +91,11 @@ const reverseOrderedDominanceSource = (): PipelineSourcePackage => {
     const next = nodeIndex === 508 ? 'n509' : `n${nodeIndex + 1}`;
     return {
       ...sourceNodeBuilders.script(next),
-      key: `n${nodeIndex}`,
+      id: `n${nodeIndex}`,
       requirementKey: 'consumer',
-      script: { key: 'consumer-script', revision: 0 },
+      script: { id: 'script:consumer-script', version: 1 },
       input: {
-        value: { kind: 'nodeOutput' as const, node: producer.key, pointer: '/value' as const },
+        value: { kind: 'nodeOutput' as const, node: producer.id, pointer: '/value' as const },
       },
       inputSchema: stringField(),
     } satisfies SourceNode;
@@ -104,7 +104,7 @@ const reverseOrderedDominanceSource = (): PipelineSourcePackage => {
     [producer, ...consumers, endNode('n509'), endNode('n510'), endNode('n511')].reverse(),
   );
   return {
-    ...sourceWithNodes(nodes, producer.key),
+    ...sourceWithNodes(nodes, producer.id),
     maximumTotalActivities: consumers.length + 1,
   };
 };
@@ -130,30 +130,30 @@ describe('compiler selector scopes and route dominance', () => {
   it('handles a status-dominated diamond and rejects a producer bypass', () => {
     const producer = {
       ...sourceNodeBuilders.script(),
-      key: 'producer',
+      id: 'producer',
       outputSchema: stringField(),
       routes: { succeeded: 'split', failed: 'failed', cancelled: 'cancelled' },
     } satisfies SourceNode;
     const consumer = {
       ...sourceNodeBuilders.script(),
-      key: 'consumer',
+      id: 'consumer',
       requirementKey: 'consumer',
-      script: { key: 'consumer', revision: 0 },
+      script: { id: 'script:consumer', version: 1 },
       input: {
-        value: { kind: 'nodeOutput' as const, node: producer.key, pointer: '/value' as const },
+        value: { kind: 'nodeOutput' as const, node: producer.id, pointer: '/value' as const },
       },
       inputSchema: stringField(),
     } satisfies SourceNode;
     const split = {
       ...sourceNodeBuilders.choice('left'),
-      key: 'split',
+      id: 'split',
       otherwise: 'right',
     } satisfies SourceNode;
     const diamond = sourceWithNodes([
       producer,
       split,
-      { ...sourceNodeBuilders.wait('consumer'), key: 'left' },
-      { ...sourceNodeBuilders.wait('consumer'), key: 'right' },
+      { ...sourceNodeBuilders.wait('consumer'), id: 'left' },
+      { ...sourceNodeBuilders.wait('consumer'), id: 'right' },
       consumer,
       endNode(),
       endNode('failed'),
@@ -164,17 +164,17 @@ describe('compiler selector scopes and route dominance', () => {
 
     const bypass = sourceWithNodes(
       [
-        { ...split, cases: [{ ...split.cases[0], target: producer.key }], otherwise: consumer.key },
+        { ...split, cases: [{ ...split.cases[0], target: producer.id }], otherwise: consumer.id },
         {
           ...producer,
-          routes: { succeeded: consumer.key, failed: 'failed', cancelled: 'cancelled' },
+          routes: { succeeded: consumer.id, failed: 'failed', cancelled: 'cancelled' },
         },
         consumer,
         endNode(),
         endNode('failed'),
         endNode('cancelled'),
       ],
-      split.key,
+      split.id,
     );
     expect(diagnosticCodes(bypass)).toContain('DATA_DOMINANCE');
   });

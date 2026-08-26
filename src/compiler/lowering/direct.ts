@@ -7,15 +7,14 @@ import type {
   ProgramHumanGateNode,
   ProgramWaitNode,
 } from '../../program/index.js';
-import type {
-  AgentSourceNode,
-  CallSourceNode,
-  ChoiceSourceNode,
-  EffectSourceNode,
-  EndSourceNode,
-  HumanGateSourceNode,
-  ScriptSourceNode,
-  WaitSourceNode,
+import {
+  type AgentSourceNode,
+  type CallSourceNode,
+  type ChoiceSourceNode,
+  type EndSourceNode,
+  type HumanGateSourceNode,
+  type ScriptSourceNode,
+  type WaitSourceNode,
 } from '../../source/index.js';
 import type { LoweredNodeFragment, LoweringContext, RequirementUse } from './contracts.js';
 import { createLoweredIdentity } from './identity.js';
@@ -25,7 +24,6 @@ import { lowerMapping, lowerSelector } from './selectors.js';
 
 type DirectNode =
   | ScriptSourceNode
-  | EffectSourceNode
   | ChoiceSourceNode
   | CallSourceNode
   | WaitSourceNode
@@ -57,10 +55,10 @@ export const lowerSingleAgent = (
   if (strategy?.kind !== 'single') {
     throw new TypeError('Expected a validated single strategy.');
   }
-  const materializationPath = `/slots/${selected.slotIndex}/selection/participant` as JsonPointer;
+  const materializationPath = `/${selected.slot.sourceNodeId}/participant` as JsonPointer;
   const identity = createLoweredIdentity(path, 'agentSingleActivity', 0, materializationPath);
   const requirement = Object.freeze({
-    kind: 'agent',
+    kind: 'agent' as const,
     key: selected.slot.selection.participant.bindingKey,
     bindingKey: selected.slot.selection.participant.bindingKey,
     inputSchema: node.inputSchema,
@@ -82,27 +80,18 @@ export const lowerSingleAgent = (
 };
 
 const lowerActivity = (
-  node: ScriptSourceNode | EffectSourceNode,
+  node: ScriptSourceNode,
   path: JsonPointer,
   targetIds: ReadonlyMap<string, `sha256:${string}`>,
 ): LoweredNodeFragment => {
   const identity = createLoweredIdentity(path, 'direct', 0, null);
-  const requirement =
-    node.kind === 'script'
-      ? Object.freeze({
-          kind: 'script' as const,
-          key: node.requirementKey,
-          script: node.script,
-          inputSchema: node.inputSchema,
-          outputSchema: node.outputSchema,
-        })
-      : Object.freeze({
-          kind: 'effect' as const,
-          key: node.requirementKey,
-          effectKey: node.effectKey,
-          inputSchema: node.inputSchema,
-          outputSchema: node.outputSchema,
-        });
+  const requirement = Object.freeze({
+    kind: 'script' as const,
+    key: node.requirementKey,
+    script: node.script,
+    inputSchema: node.inputSchema,
+    outputSchema: node.outputSchema,
+  });
   const activity: ProgramActivityNode = Object.freeze({
     kind: 'activity',
     id: identity.id,
@@ -164,7 +153,6 @@ const lowerDirectNode = (
 ): LoweredNodeFragment['nodes'][number] => {
   switch (node.kind) {
     case 'script':
-    case 'effect':
       throw new TypeError('Activities are lowered with their requirements.');
     case 'choice':
       return lowerChoice(node, id, targetIds);
@@ -184,6 +172,14 @@ const lowerDirectNode = (
         subject: node.subject,
         answers: node.answers,
         authorizationRequirements: node.authorizationRequirements,
+        payloadSchema: node.payloadSchema,
+        deadline:
+          node.deadline === null
+            ? null
+            : Object.freeze({
+                afterMs: node.deadline.afterMs,
+                target: targetId(node.deadline.target, targetIds),
+              }),
         routes: Object.freeze({
           answers: nonEmpty(
             node.routes.answers.map(({ answer, target }) =>
@@ -191,8 +187,6 @@ const lowerDirectNode = (
             ),
             'Expected validated human-gate answers.',
           ),
-          conflict: targetId(node.routes.conflict, targetIds),
-          deadline: targetId(node.routes.deadline, targetIds),
           cancelled: targetId(node.routes.cancelled, targetIds),
         }),
       }) satisfies ProgramHumanGateNode;
@@ -212,7 +206,7 @@ export const lowerDirect = (
   path: JsonPointer,
   targetIds: ReadonlyMap<string, `sha256:${string}`>,
 ): LoweredNodeFragment => {
-  if (node.kind === 'script' || node.kind === 'effect') {
+  if (node.kind === 'script') {
     return lowerActivity(node, path, targetIds);
   }
   const identity = createLoweredIdentity(path, 'direct', 0, null);

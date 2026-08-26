@@ -55,8 +55,8 @@ const consensusVector = (materialized: boolean): readonly string[] =>
       ({ programNodeId, loweringRole, ordinal, participantIndex }) => {
         const materializationPath = materialized
           ? participantIndex === null
-            ? '/slots/0/selection'
-            : `/slots/0/selection/participants/${participantIndex}`
+            ? '/activity'
+            : `/activity/participants/${participantIndex}`
           : '-';
         return `${programNodeId}|${loweringRole}|${ordinal}|/modules/0/region/nodes/0|${materializationPath}`;
       },
@@ -97,21 +97,11 @@ const targetEntryCases = [
     'agentSingleActivity',
     'sha256:f7a49fc034aec8a4727c5cfa366f1e96ac679a20095d8369ae2b17df64e1c26e',
     '/modules/0/region/nodes/0',
-    '/slots/0/selection/participant',
+    '/activity/participant',
   ],
   [
     'script',
     () => sourceForNode(sourceNodeBuilders.script()),
-    undefined,
-    'activity',
-    'direct',
-    directId,
-    '/modules/0/region/nodes/0',
-    null,
-  ],
-  [
-    'effect',
-    () => sourceForNode(sourceNodeBuilders.effect()),
     undefined,
     'activity',
     'direct',
@@ -236,6 +226,7 @@ describe('compiler lowering digest and full-ID vectors', () => {
       expect(entry).toMatchObject({ kind: programKind, id: programNodeId });
       expect(provenance).toEqual({
         programNodeId,
+        sourceNodeId: 'activity',
         sourcePath,
         materializationPath,
         loweringRole,
@@ -247,11 +238,11 @@ describe('compiler lowering digest and full-ID vectors', () => {
   it('pins slot-single IDs, roles, source/materialization paths, and digest', () => {
     const source = sourceForNode(sourceNodeBuilders.agent());
     expect(vector(source, materializationFor(source, singleSelection()))).toEqual({
-      programDigest: 'sha256:d2ab0ca09e8ca4c00ffdaacfbe45727059d5c9bf742c7c85044a36c46c1fea56',
+      programDigest: 'sha256:b4bdf983b8a1920afe6357ecbf85545ebcc7842e5b8a8258ef05c04573cc8428',
       provenance: [
         root,
         done,
-        'sha256:f7a49fc034aec8a4727c5cfa366f1e96ac679a20095d8369ae2b17df64e1c26e|agentSingleActivity|0|/modules/0/region/nodes/0|/slots/0/selection/participant',
+        'sha256:f7a49fc034aec8a4727c5cfa366f1e96ac679a20095d8369ae2b17df64e1c26e|agentSingleActivity|0|/modules/0/region/nodes/0|/activity/participant',
       ].toSorted(),
     });
   });
@@ -259,7 +250,7 @@ describe('compiler lowering digest and full-ID vectors', () => {
   it('pins generic-parallel IDs, roles, paths, and digest', () => {
     const source = sourceForNode(sourceNodeBuilders.parallel());
     expect(vector(source)).toEqual({
-      programDigest: 'sha256:dbe9d5a99d6da18e5b64b5c8d1f8fe6f12b5deca3b0f2d1c3513453517990b41',
+      programDigest: 'sha256:b55e169ea78a6c1a25d049706425d0b2dbd156dbd2e329308733446683132395',
       provenance: [
         'sha256:0850c1cd1ae717ed79e795935ed929b426fbae40e5a81b64604b7d0a92467761|direct|0|/modules/0/region/nodes/0|-',
         'sha256:43645f9a39aea76a64e91625511bbd204ad13b6d3c8aac3c3b996c13f96ee0e7|direct|0|/modules/0/region/nodes/0/branches/0/region/nodes/0|-',
@@ -275,7 +266,7 @@ describe('compiler lowering digest and full-ID vectors', () => {
 
   it('pins explicit-consensus IDs, roles, ordinals, paths, and digest', () => {
     expect(vector(sourceForNode(sourceNodeBuilders.consensus()))).toEqual({
-      programDigest: 'sha256:e2baf8b5fb0970c4d196465929f9c82096b38f9168e5ce026302d2c46872d03c',
+      programDigest: 'sha256:b752d0596dea5c9305c8986145fe184a7c9cebf38cf313ad08788047099a15fd',
       provenance: consensusVector(false),
     });
   });
@@ -283,7 +274,7 @@ describe('compiler lowering digest and full-ID vectors', () => {
   it('pins slot-consensus IDs, roles, ordinals, paths, and digest', () => {
     const source = sourceForNode(consensusAgentNode());
     expect(vector(source, materializationFor(source, consensusSelection()))).toEqual({
-      programDigest: 'sha256:06b3b0edad0438a3952a8972ea8adc78adc8eaf9b4f8ad81209fc9b477bf62aa',
+      programDigest: 'sha256:bbf7a4365ccb397120912829401c59df4237f843460ee72f4454468877edc4fe',
       provenance: consensusVector(true),
     });
   });

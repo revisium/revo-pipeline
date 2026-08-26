@@ -57,13 +57,13 @@ describe('closed compiler result contract', () => {
     const conflict = sourceWithNodes([
       {
         ...sourceNodeBuilders.script(),
-        key: 'first',
+        id: 'first',
         routes: { succeeded: 'second', failed: 'done', cancelled: 'done' },
       },
       {
         ...sourceNodeBuilders.script(),
-        key: 'second',
-        script: { key: 'different', revision: 0 },
+        id: 'second',
+        script: { id: 'script:different', version: 1 },
       },
       endNode(),
     ]);

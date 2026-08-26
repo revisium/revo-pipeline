@@ -16,10 +16,9 @@ own persistence, attempts, leases, clocks, DBOS workflows, retries, binding reso
 authorization, subscriptions, or host-runtime, Prisma, DBOS,
 queues, NestJS, GraphQL, MCP, CLI, or provider SDK dependencies.
 
-The only consumer entrypoints are `@revisium/revo-pipeline`,
-`@revisium/revo-pipeline/kernel`, and the ADR 0013
-`@revisium/revo-pipeline/execution-plan` bridge, with the exact manifests in Pipeline
-Conformance v1. Do not add other deep exports, wildcard barrels, default or CommonJS
+The only consumer entrypoints are `@revisium/revo-pipeline` and
+`@revisium/revo-pipeline/kernel`, with the exact manifests in Pipeline Conformance v1.
+Do not add other deep exports, wildcard barrels, default or CommonJS
 exports, adapters, deprecated aliases, dual readers, hidden interpreters, or runtime
 node-kind plugins.
 

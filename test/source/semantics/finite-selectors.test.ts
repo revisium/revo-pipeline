@@ -21,7 +21,7 @@ const finiteNodeChoice = (
   values: readonly [JsonScalar, ...JsonScalar[]],
 ): SourceNode => ({
   kind: 'choice',
-  key: 'choose',
+  id: 'choose',
   selector: { kind: 'nodeOutput', node, pointer },
   cases: [{ key: 'covered', when: { kind: 'oneOf', values }, target: 'done' }],
   otherwise: null,
@@ -33,7 +33,7 @@ const diagnostics = (result: PipelineSourceValidationResult) =>
 const sourceWithInput = (
   inputSchema: ValueSchema,
   nodes: readonly [SourceNode, ...SourceNode[]],
-  entry = nodes[0].key,
+  entry = nodes[0].id,
 ): PipelineSourcePackage => {
   const source = sourceWithNodes(nodes, entry);
   const module = source.modules[0];
@@ -63,7 +63,7 @@ describe('finite structured selector schemas', () => {
       const example = sourceNodeBuilders.parallel();
       const parallel: SourceNode = {
         ...example,
-        key: 'parallel',
+        id: 'parallel',
         routes: {
           completed: 'choose',
           impossible: 'choose',
@@ -96,7 +96,7 @@ describe('finite structured selector schemas', () => {
       const example = sourceNodeBuilders.consensus();
       const consensus: SourceNode = {
         ...example,
-        key: 'consensus',
+        id: 'consensus',
         routes: {
           approved: 'choose',
           rejected: 'choose',
@@ -130,24 +130,22 @@ describe('finite structured selector schemas', () => {
     const [answerRoute] = gateExample.routes.answers;
     const gate: SourceNode = {
       ...gateExample,
-      key: 'gate',
+      id: 'gate',
       routes: {
         answers: [{ ...answerRoute, target: 'choose' }],
-        conflict: 'choose',
-        deadline: 'choose',
         cancelled: 'choose',
       },
     };
     const gateResult = validatePipelineSource(
       sourceWithNodes(
-        [gate, finiteNodeChoice('gate', '/kind', ['answer', 'conflict', 'deadline']), endNode()],
+        [gate, finiteNodeChoice('gate', '/kind', ['answer', 'deadline']), endNode()],
         'gate',
       ),
     );
 
     const map: SourceNode = {
       ...mapNodeExample,
-      key: 'map',
+      id: 'map',
       items: { kind: 'literal', value: [false, 'x'] },
       routes: { completed: 'choose', failed: 'choose', cancelled: 'choose' },
     };
@@ -162,7 +160,7 @@ describe('finite structured selector schemas', () => {
       ),
     );
 
-    expect(gateResult.ok).toBe(true);
+    expect(gateResult.ok).toBe(false);
     expect(mapResult.ok).toBe(true);
   });
 
@@ -177,12 +175,12 @@ describe('finite structured selector schemas', () => {
         nodes: [
           {
             kind: 'choice',
-            key: 'choose',
+            id: 'choose',
             selector: { kind: 'repeat', value: 'iteration', pointer: '' },
-            cases: [{ key: 'zero', when: { kind: 'equals', value: 0 }, target: 'done' }],
+            cases: [{ key: 'zero', when: { kind: 'equals', value: 0 }, target: 'body-done' }],
             otherwise: null,
           },
-          endNode('done', 'value'),
+          endNode('body-done', 'value'),
         ],
       },
     });
@@ -191,7 +189,7 @@ describe('finite structured selector schemas', () => {
     expect(diagnostics(validatePipelineSource(sourceForNode(repeatWithMaximum(2))))).toContainEqual(
       {
         code: 'DATA_SCHEMA_INCOMPATIBLE',
-        path: '/modules/0/region/nodes/0/body/nodes/0/otherwise',
+        path: '/modules/0/region/nodes/0/body/nodes/1/otherwise',
       },
     );
   });
@@ -207,12 +205,12 @@ describe('finite structured selector schemas', () => {
         nodes: [
           {
             kind: 'choice',
-            key: 'choose',
+            id: 'choose',
             selector: { kind: 'map', value: 'item', pointer: '' },
-            cases: [{ key: 'covered', when: { kind: 'oneOf', values }, target: 'done' }],
+            cases: [{ key: 'covered', when: { kind: 'oneOf', values }, target: 'body-done' }],
             otherwise: null,
           },
-          endNode('done', 'completed'),
+          endNode('body-done', 'completed'),
         ],
       },
     });
@@ -222,7 +220,7 @@ describe('finite structured selector schemas', () => {
       diagnostics(validatePipelineSource(sourceForNode(mapWithCases([false, true])))),
     ).toContainEqual({
       code: 'DATA_SCHEMA_INCOMPATIBLE',
-      path: '/modules/0/region/nodes/0/body/nodes/0/otherwise',
+      path: '/modules/0/region/nodes/0/body/nodes/1/otherwise',
     });
   });
 
@@ -248,18 +246,18 @@ describe('finite structured selector schemas', () => {
         nodes: [
           {
             kind: 'choice',
-            key: 'choose',
+            id: 'choose',
             selector: { kind: 'map', value: 'item', pointer: '' },
             cases: [
               {
                 key: 'covered',
                 when: { kind: 'oneOf', values: [false, true, 'x'] },
-                target: 'done',
+                target: 'body-done',
               },
             ],
             otherwise: null,
           },
-          endNode('done', 'completed'),
+          endNode('body-done', 'completed'),
         ],
       },
     };
@@ -280,12 +278,12 @@ describe('finite structured selector schemas', () => {
         nodes: [
           {
             kind: 'choice',
-            key: 'choose',
+            id: 'choose',
             selector: { kind: 'map', value: 'item', pointer: '' },
-            cases: [{ key: 'null', when: { kind: 'equals', value: null }, target: 'done' }],
+            cases: [{ key: 'null', when: { kind: 'equals', value: null }, target: 'body-done' }],
             otherwise: null,
           },
-          endNode('done', 'completed'),
+          endNode('body-done', 'completed'),
         ],
       },
     };
@@ -359,7 +357,7 @@ describe('finite structured selector schemas', () => {
   it('reports a known producer without a successful output as DATA_SCOPE', () => {
     const choice: SourceNode = {
       kind: 'choice',
-      key: 'choose',
+      id: 'choose',
       selector: { kind: 'nodeOutput', node: 'done', pointer: '' },
       cases: [{ key: 'null', when: { kind: 'equals', value: null }, target: 'done' }],
       otherwise: null,

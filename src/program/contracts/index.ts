@@ -40,12 +40,10 @@ export {
 } from './provenance.js';
 export {
   AgentProgramRequirementSchema,
-  EffectProgramRequirementSchema,
   ProgramRequirementSchema,
   ProgramRequirementsSchema,
   ScriptProgramRequirementSchema,
   type AgentProgramRequirement,
-  type EffectProgramRequirement,
   type ProgramRequirement,
   type ProgramRequirements,
   type ScriptProgramRequirement,

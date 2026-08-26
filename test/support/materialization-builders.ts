@@ -1,8 +1,8 @@
 import { expect } from 'vitest';
 
 import {
-  type ProfileMaterialization,
-  validateProfileMaterialization,
+  type PipelineSelections,
+  validatePipelineSelections,
 } from '../../src/materialization/index.js';
 import { validatePipelineSource } from '../../src/source/index.js';
 import { agentSource } from './source-builders.js';
@@ -16,25 +16,12 @@ export const validatedSource = (source = agentSource()) => {
   return result.value;
 };
 
-export const singleMaterialization = (
-  sourceDigest: `sha256:${string}`,
-): ProfileMaterialization => ({
-  schemaVersion: 'pipeline-materialization/v1',
-  sourceDigest,
-  slots: [
-    {
-      sourcePath: '/modules/0/region/nodes/0',
-      slotKey: 'review',
-      selection: {
-        strategy: 'single',
-        participant: { key: 'p1', bindingKey: 'b1' },
-      },
-    },
-  ],
+export const singleMaterialization = (_sourceDigest: `sha256:${string}`): PipelineSelections => ({
+  a: { strategy: 'single', participant: { key: 'p1', bindingKey: 'b1' } },
 });
 
 export const expectValidMaterialization = (input: unknown, source = validatedSource()) => {
-  const result = validateProfileMaterialization(source, input);
+  const result = validatePipelineSelections(source, input);
   expect(result.ok).toBe(true);
   if (!result.ok) {
     throw new Error(`Expected valid materialization: ${JSON.stringify(result.diagnostics)}`);
@@ -43,7 +30,7 @@ export const expectValidMaterialization = (input: unknown, source = validatedSou
 };
 
 export const materializationDiagnostics = (input: unknown, source = validatedSource()) => {
-  const result = validateProfileMaterialization(source, input);
+  const result = validatePipelineSelections(source, input);
   expect(result.ok).toBe(false);
   if (result.ok) {
     throw new Error('Expected materialization diagnostics.');

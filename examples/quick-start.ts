@@ -2,11 +2,9 @@
 
 import {
   compilePipeline,
-  computeMaterializationDigest,
   computeProgramDigest,
   computeSourceDigest,
   definePipelineSource,
-  defineProfileMaterialization,
 } from '@revisium/revo-pipeline';
 import {
   advancePipeline,
@@ -21,6 +19,13 @@ const emptyObject = {
   additionalProperties: false,
 } as const;
 
+const agentInput = {
+  type: 'object',
+  properties: { prompt: { type: 'string' } },
+  required: ['prompt'],
+  additionalProperties: false,
+} as const;
+
 const source = definePipelineSource({
   schemaVersion: 'pipeline-source/v1',
   key: 'quick-start',
@@ -29,40 +34,39 @@ const source = definePipelineSource({
   modules: [
     {
       key: 'main',
-      inputSchema: emptyObject,
+      inputSchema: agentInput,
       outputSchema: emptyObject,
       region: {
         key: 'root',
-        inputSchema: emptyObject,
+        inputSchema: agentInput,
         entry: 'first',
         outputSchema: emptyObject,
         exits: [{ outcome: 'ok', outputSchema: emptyObject }],
         nodes: [
           {
             kind: 'agent',
-            key: 'first',
-            slotKey: 'review',
+            id: 'first',
             strategies: [
               {
                 kind: 'single',
                 routes: { succeeded: 'second', failed: 'terminal', cancelled: 'terminal' },
               },
             ],
-            input: {},
-            inputSchema: emptyObject,
+            input: { prompt: { kind: 'scopeInput', pointer: '/prompt' } },
+            inputSchema: agentInput,
             outputSchema: emptyObject,
           },
           {
             kind: 'script',
-            key: 'second',
+            id: 'second',
             requirementKey: 'quick-start-script',
-            script: { key: 'quick-start-script', revision: 0 },
+            script: { id: 'script:quick-start-script', version: 1 },
             input: {},
             inputSchema: emptyObject,
             outputSchema: emptyObject,
             routes: { succeeded: 'terminal', failed: 'terminal', cancelled: 'terminal' },
           },
-          { kind: 'end', key: 'terminal', outcome: 'ok', output: {} },
+          { kind: 'end', id: 'terminal', outcome: 'ok', output: {} },
         ],
       },
     },
@@ -70,22 +74,12 @@ const source = definePipelineSource({
 });
 
 const sourceDigest = computeSourceDigest(source);
-const materialization = defineProfileMaterialization({
-  schemaVersion: 'pipeline-materialization/v1',
-  sourceDigest,
-  slots: [
-    {
-      sourcePath: '/modules/0/region/nodes/0',
-      slotKey: 'review',
-      selection: {
-        strategy: 'single',
-        participant: { key: 'reviewer', bindingKey: 'reviewer-binding' },
-      },
-    },
-  ],
+const compiled = compilePipeline(source, {
+  first: {
+    strategy: 'single',
+    participant: { key: 'reviewer', bindingKey: 'reviewer-binding' },
+  },
 });
-const materializationDigest = computeMaterializationDigest(materialization);
-const compiled = compilePipeline(source, materialization);
 if (!compiled.ok) {
   throw new Error(`Quick-start compilation failed: ${JSON.stringify(compiled.diagnostics)}`);
 }
@@ -100,7 +94,7 @@ if (programDigest !== compiled.programDigest) {
 }
 
 const bundle = { program: compiled.program, programDigest };
-const initial = createInitialPipelineState(bundle, {});
+const initial = createInitialPipelineState(bundle, { prompt: 'Review the quick-start pipeline.' });
 const firstCommand = initial.commands.find(
   (command): command is Extract<PipelineCommand, { readonly kind: 'dispatchActivity' }> =>
     command.kind === 'dispatchActivity',
@@ -142,5 +136,9 @@ if (completed.kind !== 'advanced' || completed.state.status !== 'succeeded') {
 }
 
 console.log(
-  `REVO_PIPELINE_DIGEST_VECTORS=${JSON.stringify({ sourceDigest, materializationDigest, programDigest })}`,
+  `REVO_PIPELINE_DIGEST_VECTORS=${JSON.stringify({
+    sourceDigest,
+    materializationDigest: compiled.materializationDigest,
+    programDigest,
+  })}`,
 );

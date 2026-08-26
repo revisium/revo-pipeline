@@ -5,17 +5,18 @@
 - Baseline set: `rr-001` through `rr-103`
 
 This matrix preserves the semantic intent of the current host-runtime acceptance registry;
-it does not preserve its recursive node shapes, compiler template, or `ExecutionPlan`
+it does not preserve its recursive node shapes, compiler template, or prior bridge
 schema. “Compiler” includes source, materialization, linker, IR, and static validation.
-“Core” includes exact binding resolution and plan construction. “Run” includes the DBOS
-host, effects, attempts, durability, projections, and API transport.
+“Core” stores and version-selects raw source, profiles, and agent definitions, then starts
+a run. “Run” includes exact binding resolution, the DBOS host, action attempts,
+durability, projections, and API transport.
 
 The acceptance suite MUST mechanically import the upstream intent registry and prove
 that this table contains the same IDs with no gaps or extras. A row marked “host-only”
 requires no new pipeline behavior, but still requires a consumer boundary fixture when
 it depends on a program requirement, structural reference, or kernel event/command.
 
-The 103 unique rows have primary-owner counts compiler 22, kernel 32, core 7, and run 42. The evidence counts are pipeline evidence 54 and host evidence 49; host evidence
+The 103 unique rows have primary-owner counts compiler 22, kernel 32, core 0, and run 49. The evidence counts are pipeline evidence 54 and host evidence 49; host evidence
 includes core/run cross-package fixtures. This matrix is ownership traceability, not a
 request for 103 separate pipeline implementations.
 
@@ -24,19 +25,19 @@ request for 103 separate pipeline implementations.
 | rr-001 | Execute an agent and pass its output to a script                       | run           | Compiler activity/dataflow trace; kernel output-to-input routing                                  |
 | rr-002 | Route permanent agent failure explicitly                               | kernel        | Activity-failed event selects declared route                                                      |
 | rr-003 | Bound agent execution by timeout and route it                          | run           | Final failed event crosses kernel boundary; timer is host-only                                    |
-| rr-004 | Execute an immutable versioned script binding                          | core          | Versioned script requirement survives compile and exact resolution                                |
+| rr-004 | Execute an immutable versioned script binding                          | run           | Versioned script requirement survives compile and run-composition resolution                      |
 | rr-005 | Route permanent script failure without retry                           | kernel        | Activity-failed event selects declared route; retry is host-only                                  |
 | rr-006 | Bound script execution by timeout                                      | run           | Host-only timer/attempt policy plus final semantic event                                          |
 | rr-007 | Retry transient agent failure with durable backoff                     | run           | Host-only; kernel sees one logical activity completion                                            |
 | rr-008 | Stop script retry at the configured attempt limit                      | run           | Host-only attempt policy plus final failed event                                                  |
 | rr-009 | Retry only allowlisted error codes                                     | run           | Host-only error classification                                                                    |
 | rr-010 | Resume durable retry backoff after restart                             | run           | Host-only DBOS timer recovery                                                                     |
-| rr-011 | Reconcile an external effect after pre-checkpoint crash                | run           | Effect requirement/structural ref fixture; reconciliation is host-only                            |
-| rr-012 | Require attributed human resolution for unknown effect outcome         | run           | Host-only reconciliation command/audit                                                            |
-| rr-013 | Deterministically fail an effect configured to fail on unknown outcome | run           | Host-only reconciliation policy plus final failed event                                           |
-| rr-014 | Execute an effect once after restart before effect start               | run           | Host-only durable dispatch/deduplication                                                          |
+| rr-011 | Reconcile an external action after pre-checkpoint crash                | run           | Script requirement/structural ref fixture; reconciliation is host-only                            |
+| rr-012 | Require attributed human resolution for unknown action outcome         | run           | Host-only reconciliation command/audit                                                            |
+| rr-013 | Deterministically fail an action configured to fail on unknown outcome | run           | Host-only reconciliation policy plus final failed event                                           |
+| rr-014 | Execute an action once after restart before action start               | run           | Host-only durable dispatch/deduplication                                                          |
 | rr-015 | Bound reconciliation attempts                                          | run           | Host-only attempt policy                                                                          |
-| rr-016 | Retry safely only after reconciliation proves effect absence           | run           | Host-only effect reconciliation                                                                   |
+| rr-016 | Retry safely only after reconciliation proves action absence           | run           | Host-only action reconciliation                                                                   |
 | rr-017 | Cooperatively cancel an active agent execution                         | run           | Kernel emits `cancelPending`; host performs cooperative cancellation                              |
 | rr-018 | Cancel while waiting for retry backoff                                 | run           | Host-only timer cancellation; kernel terminal cancellation is idempotent                          |
 | rr-019 | Treat repeated run cancellation as idempotent                          | kernel        | Repeated `cancelRequested` leaves terminal state unchanged                                        |
@@ -67,7 +68,7 @@ request for 103 separate pipeline implementations.
 | rr-044 | Accept idempotent gate command and reject conflicts                    | run           | Host-only command ID and durable conflict policy                                                  |
 | rr-045 | Require distinct authorized approvers                                  | run           | Host-only identity, authorization, and separation-of-duties policy                                |
 | rr-046 | Reject an ineligible gate actor                                        | run           | Host-only authorization                                                                           |
-| rr-047 | Route conflicting multi-approver answers explicitly                    | run           | Gate resolution event uses compiled conflict route; arbitration is host-owned                     |
+| rr-047 | Arbitrate conflicting multi-approver answers                           | run           | Arbitration is host-owned; the kernel accepts one declared terminal gate resolution               |
 | rr-048 | Reject answer outside gate vocabulary                                  | kernel        | Closed answer validation fixture                                                                  |
 | rr-049 | Route an unanswered gate after deadline                                | run           | Host-owned timer delivers declared deadline resolution                                            |
 | rr-050 | Cancel while waiting at a human gate                                   | run           | Kernel `cancelPending`/`cancel`; host closes gate                                                 |
@@ -78,12 +79,12 @@ request for 103 separate pipeline implementations.
 | rr-055 | Support bounded repeat nested in repeat                                | compiler      | Composed bound plus nested frame fixture                                                          |
 | rr-056 | Route repeat exhaustion at iteration limit                             | kernel        | Exact-bound exhaustion fixture                                                                    |
 | rr-057 | Reject unbounded repeat                                                | compiler      | Required positive `maximumIterations` validation                                                  |
-| rr-058 | Pass a pinned entity reference without embedding entity data           | core          | Portable opaque reference schema; resolution outside pipeline                                     |
+| rr-058 | Pass a pinned entity reference without embedding entity data           | run           | Portable opaque reference schema; resolution through a run-composition port                       |
 | rr-059 | Pass a durable artifact reference between activities                   | run           | Opaque output/input mapping; artifact store is host-only                                          |
 | rr-060 | Resolve a secret only at executor boundary and never persist it        | run           | Requirement contains no secret value; resolution is host-only                                     |
 | rr-061 | Keep reference-shaped executor JSON inert                              | compiler      | Data mappings interpret only schema-declared references                                           |
 | rr-062 | Fail safely when a secret cannot be resolved                           | run           | Host-only resolution plus final failed event                                                      |
-| rr-063 | Fail deterministically when a pinned entity version is unavailable     | core          | Core resolution error crosses plan/run boundary                                                   |
+| rr-063 | Fail deterministically when a pinned entity version is unavailable     | run           | Run-composition resolution fails before executor dispatch                                         |
 | rr-064 | Store a large result as artifact reference                             | run           | Host-only output externalization                                                                  |
 | rr-065 | Use an explicitly pinned artifact as input                             | run           | Opaque input fixture; retrieval is host-only                                                      |
 | rr-066 | Fail when a referenced output key is missing                           | kernel        | Runtime own-property read emits `DATA_POINTER_MISSING`; static absence is a compiler error        |
@@ -98,24 +99,24 @@ request for 103 separate pipeline implementations.
 | rr-075 | Survive restart during durable delay                                   | run           | Serialized wait state; DBOS timer is host-only                                                    |
 | rr-076 | Cancel durable delay without waiting for deadline                      | run           | Kernel cancellation plus host timer cancellation                                                  |
 | rr-077 | Cancel active parallel children without detached work                  | run           | Kernel emits complete `cancelPending` reference set; host joins cancellation                      |
-| rr-078 | Recover parallel execution without duplicate effects                   | run           | Stable structural refs; DBOS deduplication is host-only                                           |
-| rr-079 | Enforce plan-wide active execution limit                               | run           | Host-only scheduler over kernel command frontier                                                  |
+| rr-078 | Recover parallel execution without duplicate actions                   | run           | Stable structural refs; DBOS deduplication is host-only                                           |
+| rr-079 | Enforce run-wide active execution limit                                | run           | Host-only scheduler over kernel command frontier                                                  |
 | rr-080 | Resume run subscription from durable cursor                            | run           | Host-only event log and cursor                                                                    |
 | rr-081 | Publish durable terminal failure event                                 | run           | Kernel `fail` causation; durable publication is host-only                                         |
 | rr-082 | Reject a cursor belonging to another run                               | run           | Host-only subscription validation                                                                 |
 | rr-083 | Expose every nested execution through run details                      | run           | Structural refs map to run projections                                                            |
 | rr-084 | Resume subscription cursor after manager restart                       | run           | Host-only durable event log                                                                       |
-| rr-085 | Reject unsupported execution-plan schema version                       | run           | Run-owned plan schema/admission gate; no pipeline API obligation                                  |
-| rr-086 | Reject plan missing its root program                                   | run           | Run-owned admission/root-program validation plus `programDigest` fixture                          |
-| rr-087 | Require exactly one executor binding per activity requirement          | core          | Requirement-to-binding totality fixture                                                           |
-| rr-088 | Reject duplicate executor bindings                                     | core          | Binding-key uniqueness fixture                                                                    |
+| rr-085 | Reject unsupported persisted-run schema version                        | run           | Run-owned admitted-record schema gate; no pipeline API obligation                                 |
+| rr-086 | Reject an admitted run missing its compiler program                    | run           | Run-owned compiler-bundle admission plus `programDigest` fixture                                  |
+| rr-087 | Require exactly one executor binding per activity requirement          | run           | Run-composition requirement-to-binding totality fixture                                           |
+| rr-088 | Reject duplicate executor bindings                                     | run           | Run-composition binding-key uniqueness fixture                                                    |
 | rr-089 | Reject repeat bound above total execution bound                        | compiler      | Overflow-safe composed activity-bound proof                                                       |
 | rr-090 | Reject a choice needing but missing a default route                    | compiler      | Choice exhaustiveness fixture                                                                     |
-| rr-091 | Reject binding targeting a missing activity requirement                | core          | Requirement-key referential-integrity fixture                                                     |
-| rr-092 | Reject binding targeting a control node                                | core          | Only `ProgramRequirements` are bindable                                                           |
-| rr-093 | Reject duplicate sibling node keys                                     | compiler      | Canonical key uniqueness fixture                                                                  |
+| rr-091 | Reject binding targeting a missing activity requirement                | run           | Run-composition requirement-key referential-integrity fixture                                     |
+| rr-092 | Reject binding targeting a control node                                | run           | Run admits bindings only for `ProgramRequirements`                                                |
+| rr-093 | Reject duplicate sibling node IDs                                      | compiler      | Canonical ID uniqueness fixture                                                                   |
 | rr-094 | Reject duplicate addressable keys across parallel branches             | compiler      | Structural-reference uniqueness fixture                                                           |
-| rr-095 | Reject reserved characters in node key                                 | compiler      | Identifier schema fixture                                                                         |
+| rr-095 | Reject reserved characters in node ID                                  | compiler      | Identifier schema fixture                                                                         |
 | rr-096 | Reject reserved characters in root pipeline/module ID                  | compiler      | Package/module identifier schema fixture                                                          |
 | rr-097 | Reject duplicate runtime map item keys                                 | kernel        | Canonical item-key uniqueness fixture                                                             |
 | rr-098 | Reject unreachable consensus threshold                                 | compiler      | Exact participant-count threshold validation                                                      |

@@ -124,21 +124,21 @@ describe('source region graph', () => {
   it('rejects reachable self-cycles and multi-node SCCs even when each has an exit', () => {
     const selfCycle: SourceNode = {
       kind: 'wait',
-      key: 'a',
+      id: 'a',
       wait: { kind: 'duration', durationMs: 1 },
       routes: { completed: 'a', cancelled: 'done' },
     };
     const left: SourceNode = {
       kind: 'wait',
-      key: 'a',
+      id: 'a',
       wait: { kind: 'duration', durationMs: 1 },
-      routes: { completed: 'b', cancelled: 'done' },
+      routes: { completed: 'b', cancelled: 'nested-done' },
     };
     const right: SourceNode = {
       kind: 'wait',
-      key: 'b',
+      id: 'b',
       wait: { kind: 'duration', durationMs: 1 },
-      routes: { completed: 'a', cancelled: 'done' },
+      routes: { completed: 'a', cancelled: 'nested-done' },
     };
 
     for (const nodes of [
@@ -156,13 +156,13 @@ describe('source region graph', () => {
     const repeat = sourceNodeBuilders.repeat();
     const left: SourceNode = {
       kind: 'wait',
-      key: 'a',
+      id: 'a',
       wait: { kind: 'duration', durationMs: 1 },
       routes: { completed: 'b', cancelled: 'done' },
     };
     const right: SourceNode = {
       kind: 'wait',
-      key: 'b',
+      id: 'b',
       wait: { kind: 'duration', durationMs: 1 },
       routes: { completed: 'a', cancelled: 'done' },
     };
@@ -171,7 +171,7 @@ describe('source region graph', () => {
       body: {
         ...repeat.body,
         entry: 'a',
-        nodes: [left, right, endNode('done', 'value')],
+        nodes: [left, right, endNode('nested-done', 'value')],
       },
     };
 
@@ -192,6 +192,92 @@ describe('source region graph', () => {
     expect(sourceDiagnostics(sourceForNode(invalid))).toContainEqual({
       code: 'CANONICAL_INPUT',
       path: '/modules/0/region/nodes/0/branches/0/region/entry',
+    });
+  });
+
+  it('rejects a globally known nested node as an outer route target', () => {
+    const parallel = sourceNodeBuilders.parallel('done');
+    const nested = {
+      ...parallel,
+      branches: [
+        {
+          ...parallel.branches[0],
+          region: {
+            ...parallel.branches[0].region,
+            entry: 'inner',
+            nodes: [
+              { ...sourceNodeBuilders.wait('left-region-done'), id: 'inner' },
+              endNode('left-region-done'),
+            ],
+          },
+        },
+        parallel.branches[1],
+      ],
+      routes: {
+        completed: 'inner',
+        impossible: 'inner',
+        failed: 'inner',
+        cancelled: 'inner',
+      },
+    };
+
+    const base = sourceWithNodes([parallel, endNode()]);
+    const invalid = {
+      ...base,
+      modules: [
+        {
+          ...base.modules[0],
+          region: { ...base.modules[0].region, nodes: [nested, base.modules[0].region.nodes[1]] },
+        },
+      ],
+    };
+    expect(sourceDiagnostics(invalid)).toContainEqual({
+      code: 'CANONICAL_INPUT',
+      path: '/modules/0/region/nodes/0/routes/cancelled',
+    });
+  });
+
+  it('rejects a globally known nested node as an outer selector reference', () => {
+    const parallel = sourceNodeBuilders.parallel('choice');
+    const nested = {
+      ...parallel,
+      branches: [
+        {
+          ...parallel.branches[0],
+          region: {
+            ...parallel.branches[0].region,
+            entry: 'inner',
+            nodes: [
+              { ...sourceNodeBuilders.wait('left-region-done'), id: 'inner' },
+              endNode('left-region-done'),
+            ],
+          },
+        },
+        parallel.branches[1],
+      ],
+    };
+    const choice = {
+      ...sourceNodeBuilders.choice(),
+      id: 'choice',
+      selector: { kind: 'nodeOutput' as const, node: 'inner', pointer: '' as const },
+    };
+
+    const base = sourceWithNodes([parallel, choice, endNode()]);
+    const invalid = {
+      ...base,
+      modules: [
+        {
+          ...base.modules[0],
+          region: {
+            ...base.modules[0].region,
+            nodes: [nested, choice, base.modules[0].region.nodes[2]],
+          },
+        },
+      ],
+    };
+    expect(sourceDiagnostics(invalid)).toContainEqual({
+      code: 'DATA_SCOPE',
+      path: '/modules/0/region/nodes/1/selector/node',
     });
   });
 

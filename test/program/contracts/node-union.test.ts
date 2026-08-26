@@ -67,7 +67,19 @@ const programNodeShapeVectors = [
     ],
   ],
   ['wait', ['kind', 'id', 'wait', 'routes']],
-  ['humanGate', ['kind', 'id', 'subject', 'answers', 'authorizationRequirements', 'routes']],
+  [
+    'humanGate',
+    [
+      'kind',
+      'id',
+      'subject',
+      'answers',
+      'authorizationRequirements',
+      'payloadSchema',
+      'deadline',
+      'routes',
+    ],
+  ],
   ['end', ['kind', 'id', 'outcome', 'output']],
 ] as const;
 
@@ -91,7 +103,7 @@ describe('closed Program node union', () => {
     },
   );
 
-  it.each(['agent', 'script', 'effect', 'consensus', 'sequence', 'plugin'])(
+  it.each(['agent', 'script', 'consensus', 'sequence', 'plugin'])(
     'rejects forbidden %s nodes',
     (kind) => {
       expect(validate.Check({ kind, id: `sha256:${'1'.repeat(64)}` })).toBe(false);
@@ -99,7 +111,7 @@ describe('closed Program node union', () => {
   );
 
   const unionSiblings = [
-    ...(['agent', 'script', 'effect'] as const).map((activityKind) => ({
+    ...(['agent', 'script'] as const).map((activityKind) => ({
       name: `activity/${activityKind}`,
       value: { ...programNodeExamples()[0], activityKind },
     })),

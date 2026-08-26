@@ -14,6 +14,7 @@ import {
   type ProgramValidationCounters,
   type RuntimeLookupCounters,
 } from '../support/kernel-internal.js';
+import { literalAgentInputSchema } from '../support/program-builders.js';
 import { emptySchema } from '../support/source-builders.js';
 
 const digestFromNumber = (value: number): ProgramNodeId =>
@@ -95,8 +96,8 @@ const depth32Program = () => {
             id: nodeId,
             activityKind: 'agent',
             requirementKey: 'agent',
-            input: {},
-            inputSchema: emptySchema(),
+            input: { prompt: { kind: 'literal', value: 'depth probe' } },
+            inputSchema: literalAgentInputSchema('depth probe'),
             outputSchema: emptySchema(),
             routes: { succeeded: endId, failed: endId, cancelled: endId },
           }
