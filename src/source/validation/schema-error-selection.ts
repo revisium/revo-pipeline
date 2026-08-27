@@ -77,7 +77,7 @@ const rejectedUnionBranches = (
     }
     const marker = `/properties/${field}`;
     const markerIndex = error.schemaPath.lastIndexOf(marker);
-    if (markerIndex >= 0) {
+    if (markerIndex > 1) {
       rejected.add(error.schemaPath.slice(0, markerIndex));
     }
   }
@@ -122,6 +122,7 @@ const chooseSchemaError = (
   );
   return (
     relevant.find((error) => error.keyword === 'const' && discriminatorField(error) !== null) ??
+    relevant.find((error) => error.keyword === 'pattern') ??
     relevant.find(
       (error) => error.keyword === 'required' && error.params.requiredProperties.includes('kind'),
     ) ??

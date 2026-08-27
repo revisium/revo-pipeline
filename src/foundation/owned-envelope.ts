@@ -17,6 +17,7 @@ export const normalizeOwnedEnvelope = (
   maximumArrayItems: number,
   objectLimit: OwnedEnvelopeObjectLimit = () => PIPELINE_LIMITS.portableValue.objectKeys,
   maximumVisitedValues: number = PIPELINE_LIMITS.machine.serializedStateJsonValues,
+  allowNonNfcObjectKeys = false,
 ): OwnedEnvelopeResult =>
   normalizeJsonValueWithPolicy(input, {
     maximumDepth: OWNED_ENVELOPE_MAX_DEPTH,
@@ -24,4 +25,5 @@ export const normalizeOwnedEnvelope = (
     maximumVisitedValues,
     objectLimit,
     boundFailureCode: 'BOUND_EXCEEDED',
+    allowNonNfcObjectKeys,
   });

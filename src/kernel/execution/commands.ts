@@ -49,6 +49,8 @@ export const openHumanGateCommand = (
   subject: string,
   answers: readonly [string, ...string[]],
   authorizationRequirements: readonly string[],
+  payloadSchema: ValueSchema | null,
+  deadline: { readonly afterMs: number } | null,
 ) => {
   const key = keyFor('openHumanGate', ref);
   const ownedAnswers: readonly [string, ...string[]] = Object.freeze([
@@ -64,6 +66,8 @@ export const openHumanGateCommand = (
         subject,
         answers: ownedAnswers,
         authorizationRequirements: Object.freeze([...authorizationRequirements]),
+        payloadSchema,
+        deadline,
       });
 };
 

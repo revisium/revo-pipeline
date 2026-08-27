@@ -1,4 +1,4 @@
-import { isDigest, type Digest } from '../../../foundation/index.js';
+import { isDigest, type Digest, type JsonPointer } from '../../../foundation/index.js';
 import type { MachineFaultCode } from '../../contracts/faults.js';
 import type { PendingOperation } from '../../contracts/operations.js';
 import type { RegionMachineFrame } from '../../contracts/region-frames.js';
@@ -12,7 +12,9 @@ import { findRuntimeNode, resolveRuntimeRegion } from './program-index.js';
 import { completeFailedRegion } from './region-completion.js';
 import { cleanupRegionResult, failedNode, failure } from './results.js';
 
-type Applied = { readonly ok: true } | { readonly ok: false; readonly code: MachineFaultCode };
+type Applied =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly code: MachineFaultCode; readonly path?: JsonPointer };
 
 const applied: Applied = Object.freeze({ ok: true });
 
@@ -23,7 +25,9 @@ type RoutedResult =
     }
   | { readonly failure: ReturnType<typeof failure> };
 
-type RoutedEventResult = RoutedResult | MachineFaultCode | null;
+type RejectedEvent = { readonly code: MachineFaultCode; readonly path: JsonPointer };
+
+type RoutedEventResult = RoutedResult | RejectedEvent | MachineFaultCode | null;
 
 const isCancellationEvent = (event: NormalizedEvent['event']): boolean =>
   event.kind === 'activityCancelled' ||
@@ -143,17 +147,29 @@ const gateResult = (
   const resolution = event.resolution;
   if (resolution.kind === 'answer') {
     const route = node.routes.answers.find(({ answer }) => answer === resolution.answer);
-    return route === undefined
-      ? 'EVENT_GATE_ANSWER'
-      : Object.freeze({
-          result: Object.freeze({ status: 'succeeded', output: resolution }),
-          target: route.target,
-        });
+    if (route === undefined) {
+      return 'EVENT_GATE_ANSWER';
+    }
+    if (
+      (node.payloadSchema === null && resolution.payload !== null) ||
+      (node.payloadSchema !== null && !valueMatchesSchema(node.payloadSchema, resolution.payload))
+    ) {
+      return Object.freeze({
+        code: 'DATA_SCHEMA_MISMATCH',
+        path: '/payload',
+      });
+    }
+    return Object.freeze({
+      result: Object.freeze({ status: 'succeeded', output: resolution }),
+      target: route.target,
+    });
   }
-  return Object.freeze({
-    result: Object.freeze({ status: 'succeeded', output: resolution }),
-    target: resolution.kind === 'conflict' ? node.routes.conflict : node.routes.deadline,
-  });
+  return node.deadline === null
+    ? 'EVENT_GATE_ANSWER'
+    : Object.freeze({
+        result: Object.freeze({ status: 'succeeded', output: resolution }),
+        target: node.deadline.target,
+      });
 };
 
 const routedResult = (
@@ -231,17 +247,84 @@ const applyOrdinaryResult = (
   }
 };
 
+const rejectedApplication = (routed: RoutedEventResult): Applied | null => {
+  if (typeof routed === 'string') {
+    return Object.freeze({ ok: false, code: routed });
+  }
+  return routed !== null && 'code' in routed
+    ? Object.freeze({ ok: false, code: routed.code, path: routed.path })
+    : null;
+};
+
+const isRoutedResult = (routed: RoutedEventResult): routed is RoutedResult =>
+  routed !== null && typeof routed !== 'string' && !('code' in routed);
+
+type CleanupPreparation = {
+  readonly requested: ReturnType<RuntimeContext['draft']['acknowledge']>;
+  readonly cleanup: RequestedCleanup;
+};
+
+const prepareCleanup = (
+  context: RuntimeContext,
+  frame: RegionMachineFrame,
+  pending: PendingOperation,
+): CleanupPreparation | null => {
+  const requested = context.draft.acknowledge(pending.commandKey);
+  const ownerKeys =
+    requested === null
+      ? Object.freeze([])
+      : orderedCancellationOwners(context.draft, frame.key, requested.regionOwnerKeys);
+  if (ownerKeys === null) {
+    return null;
+  }
+  return Object.freeze({
+    requested,
+    cleanup: Object.freeze({
+      kind: 'requested' as const,
+      ownerKeys,
+      run: requested?.run ?? false,
+    }),
+  });
+};
+
+const applyCancellationResult = (
+  context: RuntimeContext,
+  frame: RegionMachineFrame,
+  pending: PendingOperation,
+  preparation: CleanupPreparation,
+  normalized: NormalizedEvent,
+): boolean => {
+  if (!isCancellationEvent(normalized.event)) {
+    return false;
+  }
+  if (preparation.requested === null) {
+    context.markCancellation(frame.key, 'isolated');
+    return false;
+  }
+  if (preparation.cleanup.ownerKeys.length > 0) {
+    storeCleanupResult(
+      context,
+      frame,
+      pending.ref.nodeId,
+      Object.freeze({ status: 'cancelled' }),
+      preparation.cleanup,
+    );
+  }
+  return true;
+};
+
 export const applyOperationEvent = (
   context: RuntimeContext,
   pending: PendingOperation,
   normalized: NormalizedEvent,
 ): Applied => {
   const routed = routedResult(context, pending, normalized);
-  if (typeof routed === 'string') {
-    return Object.freeze({ ok: false, code: routed });
+  const rejected = rejectedApplication(routed);
+  if (rejected !== null) {
+    return rejected;
   }
   const frame = context.draft.frames.get(pending.ref.frameKey);
-  if (routed === null || frame === undefined || !('ready' in frame)) {
+  if (!isRoutedResult(routed) || frame === undefined || !('ready' in frame)) {
     context.invalidate();
     return applied;
   }
@@ -254,41 +337,19 @@ export const applyOperationEvent = (
     context.invalidate();
     return applied;
   }
-  const requested = context.draft.acknowledge(pending.commandKey);
-  const ownerKeys =
-    requested === null
-      ? Object.freeze([])
-      : orderedCancellationOwners(context.draft, frame.key, requested.regionOwnerKeys);
-  if (ownerKeys === null) {
+  const preparation = prepareCleanup(context, frame, pending);
+  if (preparation === null) {
     context.invalidate();
     return applied;
   }
-  const structured = ownerKeys.length > 0;
-  const cleanup = Object.freeze({
-    kind: 'requested' as const,
-    ownerKeys,
-    run: requested?.run ?? false,
-  });
-  if (isCancellationEvent(normalized.event)) {
-    if (requested !== null) {
-      if (structured) {
-        storeCleanupResult(
-          context,
-          frame,
-          pending.ref.nodeId,
-          Object.freeze({ status: 'cancelled' }),
-          cleanup,
-        );
-      }
-      return applied;
-    }
-    context.markCancellation(frame.key, 'isolated');
-  }
-  if (structured) {
-    const exactResult = 'failure' in routed ? failedNode(routed.failure) : routed.result;
-    storeCleanupResult(context, frame, pending.ref.nodeId, exactResult, cleanup);
+  if (applyCancellationResult(context, frame, pending, preparation, normalized)) {
     return applied;
   }
-  applyOrdinaryResult(context, frame, pending, routed, requested?.run === true);
+  if (preparation.cleanup.ownerKeys.length > 0) {
+    const exactResult = 'failure' in routed ? failedNode(routed.failure) : routed.result;
+    storeCleanupResult(context, frame, pending.ref.nodeId, exactResult, preparation.cleanup);
+    return applied;
+  }
+  applyOrdinaryResult(context, frame, pending, routed, preparation.cleanup.run);
   return applied;
 };

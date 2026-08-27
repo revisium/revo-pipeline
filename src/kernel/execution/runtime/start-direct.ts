@@ -113,6 +113,8 @@ export const startHumanGateNode = (
     node.subject,
     node.answers,
     node.authorizationRequirements,
+    node.payloadSchema,
+    node.deadline === null ? null : Object.freeze({ afterMs: node.deadline.afterMs }),
   );
   return (
     command !== null &&

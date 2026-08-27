@@ -42,7 +42,7 @@ const childRegionForOutcomes = (outcomes: OutcomeSet): SourceRegion => {
     nodes: [
       {
         ...sourceNodeBuilders.choice(),
-        key: 'choose',
+        id: 'choose',
         cases: [
           {
             key: caseOutcome,
@@ -122,8 +122,11 @@ describe('compiler linking diagnostics', () => {
       outputSchema: emptySchema(),
       region: {
         ...childRegion(`${key}-region`),
-        entry: 'call',
-        nodes: [{ ...sourceNodeBuilders.call(), key: 'call', module: target }, endNode('done')],
+        entry: `${key}-call`,
+        nodes: [
+          { ...sourceNodeBuilders.call(`${key}-done`), id: `${key}-call`, module: target },
+          endNode(`${key}-done`),
+        ],
       },
     });
     const source: PipelineSourcePackage = {
@@ -181,10 +184,14 @@ describe('compiler linking diagnostics', () => {
               ? childRegion(`${key}-region`)
               : {
                   ...childRegion(`${key}-region`),
-                  entry: 'call',
+                  entry: `${key}-call`,
                   nodes: [
-                    { ...sourceNodeBuilders.call(), key: 'call', module: next },
-                    { ...sourceNodeBuilders.end(), key: 'done' },
+                    {
+                      ...sourceNodeBuilders.call(`${key}-done`),
+                      id: `${key}-call`,
+                      module: next,
+                    },
+                    { ...sourceNodeBuilders.end(), id: `${key}-done` },
                   ],
                 },
         };
@@ -232,7 +239,7 @@ describe('compiler linking diagnostics', () => {
         nodes: [
           {
             ...sourceNodeBuilders.choice(),
-            key: 'choose',
+            id: 'choose',
             cases: [{ key: 'alpha', when: { kind: 'equals', value: true }, target: 'alpha-end' }],
             otherwise: 'zeta-end',
           },

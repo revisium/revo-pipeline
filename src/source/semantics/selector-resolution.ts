@@ -430,12 +430,7 @@ export const nodeSelectorGroups = (
   node: SourceNode,
   path: JsonPointer,
 ): readonly NodeSelectorGroup[] => {
-  if (
-    node.kind === 'agent' ||
-    node.kind === 'script' ||
-    node.kind === 'effect' ||
-    node.kind === 'call'
-  ) {
+  if (node.kind === 'agent' || node.kind === 'script' || node.kind === 'call') {
     return [[mappingSelectors(node.input, appendJsonPointer(path, 'input')), 'base']];
   }
   if (node.kind === 'end') {

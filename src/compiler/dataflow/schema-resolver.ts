@@ -87,7 +87,7 @@ const statusSchema = (
     return unavailable(selector, path, collector);
   }
   const status = selector.kind === 'nodeOutput' ? 'succeeded' : 'failed';
-  if (!facts.statusDominates(producer.key, consumerKey, status)) {
+  if (!facts.statusDominates(producer.id, consumerKey, status)) {
     collector.add('DATA_DOMINANCE', path);
     return null;
   }
@@ -107,7 +107,7 @@ const mapOutputDependency = (node: MapNode, input: SchemaResolverInput): MapNode
   }
   const dependency = input.facts.nodesByKey.get(node.items.node);
   return dependency?.kind === 'map' &&
-    input.facts.statusDominates(dependency.key, node.key, 'succeeded')
+    input.facts.statusDominates(dependency.id, node.id, 'succeeded')
     ? dependency
     : undefined;
 };
@@ -148,11 +148,11 @@ const resolvePendingMap = (
   input: SchemaResolverInput,
   state: ResolutionState,
 ): void => {
-  const path = input.nodePaths.get(node.key) ?? '';
+  const path = input.nodePaths.get(node.id) ?? '';
   const schema = resolveSelector(
     node.items,
     appendJsonPointer(path, 'items'),
-    node.key,
+    node.id,
     input,
     state,
   );
@@ -190,7 +190,7 @@ const uncachedNodeOutput = (
   input: SchemaResolverInput,
   state: ResolutionState,
 ): ValueSchema | null => {
-  const path = input.nodePaths.get(node.key) ?? '';
+  const path = input.nodePaths.get(node.id) ?? '';
   if (node.kind === 'agent') {
     const selected = input.agentSelections.get(path)?.slot.selection;
     if (selected?.strategy === 'single') {

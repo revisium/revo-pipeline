@@ -108,13 +108,18 @@ export const voteParallelOutputSchema = (participantKeys: readonly string[]): Va
   });
 };
 
-export const humanGateOutputSchema = (answers: readonly string[]): ValueSchema =>
-  schemaUnion([
-    closedObject({
-      kind: stringEnum('answer'),
-      answer: stringEnum(...answers),
-      actorRef: Object.freeze({ type: 'string' }),
-    }),
-    closedObject({ kind: stringEnum('conflict') }),
-    closedObject({ kind: stringEnum('deadline') }),
-  ]) ?? EmptyObjectSchema;
+export const humanGateOutputSchema = (
+  answers: readonly string[],
+  payloadSchema: ValueSchema | null,
+  hasDeadline: boolean,
+): ValueSchema => {
+  const answer = closedObject({
+    kind: stringEnum('answer'),
+    answer: stringEnum(...answers),
+    actorRef: Object.freeze({ type: 'string' }),
+    payload: payloadSchema ?? Object.freeze({ type: 'null' }),
+  });
+  return hasDeadline
+    ? (schemaUnion([answer, closedObject({ kind: stringEnum('deadline') })]) ?? answer)
+    : answer;
+};

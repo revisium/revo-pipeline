@@ -12,6 +12,7 @@ export type JsonValueTraversalPolicy = {
   readonly maximumVisitedValues: number;
   readonly objectLimit: JsonValueTraversalObjectLimit;
   readonly boundFailureCode: PipelineFailure['code'];
+  readonly allowNonNfcObjectKeys?: boolean;
 };
 
 export type JsonValueTraversalResult =
@@ -134,6 +135,7 @@ const enqueueObjectContainer = (
     task.path,
     maximumObjectProperties,
     policy.boundFailureCode,
+    policy.allowNonNfcObjectKeys,
   );
   if ('ok' in inspection) {
     return inspection;

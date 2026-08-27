@@ -1,20 +1,21 @@
 import type { JsonPointer } from '../../foundation/index.js';
 import type {
-  AgentSlotMaterialization,
-  ValidatedProfileMaterialization,
+  InternalAgentSlot,
+  ValidatedPipelineSelections,
 } from '../../materialization/index.js';
 
 export type MaterializedAgentSelection = {
-  readonly slot: AgentSlotMaterialization;
-  readonly slotIndex: number;
+  readonly slot: InternalAgentSlot;
 };
 
 export const indexAgentSelections = (
-  materialization: ValidatedProfileMaterialization,
+  materialization: ValidatedPipelineSelections,
 ): ReadonlyMap<JsonPointer, MaterializedAgentSelection> =>
   new Map(
-    materialization.materialization.slots.map((slot, slotIndex) => [
+    materialization.materialization.slots.map((slot) => [
       slot.sourcePath,
-      Object.freeze({ slot, slotIndex }),
+      Object.freeze({
+        slot,
+      }),
     ]),
   );

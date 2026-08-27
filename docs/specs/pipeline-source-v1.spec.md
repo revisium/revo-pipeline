@@ -226,13 +226,17 @@ its declared bounds fit; and a union is compatible only when every producer alte
 accepted by the consumer. A module top region `outputSchema` remains exactly equal to the
 module `outputSchema`.
 
-Each region MUST have one reachable entry, unique node keys and exit outcomes, no
-unreachable node, and no path that can avoid an exit outside declared repeat/map bounds.
+Each region MUST have one reachable entry and unique exit outcomes. Source node IDs MUST
+be globally unique across the package, including every nested region; there is no
+per-region node-key namespace. No region may contain an unreachable node or a path that
+can avoid an exit outside declared repeat/map bounds.
 Every target resolves inside the current region. Calls resolve modules in the package.
 
 ## Exact source node union
 
 ```ts
+type SourceNodeId = string;
+
 type ActivityRoutes = {
   readonly succeeded: string;
   readonly failed: string;
@@ -271,8 +275,7 @@ type ConsensusPolicy =
 
 type AgentSourceNode = {
   readonly kind: 'agent';
-  readonly key: string;
-  readonly slotKey: string;
+  readonly id: SourceNodeId;
   readonly strategies: readonly [AgentSlotStrategy, ...AgentSlotStrategy[]];
   readonly input: ValueMapping;
   readonly inputSchema: ValueSchema;
@@ -281,20 +284,9 @@ type AgentSourceNode = {
 
 type ScriptSourceNode = {
   readonly kind: 'script';
-  readonly key: string;
+  readonly id: SourceNodeId;
   readonly requirementKey: string;
-  readonly script: { readonly key: string; readonly revision: number };
-  readonly input: ValueMapping;
-  readonly inputSchema: ValueSchema;
-  readonly outputSchema: ValueSchema;
-  readonly routes: ActivityRoutes;
-};
-
-type EffectSourceNode = {
-  readonly kind: 'effect';
-  readonly key: string;
-  readonly requirementKey: string;
-  readonly effectKey: string;
+  readonly script: { readonly id: string; readonly version: number };
   readonly input: ValueMapping;
   readonly inputSchema: ValueSchema;
   readonly outputSchema: ValueSchema;
@@ -303,7 +295,7 @@ type EffectSourceNode = {
 
 type ChoiceSourceNode = {
   readonly kind: 'choice';
-  readonly key: string;
+  readonly id: SourceNodeId;
   readonly selector: ValueSelector;
   readonly cases: readonly [
     { readonly key: string; readonly when: ChoiceDomain; readonly target: string },
@@ -338,7 +330,7 @@ type ParallelRoutes = {
 };
 type ParallelSourceNode = {
   readonly kind: 'parallel';
-  readonly key: string;
+  readonly id: SourceNodeId;
   readonly branches: readonly [
     ParallelSourceBranch,
     ParallelSourceBranch,
@@ -351,7 +343,7 @@ type ParallelSourceNode = {
 
 type RepeatSourceNode = {
   readonly kind: 'repeat';
-  readonly key: string;
+  readonly id: SourceNodeId;
   readonly maximumIterations: number;
   readonly initialInput: ValueMapping;
   readonly nextInput: ValueMapping;
@@ -373,7 +365,7 @@ type RepeatSourceNode = {
 
 type MapSourceNode = {
   readonly kind: 'map';
-  readonly key: string;
+  readonly id: SourceNodeId;
   readonly items: ValueSelector;
   readonly itemKeyPointer: JsonPointer;
   readonly maximumItems: number;
@@ -396,7 +388,7 @@ type MapSourceNode = {
 
 type WaitSourceNode = {
   readonly kind: 'wait';
-  readonly key: string;
+  readonly id: SourceNodeId;
   readonly wait:
     | { readonly kind: 'duration'; readonly durationMs: number }
     | {
@@ -409,17 +401,17 @@ type WaitSourceNode = {
 
 type HumanGateSourceNode = {
   readonly kind: 'humanGate';
-  readonly key: string;
+  readonly id: SourceNodeId;
   readonly subject: string;
   readonly answers: readonly [string, ...string[]];
   readonly authorizationRequirements: readonly string[];
+  readonly payloadSchema: ValueSchema | null;
+  readonly deadline: { readonly afterMs: number; readonly target: string } | null;
   readonly routes: {
     readonly answers: readonly [
       { readonly answer: string; readonly target: string },
       ...{ readonly answer: string; readonly target: string }[],
     ];
-    readonly conflict: string;
-    readonly deadline: string;
     readonly cancelled: string;
   };
 };
@@ -432,7 +424,7 @@ type ExplicitConsensusParticipant = {
 };
 type ConsensusSourceNode = {
   readonly kind: 'consensus';
-  readonly key: string;
+  readonly id: SourceNodeId;
   readonly participants: readonly [
     ExplicitConsensusParticipant,
     ExplicitConsensusParticipant,
@@ -445,7 +437,7 @@ type ConsensusSourceNode = {
 
 type CallSourceNode = {
   readonly kind: 'call';
-  readonly key: string;
+  readonly id: SourceNodeId;
   readonly module: string;
   readonly input: ValueMapping;
   readonly outputSchema: ValueSchema;
@@ -461,7 +453,7 @@ type CallSourceNode = {
 
 type EndSourceNode = {
   readonly kind: 'end';
-  readonly key: string;
+  readonly id: SourceNodeId;
   readonly outcome: string;
   readonly output: ValueMapping;
 };
@@ -469,7 +461,6 @@ type EndSourceNode = {
 type SourceNode =
   | AgentSourceNode
   | ScriptSourceNode
-  | EffectSourceNode
   | ChoiceSourceNode
   | ParallelSourceNode
   | RepeatSourceNode
@@ -481,9 +472,12 @@ type SourceNode =
   | EndSourceNode;
 ```
 
-These are exactly the 12 source kinds. `sequence`, `aggregation`, `plugin`, `fork`,
+These are exactly the 11 source kinds. `sequence`, `aggregation`, `plugin`, `fork`,
 `join`, `task`, and `terminal` MUST be rejected. Control flow is targets plus nested
 regions; array position MUST NOT imply sequence.
+
+At runtime, `ScriptPinSchema` requires `script.id` to be a single-line string with the
+`script:` prefix and a non-empty suffix. The static TypeScript shape remains `string`.
 
 ## Node semantics and validation
 
@@ -492,6 +486,14 @@ value MUST be carried in successful output and interpreted by a following `choic
 Executor-reported custom terminal statuses are protocol errors, not source outcomes.
 Every activity input mapping MUST validate against its declared input schema before a
 requirement or command is emitted.
+
+Every agent and explicit-consensus participant `inputSchema` is an exact closed
+activity envelope: it has only required string-family `prompt` and optional
+object-family `metadata` properties. `metadata`, when declared, is itself a closed
+concrete `ValueSchema`; an authored mapping that constructs it may make it required in
+that pipeline's exact schema. The public `AgentActivityInputSchema` remains the broad
+runtime supertype `{prompt:string, metadata?:Record<string,JsonValue>}`. No other
+top-level agent input property is admitted.
 
 An agent node is a slot. Strategy kinds MUST be unique. Each strategy owns its exact
 route shape. A consensus strategy MUST declare its exact policy and participant range;
@@ -563,19 +565,19 @@ A signal wait with `payloadSchema: null` accepts no payload and has fixed output
 `{type:'null'}`. A signal wait with a schema has exactly that output schema and outputs
 the validated payload. A duration wait has fixed output schema `{type:'null'}`.
 
-A human gate declares vocabulary and abstract authorization requirements only. It MUST
-NOT declare answer arbitration or resolution policy. The host owns authentication,
-authorization, separation of duties, conflict arbitration, deadlines, inboxes, and
-audit. The kernel receives the host's explicit `answer`, `conflict`, or `deadline`
-resolution. Its successful output schema is the exact closed union of
-`{kind:'answer',answer,actorRef}`, `{kind:'conflict'}`, and `{kind:'deadline'}`; callers
-do not supply another gate output schema.
+A human gate declares vocabulary, abstract authorization requirements, a nullable
+payload schema, and an optional deterministic deadline. The host owns authentication,
+authorization, and inbox/audit delivery. The kernel receives one valid `answer` with
+its attributed payload. When and only when `deadline` is non-null, the kernel may instead
+receive a `deadline` resolution and the successful output schema is the exact closed
+union of `{kind:'answer',answer,actorRef,payload}` and `{kind:'deadline'}`. With a null
+deadline, the successful output schema is only the closed answer object.
 
 `HumanGateSourceNode.answers` and `routes.answers` are keyed sets by answer string. Each
 set MUST contain unique NFC values, the two key sets MUST be equal, and both normalize
 into Unicode code-point order. A duplicate answer, duplicate route, missing route, or
 extra route produces exactly `SOURCE_GATE_ANSWER_BIJECTION` at the source human-gate
-node path. Input array order has no semantic effect.
+node path. Input array order has no semantic impact.
 
 ## Scope input, terminal results, and child failure
 

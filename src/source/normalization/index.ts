@@ -1,6 +1,7 @@
 import {
   PIPELINE_LIMITS,
   appendJsonPointer,
+  compareUnicodeCodePoints,
   createPortableNormalizationSession,
   type DiagnosticCollector,
   type JsonPointer,
@@ -46,8 +47,9 @@ export const normalizeRegion = (
   );
   const nodesPath = appendJsonPointer(path, 'nodes');
   const nodes = nonEmptyTuple(
-    normalizeKeyed(region.nodes, ({ key }) => key, nodesPath, context.collector).map(
-      (node, index) =>
+    [...region.nodes]
+      .toSorted((left, right) => compareUnicodeCodePoints(left.id, right.id))
+      .map((node, index) =>
         normalizeSourceNode(
           node,
           appendJsonPointer(nodesPath, String(index)),
@@ -55,7 +57,7 @@ export const normalizeRegion = (
           regionDepth,
           normalizeRegion,
         ),
-    ),
+      ),
   );
   return Object.freeze({
     ...region,

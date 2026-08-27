@@ -27,8 +27,8 @@ import {
 import { validateExitClassifications, validateGateBijection } from './structured-semantics.js';
 
 export type ReachableAgentSlot = {
+  readonly id: string;
   readonly sourcePath: JsonPointer;
-  readonly slotKey: string;
   readonly strategies: AgentSourceNode['strategies'];
 };
 
@@ -36,6 +36,38 @@ type SourceRegistry = {
   readonly agents: ReachableAgentSlot[];
   nodeCount: number;
   targetCount: number;
+};
+
+export const validateSourceNodeIds = (
+  source: PipelineSourcePackage,
+  collector: DiagnosticCollector,
+): boolean => {
+  const seen = new Set<string>();
+  let unique = true;
+  const visitRegion = (region: SourceRegion, path: JsonPointer): void => {
+    for (const [index, node] of region.nodes.entries()) {
+      const nodePath = nestedPath(path, 'nodes', String(index));
+      if (seen.has(node.id)) {
+        collector.add('SOURCE_NODE_ID_DUPLICATE', appendJsonPointer(nodePath, 'id'));
+        unique = false;
+      }
+      seen.add(node.id);
+      if (node.kind === 'parallel') {
+        for (const [branchIndex, branch] of node.branches.entries()) {
+          visitRegion(
+            branch.region,
+            nestedPath(nodePath, 'branches', String(branchIndex), 'region'),
+          );
+        }
+      } else if (node.kind === 'repeat' || node.kind === 'map') {
+        visitRegion(node.body, appendJsonPointer(nodePath, 'body'));
+      }
+    }
+  };
+  for (const [moduleIndex, module] of source.modules.entries()) {
+    visitRegion(module.region, nestedPath('/modules', String(moduleIndex), 'region'));
+  }
+  return unique;
 };
 
 const validateRegionGraph = (
@@ -165,7 +197,7 @@ const validateRegionSemantics = (
   const environment: SelectorEnvironment = {
     ...inherited,
     scopeInput: region.inputSchema ?? EmptyObjectSchema,
-    nodes: new Map(region.nodes.map((node) => [node.key, node])),
+    nodes: new Map(region.nodes.map((node) => [node.id, node])),
     resolutionState: createSelectorResolutionState(),
   };
   for (const [index, node] of region.nodes.entries()) {
@@ -174,9 +206,9 @@ const validateRegionSemantics = (
       collector.add('CANONICAL_INPUT', appendJsonPointer(nodePath, 'outcome'));
     }
     validateNodeSemantics(node, nodePath, environment, collector, registry);
-    if (node.kind === 'agent' && reachable.has(node.key)) {
+    if (node.kind === 'agent' && reachable.has(node.id)) {
       registry.agents.push(
-        Object.freeze({ sourcePath: nodePath, slotKey: node.slotKey, strategies: node.strategies }),
+        Object.freeze({ id: node.id, sourcePath: nodePath, strategies: node.strategies }),
       );
     }
   }

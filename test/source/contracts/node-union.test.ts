@@ -20,31 +20,18 @@ const requiredSourceRegionFields = ['key', 'entry', 'outputSchema', 'exits', 'no
 const sourceExitFields = ['outcome', 'outputSchema'] as const;
 
 const sourceNodeShapeVectors = [
-  ['agent', ['kind', 'key', 'slotKey', 'strategies', 'input', 'inputSchema', 'outputSchema']],
+  ['agent', ['kind', 'id', 'strategies', 'input', 'inputSchema', 'outputSchema']],
   [
     'script',
-    ['kind', 'key', 'requirementKey', 'script', 'input', 'inputSchema', 'outputSchema', 'routes'],
+    ['kind', 'id', 'requirementKey', 'script', 'input', 'inputSchema', 'outputSchema', 'routes'],
   ],
-  [
-    'effect',
-    [
-      'kind',
-      'key',
-      'requirementKey',
-      'effectKey',
-      'input',
-      'inputSchema',
-      'outputSchema',
-      'routes',
-    ],
-  ],
-  ['choice', ['kind', 'key', 'selector', 'cases', 'otherwise']],
-  ['parallel', ['kind', 'key', 'branches', 'policy', 'remaining', 'routes']],
+  ['choice', ['kind', 'id', 'selector', 'cases', 'otherwise']],
+  ['parallel', ['kind', 'id', 'branches', 'policy', 'remaining', 'routes']],
   [
     'repeat',
     [
       'kind',
-      'key',
+      'id',
       'maximumIterations',
       'initialInput',
       'nextInput',
@@ -60,7 +47,7 @@ const sourceNodeShapeVectors = [
     'map',
     [
       'kind',
-      'key',
+      'id',
       'items',
       'itemKeyPointer',
       'maximumItems',
@@ -72,11 +59,23 @@ const sourceNodeShapeVectors = [
       'routes',
     ],
   ],
-  ['wait', ['kind', 'key', 'wait', 'routes']],
-  ['humanGate', ['kind', 'key', 'subject', 'answers', 'authorizationRequirements', 'routes']],
-  ['consensus', ['kind', 'key', 'participants', 'policy', 'remaining', 'routes']],
-  ['call', ['kind', 'key', 'module', 'input', 'outputSchema', 'routes']],
-  ['end', ['kind', 'key', 'outcome', 'output']],
+  ['wait', ['kind', 'id', 'wait', 'routes']],
+  [
+    'humanGate',
+    [
+      'kind',
+      'id',
+      'subject',
+      'answers',
+      'authorizationRequirements',
+      'payloadSchema',
+      'deadline',
+      'routes',
+    ],
+  ],
+  ['consensus', ['kind', 'id', 'participants', 'policy', 'remaining', 'routes']],
+  ['call', ['kind', 'id', 'module', 'input', 'outputSchema', 'routes']],
+  ['end', ['kind', 'id', 'outcome', 'output']],
 ] as const;
 
 describe('source node union', () => {

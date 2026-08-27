@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { compilePipeline } from '../../../src/compiler/index.js';
 import { EmptyObjectSchema } from '../../../src/foundation/index.js';
+import { AgentActivityInputValueSchema } from '../../../src/source/index.js';
 import type { PipelineSourcePackage } from '../../../src/source/index.js';
 import { materializationFor, singleSelection } from '../../support/compiler-builders.js';
 import { sourceForNode, sourceNodeBuilders } from '../../support/source-builders.js';
@@ -41,8 +42,8 @@ describe('generated lowering topology', () => {
       id: 'sha256:f7a49fc034aec8a4727c5cfa366f1e96ac679a20095d8369ae2b17df64e1c26e',
       activityKind: 'agent',
       requirementKey: 'reviewer-binding',
-      input: {},
-      inputSchema: EmptyObjectSchema,
+      input: { prompt: { kind: 'scopeInput', pointer: '/prompt' } },
+      inputSchema: AgentActivityInputValueSchema,
       outputSchema: EmptyObjectSchema,
       routes: { succeeded: end.id, failed: end.id, cancelled: end.id },
     });
@@ -55,7 +56,7 @@ describe('generated lowering topology', () => {
           kind: 'agent',
           key: 'reviewer-binding',
           bindingKey: 'reviewer-binding',
-          inputSchema: EmptyObjectSchema,
+          inputSchema: AgentActivityInputValueSchema,
           outputSchema: EmptyObjectSchema,
         },
       ],
@@ -64,7 +65,7 @@ describe('generated lowering topology', () => {
       {
         requirementKey: 'reviewer-binding',
         sourcePaths: ['/modules/0/region/nodes/0'],
-        materializationPaths: ['/slots/0/selection/participant'],
+        materializationPaths: ['/activity/participant'],
       },
     ]);
   });
@@ -132,9 +133,17 @@ describe('generated lowering topology', () => {
     ]);
     expect(result.requirements.entries).toEqual([]);
     expect(
+      parallel.branches.map(
+        ({ region }) =>
+          result.provenance.nodes.find(({ programNodeId }) => programNodeId === region.id)
+            ?.sourceNodeId,
+      ),
+    ).toEqual(['activity', 'activity']);
+    expect(
       result.provenance.nodes.find(({ programNodeId }) => programNodeId === choice.id),
     ).toEqual({
       programNodeId: choice.id,
+      sourceNodeId: 'activity',
       sourcePath: '/modules/0/region/nodes/0',
       materializationPath: null,
       loweringRole: 'genericParallelChoice',

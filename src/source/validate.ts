@@ -7,7 +7,11 @@ import {
 } from '../foundation/index.js';
 import { PipelineSourcePackageSchema, type PipelineSourcePackage } from './contracts/index.js';
 import { normalizeSourcePackage } from './normalization/index.js';
-import { validateSourceSemantics, type ReachableAgentSlot } from './semantics/index.js';
+import {
+  validateSourceNodeIds,
+  validateSourceSemantics,
+  type ReachableAgentSlot,
+} from './semantics/index.js';
 import { createEnvelopeValidator } from './validation/envelope.js';
 
 export type ValidatedPipelineSource = {
@@ -48,7 +52,6 @@ const validateEnvelope = createEnvelopeValidator<PipelineSourcePackage>({
     'not',
     'agent',
     'script',
-    'effect',
     'choice',
     'parallel',
     'wait',
@@ -75,7 +78,8 @@ export const validatePipelineSource = (input: unknown): PipelineSourceValidation
   }
   const collector = createDiagnosticCollector();
   const source = normalizeSourcePackage(envelope.value, collector);
-  const reachableAgents = validateSourceSemantics(source, collector);
+  const sourceNodeIdsAreUnique = validateSourceNodeIds(source, collector);
+  const reachableAgents = sourceNodeIdsAreUnique ? validateSourceSemantics(source, collector) : [];
   const diagnostics = collector.finalize();
   if (diagnostics.length > 0) {
     return { ok: false, diagnostics };

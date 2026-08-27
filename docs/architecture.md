@@ -7,13 +7,13 @@ direct-cutover architecture. [ADR 0011](./adr/0011-under-development-package-ent
 allows the exact package facades to be evaluated independently while the six contracts
 remain Draft. [ADR 0012](./adr/0012-alpha-prerelease-publication.md) permits only
 unstable prerelease publication under the npm `alpha` tag; it makes no compatibility or
-consumer-integration readiness claim. [ADR 0013](./adr/0013-curated-execution-plan-bridge.md)
-adds one separate, intentionally small execution-plan consumer facade.
+consumer-integration readiness claim. [ADR 0014](./adr/0014-direct-compiler-kernel-cutover.md)
+records the direct compiler/kernel boundary.
 
 ## System shape
 
 The package is a strict ESM, portable TypeScript language/compiler/kernel library. It
-validates TypeBox-backed source and materialization documents, links and lowers them into
+validates TypeBox-backed source and selections, materializes internally, links and lowers them into
 a closed Program IR, and advances that program as a pure state machine. It performs no
 I/O and knows no runtime provider, model, DBOS workflow, attempt, database, queue, or
 subscription.
@@ -23,7 +23,7 @@ Its only production dependencies are exact `typebox@1.3.10` and
 host/runtime libraries are not installed.
 
 ```text
-playbook PipelineSourcePackage + portable ProfileMaterialization
+playbook PipelineSourcePackage + PipelineSelections
                               |
                               v
                   compile/link/materialize
@@ -39,7 +39,7 @@ playbook PipelineSourcePackage + portable ProfileMaterialization
              next PipelineState + host commands
 ```
 
-The source language has exactly 12 node kinds: `agent`, `script`, `effect`, `choice`,
+The source language has exactly 11 node kinds: `agent`, `script`, `choice`,
 `parallel`, `repeat`, `map`, `wait`, `humanGate`, `consensus`, `call`, and `end`.
 Compilation produces exactly nine IR node kinds: `activity`, `choice`, `call`,
 `parallel`, `repeat`, `map`, `wait`, `humanGate`, and `end`. Control flow uses targets
@@ -61,9 +61,6 @@ program ------------> foundation
 compiler/linker ----> foundation + source + materialization + program
 kernel -------------> foundation + program
 ```
-
-`src/execution-plan/` is not a seventh layer. It is the ADR 0013 integration facade and may
-use only curated pipeline indexes.
 
 - **foundation** owns portable JSON, identifiers, diagnostics, bounds, canonicalization,
   hashes, and TypeBox schema helpers.
@@ -120,7 +117,7 @@ flags resolved imports of other Node core modules.
 
 Foundation is also the single implementation owner of representation-neutral
 ValueSchema, choice-domain, policy, normalization, projection, and finite-domain
-vocabulary re-exported unchanged by source. Source owns the TypeBox-derived 12-kind
+vocabulary re-exported unchanged by source. Source owns the TypeBox-derived 11-kind
 authoring graph, selectors, mappings, recursive regions, and deterministic normalization.
 Its current semantic pass is intentionally local: it validates each region's entry and
 targets, reachability and the ability to exit, nested-region exits and selector contexts,
@@ -130,10 +127,10 @@ linking, call recursion, dominance, general dataflow/schema compatibility, compo
 bounds, Program lowering, and compiler-bundle digests are composed by the compiler.
 
 Materialization owns only the portable, source-pinned selection envelope. It requires
-exactly one canonical-path entry for every reachable agent slot, accepts only a strategy
-declared by that source node, and rechecks source-owned participant policies. Slot keys
-are path-local, so distinct agent paths may deliberately share one slot key. Normalized
-source and materialization documents have separate domain-separated digests.
+exactly one entry for every reachable agent slot, keyed by that node's globally unique
+`SourceNodeId`, accepts only a strategy declared by that source node, and rechecks
+source-owned participant policies. Normalized source and materialization documents have
+separate domain-separated digests.
 
 Program owns the recursively closed nine-kind IR, derived generic/vote result schemas,
 abstract requirements, complete provenance, shared Program admission, and the exact
@@ -145,50 +142,50 @@ own-once validation and hashing path.
 
 ## Public boundary
 
-`@revisium/revo-pipeline` exposes the exact schema, identity-helper, compiler, and digest
-manifest declared by Conformance v1. `@revisium/revo-pipeline/kernel` exposes the exact
-narrow Program and pure-machine manifest. `@revisium/revo-pipeline/execution-plan` is the
-separate ADR 0013 bridge facade. No other deep import is public. These are
+`@revisium/revo-pipeline` exposes the exact schema, compiler, and digest manifest declared
+by Conformance v1. `@revisium/revo-pipeline/kernel` exposes the exact narrow Program and
+pure-machine manifest. No other deep import is public. These are
 under-development Draft contracts available from npm `alpha` prereleases and local or
 CI-built tarballs, without a compatibility guarantee.
 
 ## Cross-package ownership
 
-| Concern                 | `revo-pipeline`                                                       | `revo-core`                                                         | Host runtime                                                                                  |
-| ----------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Playbook source grammar | Owns schema, validation, and compilation                              | Stores/version-selects source through its data boundary             | Does not interpret source                                                                     |
-| Profile materialization | Validates portable slot choices                                       | Selects profile and supplies portable materialization               | Does not select profiles                                                                      |
-| Program topology        | Owns linked IR and full-bundle `programDigest`                        | Persists the admitted immutable compiler bundle                     | Recomputes/validates the bundle digest, then executes the trusted pair through the kernel     |
-| Activity requirements   | Emits abstract `ProgramRequirements`                                  | Resolves exact agent, script, effect, tool, and permission bindings | Executes resolved bindings                                                                    |
-| Execution plan          | Lowers the ADR 0013 choice/end slice to a pipeline-owned JSON payload | Constructs and persists a plan using its host contract              | Owns runtime admission, root-program validation, and immutable host-plan contract             |
-| Run lifecycle           | Emits semantic commands only                                          | Creates and enqueues runs                                           | Owns DBOS, attempts, retries, timers, cancellation, reconciliation, events, and subscriptions |
+| Concern                 | `revo-pipeline`                                                   | `revo-core`                                       | `revo-run` / host runtime                                                                      |
+| ----------------------- | ----------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Playbook source grammar | Owns schema, validation, and compilation                          | Passes raw versioned source/profile to `revo-run` | Does not reinterpret source                                                                    |
+| Pipeline selections     | Validates portable slot choices internally                        | Does not compile or select at the core boundary   | Derives selections from the supplied profile in its composition                                |
+| Program topology        | Owns linked IR and full-bundle `programDigest`                    | Does not own a compiler bundle                    | Calls `compilePipeline` internally and drives the admitted pair through the kernel             |
+| Activity requirements   | Emits abstract `ProgramRequirements`                              | Does not resolve bindings                         | Resolves exact agent and script bindings through its composition, then executes them           |
+| Compiler bundle         | Emits Program, requirements, provenance, and full `programDigest` | Passes source/profile without altering them       | Holds the immutable compiler result for the run                                                |
+| Run lifecycle           | Emits semantic commands only                                      | Initiates the run boundary                        | Drives kernel transitions and owns DBOS, attempts, retries, timers, and durable host mechanics |
 
 An agent source node is a slot, not an executor declaration. Source owns the exact
 allowed `single`/`consensus` strategies, consensus policy, participant range, and
-remaining-work behavior. Portable profile materialization chooses only an allowed
-strategy and abstract participant keys. Structural materialization may change
-`programDigest`; core later resolves exact assemblies and script/effect bindings without
-changing the program.
+remaining-work behavior. Portable selections choose only an allowed strategy and abstract
+participant keys. Structural materialization may change `programDigest`; `revo-run`
+resolves exact assemblies and script bindings through composition without changing the
+program.
 
 ## Digest lineage
 
 ```text
 PipelineSourcePackage --sourceDigest---------------------------+
-          + ProfileMaterialization(sourceDigest)               |
+          + PipelineSelections                                 |
           |                  --materializationDigest            |
           v                                                     |
 PipelineProgram + ProgramRequirements + ProgramProvenance      |
                     --programDigest                            |
-          + exact core bindings + run policies                 |
+          + exact revo-run composition bindings                |
           v                                                     |
-run-owned immutable ExecutionPlan --planDigest (core/run only)-+
+host-owned immutable run record (outside this package) --------+
 ```
 
 `sourceDigest` excludes profile materialization. `materializationDigest` pins the source.
 `programDigest` hashes exactly `{program,requirements,provenance}`; the program contains
-both upstream digest pins. Core/run admission validates every component and recomputes
-the full compiler-bundle digest. The kernel trusts the admitted `{program,programDigest}`
-pair and only compares the digest with its state pin. `planDigest` is core/run-owned.
+both upstream digest pins. `revo-run` validates every component and recomputes the full
+compiler-bundle digest before initialization. The kernel trusts the admitted
+`{program,programDigest}` pair and only compares the digest with its state pin. Host
+run-record identity is outside the pipeline contract.
 
 ## Purity and determinism
 

@@ -17,9 +17,7 @@ export const directNodeSchemas = {
   ProgramActivityNode: closedObject({
     kind: readonlySchema(Type.Literal('activity')),
     id: readonlySchema(ProgramNodeIdSchema),
-    activityKind: readonlySchema(
-      Type.Union([Type.Literal('agent'), Type.Literal('script'), Type.Literal('effect')]),
-    ),
+    activityKind: readonlySchema(Type.Union([Type.Literal('agent'), Type.Literal('script')])),
     requirementKey: readonlySchema(IdentifierSchema),
     input: readonlySchema(ProgramValueMappingSchema),
     inputSchema: readonlySchema(ValueSchemaSchema),
@@ -86,6 +84,16 @@ export const directNodeSchemas = {
     subject: readonlySchema(DisplayStringSchema),
     answers: readonlySchema(nonEmptyArraySchema(IdentifierSchema)),
     authorizationRequirements: readonlySchema(immutableArraySchema(IdentifierSchema)),
+    payloadSchema: readonlySchema(Type.Union([ValueSchemaSchema, Type.Null()])),
+    deadline: readonlySchema(
+      Type.Union([
+        closedObject({
+          afterMs: readonlySchema(Type.Integer({ minimum: 0 })),
+          target: readonlySchema(ProgramNodeIdSchema),
+        }),
+        Type.Null(),
+      ]),
+    ),
     routes: readonlySchema(
       closedObject({
         answers: readonlySchema(
@@ -96,8 +104,6 @@ export const directNodeSchemas = {
             }),
           ),
         ),
-        conflict: readonlySchema(ProgramNodeIdSchema),
-        deadline: readonlySchema(ProgramNodeIdSchema),
         cancelled: readonlySchema(ProgramNodeIdSchema),
       }),
     ),

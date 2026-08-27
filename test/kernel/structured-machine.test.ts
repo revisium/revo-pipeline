@@ -89,13 +89,13 @@ describe('kernel structured execution', () => {
 
   it('keeps parallel siblings live in the same activation burst', () => {
     const left = {
-      ...sourceNodeBuilders.script(),
-      key: 'left-work',
+      ...sourceNodeBuilders.script('left-done'),
+      id: 'left-work',
       requirementKey: 'left',
     };
     const right = {
-      ...sourceNodeBuilders.script(),
-      key: 'right-work',
+      ...sourceNodeBuilders.script('right-done'),
+      id: 'right-work',
       requirementKey: 'right',
     };
     const node = {
@@ -105,16 +105,16 @@ describe('kernel structured execution', () => {
           ...sourceNodeBuilders.parallel().branches[0],
           region: {
             ...sourceNodeBuilders.parallel().branches[0].region,
-            entry: left.key,
-            nodes: [left, endNode()],
+            entry: left.id,
+            nodes: [left, endNode('left-done')],
           },
         },
         {
           ...sourceNodeBuilders.parallel().branches[1],
           region: {
             ...sourceNodeBuilders.parallel().branches[1].region,
-            entry: right.key,
-            nodes: [right, endNode()],
+            entry: right.id,
+            nodes: [right, endNode('right-done')],
           },
         },
       ],
@@ -129,7 +129,7 @@ describe('kernel structured execution', () => {
 
   it('folds compiler-emitted vote siblings through the consensus policy', () => {
     const bundle = compileStructuredNode(sourceNodeBuilders.consensus());
-    const initial = createInitialPipelineState(bundle, {});
+    const initial = createInitialPipelineState(bundle, { prompt: 'vote' });
     const commands = initial.commands.filter((command) => command.kind === 'dispatchActivity');
     expect(commands).toHaveLength(2);
     const [first, second] = commands;
@@ -157,7 +157,7 @@ describe('kernel structured execution', () => {
     ['activityCancelled', {}],
   ] as const)('drains compiler-emitted vote siblings after %s', (kind, fields) => {
     const bundle = compileStructuredNode(sourceNodeBuilders.consensus());
-    const initial = createInitialPipelineState(bundle, {});
+    const initial = createInitialPipelineState(bundle, { prompt: 'vote' });
     const commands = initial.commands.filter((command) => command.kind === 'dispatchActivity');
     const [first, second] = commands;
     if (first?.kind !== 'dispatchActivity' || second?.kind !== 'dispatchActivity') {
@@ -190,7 +190,7 @@ describe('kernel structured execution', () => {
       ...sourceNodeBuilders.consensus(),
       remaining: 'cancel',
     });
-    const initial = createInitialPipelineState(bundle, {});
+    const initial = createInitialPipelineState(bundle, { prompt: 'vote' });
     const [first, second] = initial.commands.filter(
       (command) => command.kind === 'dispatchActivity',
     );

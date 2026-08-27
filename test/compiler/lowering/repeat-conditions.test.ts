@@ -83,10 +83,10 @@ const conditionCases: readonly {
 
 describe('repeat-condition compiler lowering', () => {
   it.each(conditionCases)('validates and lowers normalized $name', ({ source, expected }) => {
-    const repeat = { ...sourceNodeBuilders.repeat(), key: 'repeat', continueWhen: source };
+    const repeat = { ...sourceNodeBuilders.repeat(), id: 'repeat', continueWhen: source };
     const producer = {
       ...sourceNodeBuilders.script('repeat'),
-      key: 'producer',
+      id: 'producer',
       outputSchema: { type: 'boolean' as const },
       routes: { succeeded: 'repeat', failed: 'done', cancelled: 'done' },
     };

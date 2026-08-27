@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   compilePipeline,
-  computeMaterializationDigest,
   computeProgramDigest,
   computeSourceDigest,
   definePipelineSource,
-  defineProfileMaterialization,
   type PipelineProgram,
   type ProgramDigestInput,
   type ProgramNode,
@@ -63,6 +61,7 @@ const digestInputFor = (program: PipelineProgram): ProgramDigestInput => {
       schemaVersion: 'pipeline-provenance/v1',
       nodes: ids.toSorted().map((programNodeId, ordinal) => ({
         programNodeId,
+        sourceNodeId: null,
         sourcePath: '/fixture',
         materializationPath: null,
         loweringRole: 'direct',
@@ -151,11 +150,7 @@ describe('public authoring and digest helpers', () => {
         throw new Error('identity helper inspected source');
       },
     });
-    const materialization = Proxy.revocable(materializationFor(sourceValue), {});
-    materialization.revoke();
-
     expect(definePipelineSource(source)).toBe(source);
-    expect(defineProfileMaterialization(materialization.proxy)).toBe(materialization.proxy);
   });
 
   it('returns compiler digests through the public validation paths', () => {
@@ -165,13 +160,6 @@ describe('public authoring and digest helpers', () => {
       result.sourceDigest,
     );
     expect(
-      computeMaterializationDigest({
-        schemaVersion: 'pipeline-materialization/v1',
-        sourceDigest: result.sourceDigest,
-        slots: [],
-      }),
-    ).toBe(result.materializationDigest);
-    expect(
       computeProgramDigest({
         program: result.program,
         requirements: result.requirements,
@@ -180,28 +168,12 @@ describe('public authoring and digest helpers', () => {
     ).toBe(result.programDigest);
   });
 
-  it('keeps materialization digest validation intrinsic to its own envelope', () => {
-    const result = compiledScript();
-    expect(() =>
-      computeMaterializationDigest({
-        schemaVersion: 'pipeline-materialization/v1',
-        sourceDigest: result.sourceDigest,
-        slots: [],
-      }),
-    ).not.toThrow();
-  });
-
   it('rejects invalid, cyclic, and hostile digest inputs with one redacted error', () => {
-    const cycle: Record<string, unknown> = {};
-    cycle.self = cycle;
     const revoked = Proxy.revocable({}, {});
     revoked.revoke();
     const calls = [
       () => {
         Reflect.apply(computeSourceDigest, undefined, [{}]);
-      },
-      () => {
-        Reflect.apply(computeMaterializationDigest, undefined, [cycle]);
       },
       () => {
         Reflect.apply(computeProgramDigest, undefined, [revoked.proxy]);
@@ -261,6 +233,76 @@ describe('public authoring and digest helpers', () => {
     expect(() => computeProgramDigest(mismatchedRequirementKind)).toThrowError(
       new TypeError(invalidDigestMessage),
     );
+  });
+
+  it('rejects forged non-envelope agent activities before hashing or kernel initialization', () => {
+    const source = sourceForNode(sourceNodeBuilders.agent());
+    const compiled = compilePipeline(
+      source,
+      materializationFor(source, {
+        strategy: 'single',
+        participant: { key: 'reviewer', bindingKey: 'reviewer-binding' },
+      }),
+    );
+    if (!compiled.ok) {
+      throw new TypeError('Expected an admitted agent Program.');
+    }
+    const program = structuredClone(compiled.program);
+    const module = program.modules[0];
+    const activity = module?.region.nodes.find(
+      (node): node is Extract<ProgramNode, { readonly kind: 'activity' }> =>
+        node.kind === 'activity',
+    );
+    if (module === undefined || activity === undefined) {
+      throw new TypeError('Expected an agent activity.');
+    }
+    const forgedSchema = {
+      type: 'object' as const,
+      properties: { request: { type: 'string' as const } },
+      required: ['request'] as const,
+      additionalProperties: false as const,
+    };
+    const forgedProgram: PipelineProgram = {
+      ...program,
+      modules: [
+        {
+          ...module,
+          region: {
+            ...module.region,
+            nodes: nonEmpty(
+              module.region.nodes.map((node) =>
+                node.id === activity.id
+                  ? {
+                      ...activity,
+                      input: { request: { kind: 'literal', value: 'forged' } },
+                      inputSchema: forgedSchema,
+                    }
+                  : node,
+              ),
+            ),
+          },
+        },
+      ],
+    };
+    const forgedRequirements = {
+      ...compiled.requirements,
+      entries: compiled.requirements.entries.map((requirement) =>
+        requirement.kind === 'agent' ? { ...requirement, inputSchema: forgedSchema } : requirement,
+      ),
+    };
+    const forged = {
+      program: forgedProgram,
+      requirements: forgedRequirements,
+      provenance: compiled.provenance,
+    };
+
+    expect(() => computeProgramDigest(forged)).toThrowError(new TypeError(invalidDigestMessage));
+    expect(
+      createInitialPipelineState(
+        { program: forgedProgram, programDigest: compiled.programDigest },
+        {},
+      ).state.fault,
+    ).toEqual({ code: 'PROGRAM_INVALID', path: '/program' });
   });
 
   it('applies complete Program admission before public hashing and kernel execution', () => {

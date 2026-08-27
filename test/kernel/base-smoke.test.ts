@@ -9,7 +9,7 @@ import {
   runningResult,
   terminalResult,
 } from '../support/kernel-builders.js';
-import { programEnd, programId } from '../support/program-builders.js';
+import { literalAgentInputSchema, programEnd, programId } from '../support/program-builders.js';
 
 describe('kernel base smoke', () => {
   it('saturates a root end into one terminal command', () => {
@@ -29,13 +29,8 @@ describe('kernel base smoke', () => {
       id: programId('1'),
       activityKind: 'agent' as const,
       requirementKey: 'agent',
-      input: {},
-      inputSchema: {
-        type: 'object' as const,
-        properties: {},
-        required: [],
-        additionalProperties: false as const,
-      },
+      input: { prompt: { kind: 'literal' as const, value: 'smoke' } },
+      inputSchema: literalAgentInputSchema('smoke'),
       outputSchema: {
         type: 'object' as const,
         properties: {},

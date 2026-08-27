@@ -123,7 +123,7 @@ export const lowerSlotConsensus = (
   if (strategy?.kind !== 'consensus') {
     throw new TypeError('Expected a validated consensus strategy.');
   }
-  const selectionPath = `/slots/${selected.slotIndex}/selection` as JsonPointer;
+  const selectionPath = `/${selected.slot.sourceNodeId}` as JsonPointer;
   return lowerVoteTopology(
     {
       sourcePath: path,

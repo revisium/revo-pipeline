@@ -145,16 +145,17 @@ const consensusOutputSchema = (
   });
 };
 
-const humanGateOutputSchema = (node: HumanGateSourceNode): ValueSchema =>
-  schemaUnion([
-    closedValueObject({
-      kind: stringEnum('answer'),
-      answer: stringEnum(...node.answers),
-      actorRef: Object.freeze({ type: 'string' }),
-    }),
-    closedValueObject({ kind: stringEnum('conflict') }),
-    closedValueObject({ kind: stringEnum('deadline') }),
-  ]) ?? closedValueObject({ kind: stringEnum('deadline') });
+const humanGateOutputSchema = (node: HumanGateSourceNode): ValueSchema => {
+  const answer = closedValueObject({
+    kind: stringEnum('answer'),
+    answer: stringEnum(...node.answers),
+    actorRef: Object.freeze({ type: 'string' }),
+    payload: node.payloadSchema ?? Object.freeze({ type: 'null' }),
+  });
+  return node.deadline === null
+    ? answer
+    : (schemaUnion([answer, closedValueObject({ kind: stringEnum('deadline') })]) ?? answer);
+};
 
 export type MapItemsSchema = {
   readonly item: ValueSchema;
@@ -242,7 +243,6 @@ export const sourceNodeOutputSchema = (
     case 'agent':
       return node.strategies.every(({ kind }) => kind === 'single') ? node.outputSchema : null;
     case 'script':
-    case 'effect':
     case 'repeat':
     case 'call':
       return node.outputSchema;

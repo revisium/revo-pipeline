@@ -26,7 +26,7 @@ const activityTargets = (node: SourceNode, path: JsonPointer): readonly Target[]
       })),
     );
   }
-  if (node.kind === 'script' || node.kind === 'effect') {
+  if (node.kind === 'script') {
     return Object.entries(node.routes).map(([route, key]) => ({
       key,
       path: nestedPath(path, 'routes', route),
@@ -49,7 +49,6 @@ const fixedRouteTargets = (node: SourceNode, path: JsonPointer): readonly Target
     case 'agent':
     case 'call':
     case 'choice':
-    case 'effect':
     case 'end':
     case 'humanGate':
     case 'script':
@@ -80,10 +79,10 @@ const nodeTargets = (node: SourceNode, path: JsonPointer): readonly Target[] => 
         key: target,
         path: nestedPath(path, 'routes', 'answers', String(index), 'target'),
       })),
-      ...(['conflict', 'deadline', 'cancelled'] as const).map((route) => ({
-        key: node.routes[route],
-        path: nestedPath(path, 'routes', route),
-      })),
+      ...(node.deadline === null
+        ? []
+        : [{ key: node.deadline.target, path: nestedPath(path, 'deadline', 'target') }]),
+      { key: node.routes.cancelled, path: nestedPath(path, 'routes', 'cancelled') },
     ];
   }
   if (node.kind === 'call') {
@@ -122,8 +121,8 @@ const nodesThatCanExit = (
   nodes: readonly SourceNode[],
   edges: ReadonlyMap<string, readonly Target[]>,
 ): ReadonlySet<string> => {
-  const reverse = reverseEdges(new Set(nodes.map(({ key }) => key)), edges);
-  const canExit = new Set(nodes.filter(({ kind }) => kind === 'end').map(({ key }) => key));
+  const reverse = reverseEdges(new Set(nodes.map(({ id }) => id)), edges);
+  const canExit = new Set(nodes.filter(({ kind }) => kind === 'end').map(({ id }) => id));
   const pending = [...canExit];
   while (pending.length > 0) {
     const current = pending.pop();
@@ -272,7 +271,7 @@ export const analyzeRegionGraph = (
   region: SourceRegion,
   path: JsonPointer,
 ): RegionGraphAnalysis => {
-  const nodes = new Map(region.nodes.map((node) => [node.key, node]));
+  const nodes = new Map(region.nodes.map((node) => [node.id, node]));
   if (!nodes.has(region.entry)) {
     return {
       entryMissing: true,
@@ -294,19 +293,17 @@ export const analyzeRegionGraph = (
       }
     }
     edges.set(
-      node.key,
+      node.id,
       targets.filter(({ key }) => nodes.has(key)),
     );
   }
 
   const reachable = reachableNodes(region.entry, edges);
-  const unreachableIndex = region.nodes.findIndex(({ key }) => !reachable.has(key));
+  const unreachableIndex = region.nodes.findIndex(({ id }) => !reachable.has(id));
   const cyclic = cyclicNodes(reachable, edges);
-  const cyclicIndex = region.nodes.findIndex(({ key }) => cyclic.has(key));
+  const cyclicIndex = region.nodes.findIndex(({ id }) => cyclic.has(id));
   const canExit = nodesThatCanExit(region.nodes, edges);
-  const nonExitingIndex = region.nodes.findIndex(
-    ({ key }) => reachable.has(key) && !canExit.has(key),
-  );
+  const nonExitingIndex = region.nodes.findIndex(({ id }) => reachable.has(id) && !canExit.has(id));
 
   return {
     entryMissing: false,

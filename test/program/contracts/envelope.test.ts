@@ -46,6 +46,7 @@ const provenance = {
   nodes: [
     {
       programNodeId: programId(),
+      sourceNodeId: null,
       sourcePath: '/modules/0/region/nodes/0',
       materializationPath: null,
       loweringRole: 'direct',

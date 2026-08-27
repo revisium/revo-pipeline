@@ -18,13 +18,13 @@ import {
 const sharedRequirementSource = (conflict = false): PipelineSourcePackage => {
   const first: ScriptSourceNode = {
     ...sourceNodeBuilders.script(),
-    key: 'a-first',
+    id: 'a-first',
     routes: { succeeded: 'b-second', failed: 'done', cancelled: 'done' },
   };
   const second: ScriptSourceNode = {
     ...sourceNodeBuilders.script(),
-    key: 'b-second',
-    ...(conflict ? { script: { key: 'different-script', revision: 0 } } : {}),
+    id: 'b-second',
+    ...(conflict ? { script: { id: 'script:different-script', version: 1 } } : {}),
   };
   return sourceWithNodes([first, second, endNode()]);
 };
@@ -125,10 +125,10 @@ describe('compiler bundle emission', () => {
       programDigest: result.programDigest,
       ids: result.provenance.nodes.map(({ programNodeId }) => programNodeId),
     }).toEqual({
-      sourceDigest: 'sha256:7bfd624e400cad809c66bab21a33f2fd5e1a79b596e7885ac7da3ac722efe661',
+      sourceDigest: 'sha256:dc5813b5e8c0c8258744b51e0c14fb24ba5d2c77ccf973a8eb0b39fe224d809a',
       materializationDigest:
-        'sha256:c22fbde144cd0b90fe5fa4c1034980653f0775465e6b12badaafa682b04279e7',
-      programDigest: 'sha256:6196915fd76a00f709858916fe03517a5351fba5a00b9faed3f3c28b9d2f5c56',
+        'sha256:6731fe281e14ad959ea6b5f3cb4eb8012ab7f43137f49145064fbba35164d4e6',
+      programDigest: 'sha256:3361eb00efac5f36427a66307610b0bf4c9df54073465f2875aee43025186af2',
       ids: [
         'sha256:0850c1cd1ae717ed79e795935ed929b426fbae40e5a81b64604b7d0a92467761',
         'sha256:505866bbfaecb35b1838a9ce879c0dc320a4e54885069bfbe0ffebe466360eba',

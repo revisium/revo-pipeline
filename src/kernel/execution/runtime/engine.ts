@@ -4,6 +4,7 @@ import {
   normalizePortableValue,
   readOwnDataValue,
   type Digest,
+  type JsonPointer,
   type PipelineFailure,
 } from '../../../foundation/index.js';
 import { createMachineFault } from '../../contracts/fault-factory.js';
@@ -36,8 +37,9 @@ function ownValue(input: unknown, key: string): unknown {
 const rejected = (
   state: PipelineState,
   code: Parameters<typeof createMachineFault>[0],
+  path?: JsonPointer,
 ): PipelineTransition => {
-  const fault = createMachineFault(code);
+  const fault = createMachineFault(code, path);
   const faults: readonly [typeof fault, ...(typeof fault)[]] = Object.freeze([fault]);
   return Object.freeze({
     kind: 'rejected',
@@ -181,7 +183,7 @@ const advanceHydratedState = (
       normalized.normalized,
     );
     if (!applied.ok) {
-      return rejected(stateInput, applied.code);
+      return rejected(stateInput, applied.code, applied.path);
     }
   }
   const result = finishRuntimeTransition(runtime);

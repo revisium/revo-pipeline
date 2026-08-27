@@ -52,15 +52,15 @@ NOT be truncated.
 
 ## Fixed domains and payloads
 
-| Domain                        | Exact payload                                                          |
-| ----------------------------- | ---------------------------------------------------------------------- |
-| `pipeline-source/v1`          | Complete normalized `PipelineSourcePackage`                            |
-| `pipeline-materialization/v1` | Complete normalized `ProfileMaterialization`, including `sourceDigest` |
-| `pipeline-program/v1`         | `{program, provenance, requirements}`                                  |
-| `pipeline-ir-id/v1`           | `{loweringRole, ordinal, sourcePath}`                                  |
-| `pipeline-frame-key/v1`       | One exact `FrameKeyPayload`                                            |
-| `pipeline-command-key/v1`     | `{kind, ref}`                                                          |
-| `pipeline-event/v1`           | Complete normalized `PipelineEvent`                                    |
+| Domain                        | Exact payload                                              |
+| ----------------------------- | ---------------------------------------------------------- |
+| `pipeline-source/v1`          | Complete normalized `PipelineSourcePackage`                |
+| `pipeline-materialization/v1` | Compiler-owned normalized selections, including source pin |
+| `pipeline-program/v1`         | `{program, provenance, requirements}`                      |
+| `pipeline-ir-id/v1`           | `{loweringRole, ordinal, sourcePath}`                      |
+| `pipeline-frame-key/v1`       | One exact `FrameKeyPayload`                                |
+| `pipeline-command-key/v1`     | `{kind, ref}`                                              |
+| `pipeline-event/v1`           | Complete normalized `PipelineEvent`                        |
 
 `sourceDigest` excludes materialization. `materializationDigest` pins source.
 `programDigest` covers the complete compiler bundle: program topology (including both
@@ -71,8 +71,7 @@ Frame keys, IR IDs, command keys, and event digests use their dedicated domains 
 same preimage construction. Object identity, insertion order, local path, timestamp,
 runtime ID, attempt, host, or environment MUST NOT influence any digest.
 
-`planDigest` covers program plus exact bindings/policies and is core/run-owned.
-`revo-pipeline` MUST NOT define, compute, export, or validate it.
+`revo-pipeline` MUST NOT define, compute, export, or validate `planDigest`.
 
 ## Required golden vectors
 

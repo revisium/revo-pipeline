@@ -1,13 +1,14 @@
 import {
   EmptyObjectSchema,
   appendJsonPointer,
+  isAgentActivityInputValueSchema,
   projectValueSchema,
   valueSchemasEqual,
   type DiagnosticCollector,
   type JsonPointer,
   type ValueSchema,
 } from '../../foundation/index.js';
-import type { SourceNode, SourceRegion } from '../../source/index.js';
+import { type SourceNode, type SourceRegion } from '../../source/index.js';
 import type { LinkedSource } from '../linking/index.js';
 import { validateChoiceDomains, validateRepeatCondition } from './condition-validation.js';
 import { validateMapping } from './mapping-validation.js';
@@ -30,14 +31,20 @@ export type NodeValidationContext = {
 };
 
 const validateActivity = (
-  node: Extract<SourceNode, { readonly kind: 'agent' | 'script' | 'effect' }>,
+  node: Extract<SourceNode, { readonly kind: 'agent' | 'script' }>,
   context: NodeValidationContext,
 ): void => {
+  if (node.kind === 'agent' && !isAgentActivityInputValueSchema(node.inputSchema)) {
+    context.collector.add(
+      'DATA_SCHEMA_INCOMPATIBLE',
+      appendJsonPointer(context.path, 'inputSchema'),
+    );
+  }
   validateMapping(
     node.input,
     node.inputSchema,
     appendJsonPointer(context.path, 'input'),
-    node.key,
+    node.id,
     context.resolver,
     context.collector,
   );
@@ -50,7 +57,7 @@ const validateChoice = (
   const schema = context.resolver.selector(
     node.selector,
     appendJsonPointer(context.path, 'selector'),
-    node.key,
+    node.id,
   );
   if (schema !== null) {
     validateChoiceDomains(
@@ -72,7 +79,7 @@ const validateParallel = (
       branch.input,
       branch.region.inputSchema ?? EmptyObjectSchema,
       appendJsonPointer(branchPath, 'input'),
-      node.key,
+      node.id,
       context.resolver,
       context.collector,
     );
@@ -104,7 +111,7 @@ const validateRepeat = (
     node.initialInput,
     bodyInput,
     appendJsonPointer(context.path, 'initialInput'),
-    node.key,
+    node.id,
     context.resolver,
     context.collector,
   );
@@ -113,7 +120,7 @@ const validateRepeat = (
     node.nextInput,
     bodyInput,
     appendJsonPointer(context.path, 'nextInput'),
-    node.key,
+    node.id,
     context.resolver,
     context.collector,
     afterBody,
@@ -121,7 +128,7 @@ const validateRepeat = (
   validateRepeatCondition(
     node.continueWhen,
     appendJsonPointer(context.path, 'continueWhen'),
-    node.key,
+    node.id,
     context.resolver,
     context.collector,
     afterBody,
@@ -130,7 +137,7 @@ const validateRepeat = (
     node.output,
     node.outputSchema,
     appendJsonPointer(context.path, 'output'),
-    node.key,
+    node.id,
     context.resolver,
     context.collector,
     afterBody,
@@ -171,7 +178,7 @@ const validateMap = (
     node.bodyInput,
     bodyInput,
     appendJsonPointer(context.path, 'bodyInput'),
-    node.key,
+    node.id,
     context.resolver,
     context.collector,
     mapEnvironment,
@@ -187,11 +194,17 @@ const validateConsensus = (
   context: NodeValidationContext,
 ): void => {
   for (const [index, participant] of node.participants.entries()) {
+    if (!isAgentActivityInputValueSchema(participant.inputSchema)) {
+      context.collector.add(
+        'DATA_SCHEMA_INCOMPATIBLE',
+        `${context.path}/participants/${index}/inputSchema`,
+      );
+    }
     validateMapping(
       participant.input,
       participant.inputSchema,
       `${context.path}/participants/${index}/input`,
-      node.key,
+      node.id,
       context.resolver,
       context.collector,
     );
@@ -210,7 +223,7 @@ const validateCall = (
     node.input,
     target.inputSchema,
     appendJsonPointer(context.path, 'input'),
-    node.key,
+    node.id,
     context.resolver,
     context.collector,
   );
@@ -233,7 +246,7 @@ const validateEnd = (
       node.output,
       outputSchema,
       appendJsonPointer(context.path, 'output'),
-      node.key,
+      node.id,
       context.resolver,
       context.collector,
     );
@@ -248,7 +261,6 @@ export const validateNodeDataflow = (
   switch (node.kind) {
     case 'agent':
     case 'script':
-    case 'effect':
       return validateActivity(node, context);
     case 'choice':
       return validateChoice(node, context);

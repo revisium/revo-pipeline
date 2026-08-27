@@ -6,6 +6,7 @@ import {
   PIPELINE_LIMITS,
   createDiagnosticCollector,
   normalizeOwnedEnvelope,
+  type OwnedEnvelopeObjectLimit,
   type JsonValue,
   type PipelineDiagnostic,
 } from '../../foundation/index.js';
@@ -21,12 +22,16 @@ export type EnvelopeValidatorOptions<Value> = {
   readonly schema: TUnsafe<Value>;
   readonly mapFailure?: EnvelopeSchemaFailureMapper;
   readonly knownDiscriminators?: readonly string[];
+  readonly objectLimit?: OwnedEnvelopeObjectLimit;
+  readonly allowNonNfcObjectKeys?: boolean;
 };
 
 export const createEnvelopeValidator = <Value>({
   schema,
   mapFailure,
   knownDiscriminators = [],
+  objectLimit,
+  allowNonNfcObjectKeys = false,
 }: EnvelopeValidatorOptions<Value>): EnvelopeValidator<Value> => {
   const validator: Validator<Record<string, never>, TUnsafe<Value>> = Compile(schema);
   const discriminatorSet = new Set(knownDiscriminators);
@@ -37,8 +42,9 @@ export const createEnvelopeValidator = <Value>({
     const envelope = normalizeOwnedEnvelope(
       input,
       PIPELINE_LIMITS.sourcePackage.nodes,
-      undefined,
+      objectLimit,
       PIPELINE_LIMITS.machine.serializedStateJsonValues,
+      allowNonNfcObjectKeys,
     );
     if (!envelope.ok) {
       collector.add(

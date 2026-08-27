@@ -12,7 +12,7 @@ import {
 
 const consensusNode = (index: number, target: string): ConsensusSourceNode => ({
   ...sourceNodeBuilders.consensus(target),
-  key: `c${String(index).padStart(3, '0')}`,
+  id: `c${String(index).padStart(3, '0')}`,
 });
 
 const expandedConsensusSource = (count: number) => {
