@@ -54,12 +54,6 @@ jobs:
       - name: SonarQube branch scan
         if: ${{ github.event_name != 'pull_request' }}
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
-        with:
-          args: >-
-            -Dsonar.qualitygate.wait=true
-            -Dsonar.qualitygate.timeout=300
-            -Dsonar.branch.name=${{ github.ref_name }}
-            -Dsonar.scm.revision=${{ github.sha }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -78,9 +72,9 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Inspect Sonar open issues
+        if: ${{ github.event_name == 'pull_request' }}
         env:
-          SONAR_BRANCH_NAME: ${{ github.ref_name }}
-          SONAR_EXPECTED_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          SONAR_EXPECTED_REVISION: ${{ github.event.pull_request.head.sha }}
           SONAR_PR_KEY: ${{ github.event.pull_request.number }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: pnpm sonar:issues:local
