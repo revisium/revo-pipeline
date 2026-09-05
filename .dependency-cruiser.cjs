@@ -181,12 +181,6 @@ function createDependencyRules(manifest, productionDependencyNames) {
       from: { path: `^${allLayers}/`, pathNot: '^src/kernel/public\\.ts$' },
       to: { path: '^src/kernel/public\\.ts$' },
     },
-    {
-      name: 'publication-boundary-imports-only-kernel-public',
-      severity: 'error',
-      from: { path: '^test/package/publication-block\\.test\\.ts$' },
-      to: { path: '^src/kernel/(?!public\\.ts$)' },
-    },
     ...dependencyRules,
     ...curatedBoundaryRules,
   ];

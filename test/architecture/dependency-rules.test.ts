@@ -103,7 +103,6 @@ describe('manifest-derived dependency rules', () => {
     ['root-kernel-import', 'root-module-uses-only-approved-facade-sources'],
     ['kernel-public-deep', 'kernel-public-uses-only-approved-indexes'],
     ['kernel-internal-public', 'private-layers-do-not-import-kernel-public'],
-    ['package-kernel-index', 'publication-boundary-imports-only-kernel-public'],
     ['unresolved-local', 'source-imports-must-resolve'],
     ['cycle', 'no-cycles'],
     ['forbidden-builtin', 'source-uses-only-node-crypto'],

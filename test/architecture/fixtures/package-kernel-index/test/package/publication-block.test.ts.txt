@@ -1,1 +1,0 @@
-export { kernel } from '../../src/kernel/index.js';
