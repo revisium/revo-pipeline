@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -53,15 +53,12 @@ describe('canonical layer manifest', () => {
   });
 
   it('materializes exactly the six dependency layers and two public facades', () => {
-    expect(readdirSync(join(repositoryRoot, 'src')).toSorted()).toEqual([
-      'compiler',
-      'foundation',
-      'index.ts',
-      'kernel',
-      'materialization',
-      'program',
-      'source',
-    ]);
+    expect(readdirSync(join(repositoryRoot, 'src')).toSorted()).toEqual(
+      [
+        basename(expectedManifest.rootModule),
+        ...expectedManifest.layers.map(({ path }) => basename(path)),
+      ].toSorted(),
+    );
     expect(existsSync(join(repositoryRoot, 'src', 'foundation', 'index.ts'))).toBe(true);
     expect(existsSync(join(repositoryRoot, 'src', 'kernel', 'public.ts'))).toBe(true);
     expect(existsSync(join(repositoryRoot, 'src', 'extensions'))).toBe(false);

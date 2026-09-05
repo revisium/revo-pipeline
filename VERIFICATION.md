@@ -43,14 +43,9 @@ npm publish --dry-run --tag alpha --access public
 
 Actual publication remains a separate, explicitly approved human action.
 
-Before handoff also run:
+The architecture gate checks the declared source layout. Before handoff also run:
 
 ```bash
-test -d src/program
-test -d src/compiler
-test -d src/kernel
-test ! -d src/extensions
-test "$(ls -1 .github/workflows | sort | tr '\n' ' ')" = "ci.yml npm-publish.yml release-train.yml "
 git diff --check
 ```
 
